@@ -18,6 +18,7 @@ static std::vector<float> transpose_swap(const std::vector<float>& out, const ra
 HPX_PLAIN_ACTION (fft3d_accumulate);
 HPX_PLAIN_ACTION (fft3d_init);
 HPX_PLAIN_ACTION (fft3d_execute);
+HPX_PLAIN_ACTION (fft3d_read);
 HPX_PLAIN_ACTION (fft3d_destroy);
 HPX_PLAIN_ACTION (transpose_swap);
 HPX_PLAIN_ACTION (transpose);
@@ -26,6 +27,45 @@ void fft3d_execute() {
 
 	transpose(0, 2);
 
+}
+
+std::vector<float> fft3d_read(const range<int>& this_box) {
+	std::vector<hpx::future<void>> futs;
+	std::vector<float> data(this_box.volume());
+	if (mybox.contains(this_box)) {
+		std::array<int, NDIM> i;
+		for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
+			for (i[1] = this_box.begin[1]; i[1] != this_box.end[1]; i[1]++) {
+				for (i[2] = this_box.begin[2]; i[2] != this_box.end[2]; i[2]++) {
+					data[this_box.index(i)] = Y[mybox.index(i)];
+				}
+			}
+		}
+	} else {
+		for (int ri = 0; ri < hpx_size(); ri++) {
+			const auto inter = boxes[ri].intersection(this_box);
+			if (inter.volume()) {
+				std::vector<range<int>> inters;
+				split_box(inter, inters);
+				for (auto this_inter : inters) {
+					auto fut = hpx::async < fft3d_read_action > (hpx_localities()[ri], this_inter);
+					futs.push_back(fut.then([this_box,this_inter,&data](hpx::future<std::vector<float>> fut) {
+						auto this_data = fut.get();
+						std::array<int, NDIM> i;
+						for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
+							for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
+								for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
+									data[this_box.index(i)] = this_data[this_inter.index(i)];
+								}
+							}
+						}
+					}));
+				}
+			}
+		}
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	return std::move(data);
 }
 
 void fft3d_accumulate(const range<int>& this_box, const std::vector<float>& data) {
@@ -137,7 +177,7 @@ static void transpose(int dim1, int dim2) {
 	range<int> tbox = mybox.transpose(dim1, dim2);
 	for (int bi = hpx_rank(); bi < boxes.size(); bi++) {
 		const auto tinter = boxes[bi].intersection(tbox);
-	//	printf("%i with %i Intersection : %s\n", hpx_rank(), bi, tinter.to_string().c_str());
+		//	printf("%i with %i Intersection : %s\n", hpx_rank(), bi, tinter.to_string().c_str());
 		std::vector<float> data;
 		if (!tinter.empty()) {
 			std::vector<range<int>> tinters;

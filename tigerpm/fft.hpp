@@ -14,6 +14,7 @@
 
 void fft3d_init(int N);
 void fft3d_execute();
+std::vector<float> fft3d_read(const range<int>&);
 void fft3d_accumulate(const range<int>&, const std::vector<float>&);
 void fft3d_destroy();
 
