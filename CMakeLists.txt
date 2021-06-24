@@ -26,6 +26,7 @@ set(tigerpm_source_files
                         
 
 set(tigerpm_header_files
+	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
 	tigerpm/hpx.hpp
 	tigerpm/fft.hpp
@@ -40,7 +41,7 @@ set(tigerpm_header_files
 add_hpx_executable(
   tigerpm
   DEPENDENCIES
-    Boost::boost silo cufft cudart
+    Boost::boost silo cudart fftw3
   SOURCES
     ${tigerpm_source_files}
   HEADERS
