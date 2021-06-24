@@ -11,10 +11,12 @@
 
 #include <tigerpm/tigerpm.hpp>
 #include <tigerpm/range.hpp>
+#include <tigerpm/complex.hpp>
 
 void fft3d_init(int N);
 void fft3d_execute();
-std::vector<float> fft3d_read(const range<int>&);
+std::vector<float> fft3d_read_real(const range<int>&);
+std::vector<cmplx> fft3d_read_complex(const range<int>&);
 void fft3d_accumulate(const range<int>&, const std::vector<float>&);
 void fft3d_destroy();
 
