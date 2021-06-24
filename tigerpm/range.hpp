@@ -1,0 +1,84 @@
+/*
+ * range.hpp
+ *
+ *  Created on: Jun 23, 2021
+ *      Author: dmarce1
+ */
+
+#ifndef RANGE_HPP_
+#define RANGE_HPP_
+
+#include <tigerpm/tigerpm.hpp>
+#include <array>
+
+template<class T>
+struct range {
+	std::array<T, NDIM> begin;
+	std::array<T, NDIM> end;
+
+	inline range intersection(const range& other) const {
+		range I;
+		for (int dim = 0; dim < NDIM; dim++) {
+			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
+			I.end[dim] = std::min(begin[dim], other.end[dim]);
+		}
+		return I;
+	}
+
+	inline bool empty() const {
+		return volume() == T(0);
+	}
+
+	inline bool contains(const range<T>& box) const {
+		return (intersection(box).volume() == volume());
+	}
+
+	inline std::pair<range<T>, range<T>> split() const {
+		auto left = *this;
+		auto right = *this;
+		int max_dim;
+		T max_span = 0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			const T span = end[dim] - begin[dim];
+			if (span > max_span) {
+				max_span = span;
+				max_dim = dim;
+			}
+		}
+		const T mid = (end[max_dim] + begin[max_dim]) / T(2);
+		left.end[max_dim] = right.begin[max_dim] = mid;
+		return std::make_pair(left, right);
+	}
+
+	inline int index(std::array<T, NDIM> & i) const {
+		const auto spanx = end[0] - begin[0];
+		const auto spany = end[1] - begin[1];
+		return spany * (spanx * i[2] + i[1]) + i[0];
+	}
+
+	inline range<int> transpose(int dim1, int dim2) const {
+		auto rc = *this;
+		std::swap(rc.begin[dim1], rc.begin[dim2]);
+		std::swap(rc.end[dim1], rc.end[dim2]);
+		return rc;
+	}
+
+	inline T volume() const {
+		T vol = end[0] - begin[0];
+		for (int dim = 1; dim < NDIM; dim++) {
+			vol *= end[dim] - begin[dim];
+		}
+		return vol < T(0) ? T(0) : vol;
+	}
+
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			arc & begin[dim];
+			arc & end[dim];
+		}
+	}
+
+};
+
+#endif /* RANGE_HPP_ */

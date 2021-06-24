@@ -1,3 +1,11 @@
+/*****************
+ *
+ * THIS (slightly modifed) CODE TAKEN FROM
+ * https://wagonhelm.github.io/articles/2018-03/detecting-cuda-capability-with-cmake
+ *
+ */
+
+
 #include <stdio.h>
 
 int main(int argc, char **argv){

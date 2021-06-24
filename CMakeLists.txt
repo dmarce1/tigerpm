@@ -15,13 +15,20 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 
 
 set(tigerpm_source_files
+    src/hpx.cpp
     src/main.cpp
+    src/fft.cpp
 )      
                        
                         
                         
 
 set(tigerpm_header_files
+	tigerpm/cuda.hpp
+	tigerpm/hpx.hpp
+	tigerpm/fft.hpp
+	tigerpm/tigerpm.hpp
+	tigerpm/range.hpp
 )
 
 
@@ -29,7 +36,7 @@ set(tigerpm_header_files
 add_hpx_executable(
   tigerpm
   DEPENDENCIES
-    Boost::boost silo cufft
+    Boost::boost silo cufft cudart
   SOURCES
     ${tigerpm_source_files}
   HEADERS

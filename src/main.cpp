@@ -1,7 +1,8 @@
-#include <hpx/hpx.hpp>
+#include <tigerpm/tigerpm.hpp>
+#include <tigerpm/hpx.hpp>
 
 int hpx_main(int argc, char *argv[]) {
-
+	hpx_init();
 	return hpx::finalize();
 }
 
