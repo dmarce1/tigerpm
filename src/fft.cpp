@@ -26,6 +26,7 @@ HPX_PLAIN_ACTION (transpose);
 void fft3d_execute() {
 
 	transpose(0, 2);
+	transpose(2, 0);
 
 }
 

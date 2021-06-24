@@ -29,6 +29,19 @@ struct range {
 		return volume() == T(0);
 	}
 
+	range() = default;
+	range(const range&) = default;
+	range(range&&) = default;
+	range& operator=(const range&) = default;
+	range& operator=(range&&) = default;
+
+	range(const T& sz) {
+		for( int dim = 0; dim < NDIM; dim++) {
+			begin[dim] = T(0);
+			end[dim] = sz;
+		}
+	}
+
 	inline bool contains(const range<T>& box) const {
 		bool rc = true;
 		for (int dim = 0; dim < NDIM; dim++) {
