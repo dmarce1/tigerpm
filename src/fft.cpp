@@ -25,9 +25,6 @@ HPX_PLAIN_ACTION (transpose);
 void fft3d_execute() {
 
 	transpose(0, 2);
-	transpose(2, 0);
-	transpose(1, 2);
-	transpose(2, 1);
 
 }
 
@@ -75,7 +72,6 @@ void fft3d_init(int N_) {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < fft3d_init_action > (c, N_));
 	}
-
 	N = N_;
 	range<int> box;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -86,7 +82,7 @@ void fft3d_init(int N_) {
 	find_boxes(box, 0, hpx_size());
 	mybox = boxes[hpx_rank()];
 	Y.resize(mybox.volume(), 0.0);
-
+//	PRINT("Box on rank %i is %s\n", hpx_rank(), mybox.to_string().c_str());
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -107,8 +103,9 @@ static void find_boxes(range<int> box, int begin, int end, int depth) {
 		const int xdim = depth % (NDIM - 1);
 		auto left = box;
 		auto right = box;
-		left.end[xdim] = right.begin[xdim] = (box.begin[xdim] + box.end[xdim]) / 2;
 		const int mid = (begin + end) / 2;
+		const double w = double(mid - begin) / double(end - begin);
+		left.end[xdim] = right.begin[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
 		find_boxes(left, begin, mid, depth + 1);
 		find_boxes(right, mid, end, depth + 1);
 	}
@@ -140,6 +137,7 @@ static void transpose(int dim1, int dim2) {
 	range<int> tbox = mybox.transpose(dim1, dim2);
 	for (int bi = hpx_rank(); bi < boxes.size(); bi++) {
 		const auto tinter = boxes[bi].intersection(tbox);
+	//	printf("%i with %i Intersection : %s\n", hpx_rank(), bi, tinter.to_string().c_str());
 		std::vector<float> data;
 		if (!tinter.empty()) {
 			std::vector<range<int>> tinters;
@@ -151,7 +149,11 @@ static void transpose(int dim1, int dim2) {
 				for (i[0] = inter.begin[0]; i[0] != inter.end[0]; i[0]++) {
 					for (i[1] = inter.begin[1]; i[1] != inter.end[1]; i[1]++) {
 						for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
-							data[inter.index(i)] = Y[mybox.index(i)];
+							const int k = inter.index(i);
+							const int l = mybox.index(i);
+							assert(k < data.size());
+							assert(l < Y.size());
+							data[k] = Y[l];
 						}
 					}
 				}

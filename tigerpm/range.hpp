@@ -20,7 +20,7 @@ struct range {
 		range I;
 		for (int dim = 0; dim < NDIM; dim++) {
 			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
-			I.end[dim] = std::min(begin[dim], other.end[dim]);
+			I.end[dim] = std::min(end[dim], other.end[dim]);
 		}
 		return I;
 	}
@@ -30,7 +30,28 @@ struct range {
 	}
 
 	inline bool contains(const range<T>& box) const {
-		return (intersection(box).volume() == volume());
+		bool rc = true;
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (begin[dim] > box.begin[dim]) {
+				rc = false;
+				break;
+			}
+			if (end[dim] < box.end[dim]) {
+				rc = false;
+				break;
+			}
+		}
+		return rc;
+	}
+
+	inline std::string to_string() const {
+		std::string str;
+		for (int dim = 0; dim < NDIM; dim++) {
+			str += std::to_string(dim) + ":(";
+			str += std::to_string(begin[dim]) + ",";
+			str += std::to_string(end[dim]) + ") ";
+		}
+		return str;
 	}
 
 	inline std::pair<range<T>, range<T>> split() const {
@@ -51,9 +72,9 @@ struct range {
 	}
 
 	inline int index(std::array<T, NDIM> & i) const {
-		const auto spanx = end[0] - begin[0];
+		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
-		return spany * (spanx * i[2] + i[1]) + i[0];
+		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
 	}
 
 	inline range<int> transpose(int dim1, int dim2) const {
@@ -64,8 +85,8 @@ struct range {
 	}
 
 	inline T volume() const {
-		T vol = end[0] - begin[0];
-		for (int dim = 1; dim < NDIM; dim++) {
+		T vol = T(1);
+		for (int dim = 0; dim < NDIM; dim++) {
 			vol *= end[dim] - begin[dim];
 		}
 		return vol < T(0) ? T(0) : vol;

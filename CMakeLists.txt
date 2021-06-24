@@ -15,9 +15,11 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 
 
 set(tigerpm_source_files
+    src/fft.cpp
     src/hpx.cpp
     src/main.cpp
-    src/fft.cpp
+    src/options.cpp
+    src/test.cpp
 )      
                        
                         
@@ -27,8 +29,10 @@ set(tigerpm_header_files
 	tigerpm/cuda.hpp
 	tigerpm/hpx.hpp
 	tigerpm/fft.hpp
-	tigerpm/tigerpm.hpp
+	tigerpm/options.hpp
 	tigerpm/range.hpp
+	tigerpm/test.hpp
+	tigerpm/tigerpm.hpp
 )
 
 

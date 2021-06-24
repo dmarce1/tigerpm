@@ -1,27 +1,32 @@
 #include <tigerpm/hpx.hpp>
 
-
 static int rank;
 static int nranks;
 static std::vector<hpx::id_type> localities;
 static std::vector<hpx::id_type> children;
 
-#define CHILD_SHIFT 3
-
-#define NCHILD_RANKS (1 << CHILD_SHIFT)
-
+HPX_PLAIN_ACTION (hpx_init);
 
 void hpx_init() {
 	rank = hpx::get_locality_id();
 	localities = hpx::find_all_localities();
 	nranks = localities.size();
-	int base = (rank - 1) << CHILD_SHIFT;
-	for( int i = 0; i < NCHILD_RANKS; i++) {
-		const int index = base + i + 1;
-		if( index < nranks) {
-			children.push_back(localities[index]);
-		}
+	int base = (rank + 1) << 1;
+	const int index1 = base - 1;
+	const int index2 = base;
+	if (index1 < nranks) {
+		children.push_back(localities[index1]);
 	}
+	if (index2 < nranks) {
+		children.push_back(localities[index2]);
+	}
+
+	std::vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async < hpx_init_action > (c));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+
 }
 
 int hpx_rank() {
