@@ -82,6 +82,15 @@ struct range {
 		return rc;
 	}
 
+	inline bool contains(const std::array<T, NDIM>& p) const {
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	inline std::string to_string() const {
 		std::string str;
 		for (int dim = 0; dim < NDIM; dim++) {

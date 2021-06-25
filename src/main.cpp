@@ -2,6 +2,7 @@
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/options.hpp>
 #include <tigerpm/test.hpp>
+#include <tigerpm/fixed.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();

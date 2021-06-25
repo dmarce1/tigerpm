@@ -1,13 +1,17 @@
 #include <tigerpm/test.hpp>
 #include <tigerpm/fft.hpp>
 #include <tigerpm/timer.hpp>
+#include <tigerpm/particles.hpp>
 
 static void fft_test();
+static void particle_test();
 
 void run_test(std::string test) {
 	printf("Testing\n");
 	if (test == "fft") {
 		fft_test();
+	} else if (test == "parts") {
+		particle_test();
 	} else {
 		PRINT("%s is an unknown test.\n", test.c_str());
 	}
@@ -38,7 +42,7 @@ static void fft_test() {
 	tm.start();
 	fft3d_inv_execute();
 	tm.stop();
-	PRINT( "Inverse Fourier took %e seconds\n", tm.read());
+	PRINT("Inverse Fourier took %e seconds\n", tm.read());
 //	box.end[2] = N / 2 + 1;
 	const auto Y = fft3d_read_real(box);
 	for (int i = 0; i < N; i++) {
@@ -52,4 +56,15 @@ static void fft_test() {
 
 	PRINT("FFT took %e seconds\n", tm.read());
 	fft3d_destroy();
+}
+
+static void particle_test() {
+	PRINT("Doing particle test\n");
+	particles_random_init();
+	timer tm;
+	tm.start();
+	particles_domain_sort();
+	tm.stop();
+	PRINT("Test took %e seconds\n", tm.read());
+	tm.reset();
 }

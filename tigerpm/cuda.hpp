@@ -90,4 +90,6 @@ inline __device__ double atomicAdd(double* address, double val)
 
 #endif
 
+#define CUDA_EXPORT __host__ __device__
+
 #endif /* COSMICTIGER_CUDA_HPP_ */

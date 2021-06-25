@@ -19,6 +19,7 @@ set(tigerpm_source_files
     src/hpx.cpp
     src/main.cpp
     src/options.cpp
+    src/particles.cpp
     src/test.cpp
 )      
                        
@@ -29,8 +30,10 @@ set(tigerpm_header_files
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
 	tigerpm/hpx.hpp
+	tigerpm/fixed.hpp
 	tigerpm/fft.hpp
 	tigerpm/options.hpp
+	tigerpm/particles.hpp
 	tigerpm/range.hpp
 	tigerpm/test.hpp
 	tigerpm/tigerpm.hpp
@@ -42,7 +45,7 @@ set(tigerpm_header_files
 add_hpx_executable(
   tigerpm
   DEPENDENCIES
-    Boost::boost silo cudart fftw3f
+    Boost::boost silo cudart fftw3f gsl
   SOURCES
     ${tigerpm_source_files}
   HEADERS
