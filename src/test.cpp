@@ -20,7 +20,7 @@ void run_test(std::string test) {
 
 static void fft_test() {
 	PRINT("Doing FFT test\n");
-	const int N = 1290;
+	const int N = 1500;
 	fft3d_init(N);
 	std::vector<float> R(N * N * N);
 	for (int i = 0; i < N; i++) {
