@@ -16,6 +16,7 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 
 set(tigerpm_source_files
     src/fft.cpp
+    src/gravity_long.cpp
     src/hpx.cpp
     src/main.cpp
     src/options.cpp
@@ -29,6 +30,7 @@ set(tigerpm_source_files
 set(tigerpm_header_files
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
+	tigerpm/gravity_long.hpp
 	tigerpm/hpx.hpp
 	tigerpm/fixed.hpp
 	tigerpm/fft.hpp

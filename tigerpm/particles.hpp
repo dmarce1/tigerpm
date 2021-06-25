@@ -9,6 +9,7 @@
 #define PARTICLES_HPP_
 
 #include <tigerpm/fixed.hpp>
+#include <tigerpm/range.hpp>
 
 #ifndef PARTICLES_CPP
 extern std::array<std::vector<fixed32>, NDIM> particles_X;
@@ -29,6 +30,9 @@ int particles_size();
 void particles_resize(size_t new_size);
 void particles_domain_sort();
 void particles_random_init();
+range<int> particles_get_local_box();
+std::array<int, NDIM> particles_mesh_loc(int index);
+
 
 inline fixed32& particles_pos(int dim, int index) {
 	return particles_X[dim][index];

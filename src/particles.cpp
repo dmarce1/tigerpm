@@ -34,7 +34,6 @@ static int sort_counter = 0;
 
 static void domain_sort_end();
 static void domain_sort_begin();
-static std::array<int, NDIM> mesh_loc(int index);
 static int find_domain(std::array<int, NDIM> I);
 static void find_domains(domain_t*);
 static range<int> find_my_box();
@@ -49,6 +48,12 @@ void particles_domain_sort() {
 	domain_sort_begin();
 	domain_sort_end();
 }
+
+
+range<int> particles_get_local_box() {
+	return find_my_box();
+}
+
 
 void particles_random_init() {
 	std::vector<hpx::future<void>> futs;
@@ -83,7 +88,7 @@ void particles_random_init() {
 
 }
 
-static std::array<int, NDIM> mesh_loc(int index) {
+std::array<int, NDIM> particles_mesh_loc(int index) {
 	static const double N = get_options().chain_dim;
 	std::array<int, NDIM> i;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -111,7 +116,7 @@ static void domain_sort_begin() {
 			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
 			const int end = size_t(proc + 1) * size_t(particles_size()) / size_t(nthreads);
 			for (int i = begin; i < end; i++) {
-				const auto mi = mesh_loc(i);
+				const auto mi = particles_mesh_loc(i);
 				if (!mybox.contains(mi)) {
 					const auto rank = find_domain(mi);
 					assert(rank != hpx_rank());

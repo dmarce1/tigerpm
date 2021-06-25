@@ -38,6 +38,7 @@ bool process_options(int argc, char *argv[]) {
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
 	("config_file", po::value<std::string>(&(opts.config_file))->default_value(""), "configuration file") //
+	("box_size", po::value<double>(&(opts.box_size))->default_value(100), "size of the computational domain in mpc") //
 	("part_dim", po::value<int>(&(opts.part_dim))->default_value(1000), "nparts^(1/2)") //
 	("chain_dim", po::value<int>(&(opts.chain_dim))->default_value(250), "chain mesh dimension size") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "test problem") //
@@ -74,6 +75,7 @@ bool process_options(int argc, char *argv[]) {
 
 	PRINT("Simulation Options\n");
 
+	SHOW(box_size);
 	SHOW(chain_dim);
 	SHOW(part_dim);
 	SHOW_STRING(config_file);

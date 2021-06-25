@@ -8,6 +8,8 @@ struct options {
 	int chain_dim;
 	int part_dim;
 
+	double box_size;
+
 	std::string config_file;
 	std::string test;
 
@@ -15,6 +17,7 @@ struct options {
 	void serialize(A&& arc, unsigned) {
 		arc & chain_dim;
 		arc & part_dim;
+		arc & box_size;
 		arc & config_file;
 		arc & test;
 	}

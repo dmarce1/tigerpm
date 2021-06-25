@@ -8,7 +8,6 @@
 #ifndef FFT_HPP_
 #define FFT_HPP_
 
-
 #include <tigerpm/tigerpm.hpp>
 #include <tigerpm/range.hpp>
 #include <tigerpm/complex.hpp>
@@ -22,5 +21,7 @@ void fft3d_accumulate_real(const range<int>&, const std::vector<float>&);
 void fft3d_accumulate_complex(const range<int>&, const std::vector<cmplx>&);
 void fft3d_destroy();
 void fft3d_force_real();
+range<int> fft3d_complex_range();
+std::vector<cmplx>& fft3d_complex_vector();
 
 #endif /* FFT_HPP_ */

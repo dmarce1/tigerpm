@@ -145,6 +145,12 @@ struct range {
 		return rc;
 	}
 
+	inline int index(int xi, int yi, int zi) const {
+		const auto spanz = end[2] - begin[2];
+		const auto spany = end[1] - begin[1];
+		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
+	}
+
 	inline int index(std::array<T, NDIM> & i) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
@@ -172,6 +178,15 @@ struct range {
 			arc & begin[dim];
 			arc & end[dim];
 		}
+	}
+
+	inline range<T> pad(T dx = T(1)) const {
+		range<T> r;
+		for (int dim = 0; dim < NDIM; dim++) {
+			r.begin[dim] = begin[dim] - dx;
+			r.end[dim] = end[dim] + dx;
+		}
+		return r;
 	}
 
 };

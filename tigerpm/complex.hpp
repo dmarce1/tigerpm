@@ -63,6 +63,12 @@ public:
 		return b;
 	}
 
+	complex& operator*=(float other) {
+		x *= other;
+		y *= other;
+		return *this;
+	}
+
 	complex operator+(complex other) const {
 		complex a;
 		a.x = x + other.x;
@@ -120,7 +126,6 @@ public:
 		arc & y;
 	}
 };
-
 
 template<class T>
 inline void swap(complex<T>& a, complex<T>& b) {

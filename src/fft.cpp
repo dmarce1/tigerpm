@@ -48,10 +48,6 @@ HPX_PLAIN_ACTION (shift_read);
 HPX_PLAIN_ACTION (update);
 HPX_PLAIN_ACTION (finish_force_real);
 
-#define XDIM 0
-#define YDIM 1
-#define ZDIM 2
-
 void fft3d_execute() {
 	printf("FFT z\n");
 	fft3d_phase1();
@@ -124,6 +120,16 @@ void fft3d_force_real() {
 		finish_force_real();
 	}
 }
+
+range<int> fft3d_complex_range() {
+	return cmplx_mybox[ZDIM];
+}
+
+
+std::vector<cmplx>& fft3d_complex_vector() {
+	return Y;
+}
+
 
 void finish_force_real() {
 	std::vector<hpx::future<void>> futs;
