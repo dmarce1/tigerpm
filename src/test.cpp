@@ -22,23 +22,30 @@ static void fft_test() {
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
 			for (int k = 0; k < N; k++) {
-				R[i * N * N + j * N + k] = sin(2.0 * M_PI * double(k) / N);
+				R[i * N * N + j * N + k] = 0.0;
 			}
 		}
 	}
+	R[0] = 1.0;
 	range<int> box(N);
-	fft3d_accumulate(box, std::move(R));
+	fft3d_accumulate_real(box, std::move(R));
 	timer tm;
 	tm.start();
 	fft3d_execute();
 	tm.stop();
-	box.end[2] = N / 2 + 1;
-	const auto Y = fft3d_read_complex(box);
+	PRINT("Fourier took %e seconds\n", tm.read());
+	tm.reset();
+	tm.start();
+	fft3d_inv_execute();
+	tm.stop();
+//	PRINT( "Inverse Fourier took %e seconds\n", tm.read());
+//	box.end[2] = N / 2 + 1;
+	const auto Y = fft3d_read_real(box);
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
 			for (int k = 0; k < N / 2 + 1; k++) {
 				const int l = (i * N + j) * (N / 2 + 1) + k;
-				PRINT("%i %i %i %e %e\n", i, j, k, Y[l].real(), Y[l].imag());
+				PRINT("%i %i %i %e\n", i, j, k, Y[l]);
 			}
 		}
 	}

@@ -18,19 +18,22 @@ static std::vector<cmplx> Y1;
 
 static void find_boxes(range<int> box, std::vector<range<int>>& boxes, int begin, int end);
 static void split_box(range<int> box, std::vector<range<int>>& real_boxes);
-static void update();
 static void transpose(int, int);
-static void shift();
+static void shift(bool);
+static void update();
 static void fft3d_phase1();
-static void fft3d_phase2(int);
+static void fft3d_phase2(int, bool);
+static void fft3d_phase3();
 static std::vector<cmplx> transpose_read(const range<int>&, int dim1, int dim2);
-static std::vector<cmplx> shift_read(const range<int>&);
+static std::vector<cmplx> shift_read(const range<int>&, bool);
 
-HPX_PLAIN_ACTION (fft3d_accumulate);
+HPX_PLAIN_ACTION (fft3d_accumulate_real);
+HPX_PLAIN_ACTION (fft3d_accumulate_complex);
 HPX_PLAIN_ACTION (fft3d_init);
 HPX_PLAIN_ACTION (fft3d_execute);
 HPX_PLAIN_ACTION (fft3d_phase1);
 HPX_PLAIN_ACTION (fft3d_phase2);
+HPX_PLAIN_ACTION (fft3d_phase3);
 HPX_PLAIN_ACTION (fft3d_read_real);
 HPX_PLAIN_ACTION (fft3d_read_complex);
 HPX_PLAIN_ACTION (transpose_read);
@@ -50,16 +53,11 @@ void fft3d_execute() {
 	printf("Transpose y-z\n");
 	transpose(1, 2);
 	printf("FFT y\n");
-	fft3d_phase2(1);
-/*	printf("Transpose z-y\n");
-	transpose(2, 1);
-	update();
-	printf("Transpose x-z\n");
-	transpose(0, 2);*/
-	printf( "Shifting\n");
-	shift();
+	fft3d_phase2(1, false);
+	printf("Shifting\n");
+	shift(false);
 	printf("FFT x\n");
-	fft3d_phase2(0);
+	fft3d_phase2(0, false);
 	printf("Transpose z-x\n");
 	transpose(2, 0);
 	update();
@@ -67,7 +65,24 @@ void fft3d_execute() {
 
 }
 
-void update() {
+void fft3d_inv_execute() {
+	printf("Transpose z-x\n");
+	transpose(0, 2);
+	printf("inv FFT x\n");
+	fft3d_phase2(0, true);
+	printf("Shifting\n");
+	shift(true);
+	printf("inv FFT y\n");
+	fft3d_phase2(1, true);
+	printf("Transpose y-z\n");
+	transpose(2, 1);
+	printf("inv FFT z\n");
+	fft3d_phase3();
+	printf("done\n");
+
+}
+
+static void update() {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < update_action > (c));
@@ -110,23 +125,25 @@ static void fft3d_phase1() {
 		}, i));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+	R = decltype(R)();
 }
 
-static void fft3d_phase2(int dim) {
+static void fft3d_phase2(int dim, bool inv) {
 	static mutex_type mtx;
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_phase2_action > (c, dim));
+		futs.push_back(hpx::async < fft3d_phase2_action > (c, dim, inv));
 	}
 	Y = std::move(Y1);
 	std::array<int, NDIM> i;
+	const float norm = inv ? 1.0f / N : 1.0;
 	for (i[0] = cmplx_mybox[dim].begin[0]; i[0] != cmplx_mybox[dim].end[0]; i[0]++) {
-		futs.push_back(hpx::async([dim](std::array<int,NDIM> j) {
+		futs.push_back(hpx::async([dim,inv,norm](std::array<int,NDIM> j) {
 			fftwf_complex out[N];
 			fftwf_complex in[N];
 			fftwf_plan p;
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftwf_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+			p = fftwf_plan_dft_1d(N, in, out, inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
 			lock.unlock();
 			auto i = j;
 			for (i[1] = cmplx_mybox[dim].begin[1]; i[1] != cmplx_mybox[dim].end[1]; i[1]++) {
@@ -142,8 +159,8 @@ static void fft3d_phase2(int dim) {
 				fftwf_execute(p);
 				for (i[2] = 0; i[2] < N; i[2]++) {
 					const int l = cmplx_mybox[dim].index(i);
-					Y[l].real() = out[i[2]][0];
-					Y[l].imag() = out[i[2]][1];
+					Y[l].real() = out[i[2]][0] * norm;
+					Y[l].imag() = out[i[2]][1] * norm;
 				}
 			}
 			lock.lock();
@@ -152,6 +169,45 @@ static void fft3d_phase2(int dim) {
 		}, i));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+}
+
+static void fft3d_phase3() {
+	static mutex_type mtx;
+	std::vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async < fft3d_phase3_action > (c));
+	}
+	std::array<int, NDIM> i;
+	Y = std::move(Y1);
+	R.resize(real_mybox.volume());
+	const float Ninv = 1.0 / N;
+	for (i[0] = cmplx_mybox[ZDIM].begin[0]; i[0] != cmplx_mybox[ZDIM].end[0]; i[0]++) {
+		futs.push_back(hpx::async([Ninv](std::array<int,NDIM> j) {
+			fftwf_plan p;
+			fftwf_complex in[N / 2 + 1];
+			float out[N];
+			std::unique_lock<mutex_type> lock(mtx);
+			p = fftwf_plan_dft_c2r_1d(N, in, out, 0);
+			lock.unlock();
+			auto i = j;
+			for (i[1] = cmplx_mybox[ZDIM].begin[1]; i[1] !=cmplx_mybox[ZDIM].end[1]; i[1]++) {
+				for (i[2] = 0; i[2] < N / 2 + 1; i[2]++) {
+					const int l = cmplx_mybox[ZDIM].index(i);
+					in[i[2]][0] = Y[l].real();
+					in[i[2]][1] = Y[l].imag();
+				}
+				fftwf_execute(p);
+				for (i[2] = 0; i[2] != N; i[2]++) {
+					R[real_mybox.index(i)] = out[i[2]] * Ninv;
+				}
+			}
+			lock.lock();
+			fftwf_destroy_plan(p);
+			lock.unlock();
+		}, i));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	Y = decltype(Y)();
 }
 
 std::vector<float> fft3d_read_real(const range<int>& this_box) {
@@ -233,7 +289,7 @@ std::vector<cmplx> fft3d_read_complex(const range<int>& this_box) {
 	return std::move(data);
 }
 
-void fft3d_accumulate(const range<int>& this_box, const std::vector<float>& data) {
+void fft3d_accumulate_real(const range<int>& this_box, const std::vector<float>& data) {
 	std::vector<hpx::future<void>> futs;
 	if (real_mybox.contains(this_box)) {
 		std::array<int, NDIM> i;
@@ -261,7 +317,46 @@ void fft3d_accumulate(const range<int>& this_box, const std::vector<float>& data
 							}
 						}
 					}
-					auto fut = hpx::async < fft3d_accumulate_action
+					auto fut = hpx::async < fft3d_accumulate_real_action
+							> (hpx_localities()[bi], this_inter, std::move(this_data));
+					futs.push_back(std::move(fut));
+				}
+			}
+		}
+	}
+
+	hpx::wait_all(futs.begin(), futs.end());
+}
+
+void fft3d_accumulate_complex(const range<int>& this_box, const std::vector<cmplx>& data) {
+	std::vector<hpx::future<void>> futs;
+	if (real_mybox.contains(this_box)) {
+		std::array<int, NDIM> i;
+		for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
+			for (i[1] = this_box.begin[1]; i[1] != this_box.end[1]; i[1]++) {
+				for (i[2] = this_box.begin[2]; i[2] != this_box.end[2]; i[2]++) {
+					Y[real_mybox.index(i)] += data[this_box.index(i)];
+				}
+			}
+		}
+	} else {
+		for (int bi = 0; bi < real_boxes.size(); bi++) {
+			const auto inter = real_boxes[bi].intersection(this_box);
+			if (!inter.empty()) {
+				std::vector<range<int>> inters;
+				split_box(inter, inters);
+				for (auto this_inter : inters) {
+					std::vector<cmplx> this_data;
+					this_data.resize(this_inter.volume());
+					std::array<int, NDIM> i;
+					for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
+						for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
+							for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
+								this_data[this_inter.index(i)] = data[this_box.index(i)];
+							}
+						}
+					}
+					auto fut = hpx::async < fft3d_accumulate_complex_action
 							> (hpx_localities()[bi], this_inter, std::move(this_data));
 					futs.push_back(std::move(fut));
 				}
@@ -325,8 +420,6 @@ static void find_boxes(range<int> box, std::vector<range<int>>& boxes, int begin
 	}
 }
 
-
-
 static void transpose(int dim1, int dim2) {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -383,31 +476,32 @@ static std::vector<cmplx> transpose_read(const range<int>& this_box, int dim1, i
 	return std::move(data);
 }
 
-
-static void shift() {
+static void shift(bool inv) {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < shift_action > (c));
+		futs.push_back(hpx::async < shift_action > (c, inv));
 	}
-	range<int> tbox = cmplx_mybox[XDIM].shift_down();
-	Y1.resize(cmplx_mybox[XDIM].volume());
-	for (int bi = 0; bi < cmplx_boxes[YDIM].size(); bi++) {
-		const auto tinter = cmplx_boxes[YDIM][bi].intersection(tbox);
+	const int dim2 = inv ? YDIM : XDIM;
+	const int dim1 = inv ? XDIM : YDIM;
+	range<int> tbox = inv ? cmplx_mybox[dim2].shift_up() : cmplx_mybox[dim2].shift_down();
+	Y1.resize(cmplx_mybox[dim2].volume());
+	for (int bi = 0; bi < cmplx_boxes[dim1].size(); bi++) {
+		const auto tinter = cmplx_boxes[dim1][bi].intersection(tbox);
 		std::vector<float> data;
 		if (!tinter.empty()) {
 			std::vector<range<int>> tinters;
 			split_box(tinter, tinters);
 			for (auto this_tinter : tinters) {
-				auto inter = this_tinter.shift_up();
-				auto fut = hpx::async < shift_read_action > (hpx_localities()[bi], this_tinter);
-				futs.push_back(fut.then([inter](hpx::future<std::vector<cmplx>> fut) {
+				auto inter = inv ? this_tinter.shift_down() : this_tinter.shift_up();
+				auto fut = hpx::async < shift_read_action > (hpx_localities()[bi], this_tinter, inv);
+				futs.push_back(fut.then([inter,dim2](hpx::future<std::vector<cmplx>> fut) {
 					auto data = fut.get();
 					std::array<int, NDIM> i;
 					for (i[0] = inter.begin[0]; i[0] != inter.end[0]; i[0]++) {
 						for (i[1] = inter.begin[1]; i[1] != inter.end[1]; i[1]++) {
 							for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
 								const int k = inter.index(i);
-								const int l = cmplx_mybox[XDIM].index(i);
+								const int l = cmplx_mybox[dim2].index(i);
 								assert(k < data.size());
 								assert(l < Y.size());
 								Y1[l] = data[k];
@@ -423,18 +517,16 @@ static void shift() {
 
 }
 
-
-
-static std::vector<cmplx> shift_read(const range<int>& this_box) {
+static std::vector<cmplx> shift_read(const range<int>& this_box, bool inv) {
 	std::vector<cmplx> data(this_box.volume());
-	assert(cmplx_mybox[dim2].contains(this_box));
-	auto tbox = this_box.shift_up();
+	auto tbox = inv ? this_box.shift_down() : this_box.shift_up();
 	std::array<int, NDIM> i;
+	const int dim = inv ? XDIM : YDIM;
 	for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
 		for (i[1] = this_box.begin[1]; i[1] != this_box.end[1]; i[1]++) {
 			for (i[2] = this_box.begin[2]; i[2] != this_box.end[2]; i[2]++) {
-				auto j = shift_up(i);
-				data[tbox.index(j)] = Y[cmplx_mybox[YDIM].index(i)];
+				auto j = inv ? shift_down(i) : shift_up(i);
+				data[tbox.index(j)] = Y[cmplx_mybox[dim].index(i)];
 			}
 		}
 	}
