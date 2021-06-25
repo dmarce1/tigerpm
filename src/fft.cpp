@@ -42,15 +42,24 @@ HPX_PLAIN_ACTION (update);
 #define ZDIM 2
 
 void fft3d_execute() {
+	printf("FFT z\n");
 	fft3d_phase1();
+	printf("Transpose y-z\n");
 	transpose(1, 2);
+	printf("FFT y\n");
 	fft3d_phase2(1);
+	printf("Transpose z-y\n");
 	transpose(2, 1);
 	update();
+	printf("Transpose x-z\n");
 	transpose(0, 2);
+	printf("FFT x\n");
 	fft3d_phase2(0);
+	printf("Transpose z-x\n");
 	transpose(2, 0);
 	update();
+	printf("done\n");
+
 }
 
 void update() {
@@ -58,11 +67,12 @@ void update() {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < update_action > (c));
 	}
-	Y = Y1;
+	Y = std::move(Y1);
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void fft3d_phase1() {
+	static mutex_type mtx;
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < fft3d_phase1_action > (c));
@@ -70,27 +80,35 @@ void fft3d_phase1() {
 	std::array<int, NDIM> i;
 	Y.resize(cmplx_mybox[ZDIM].volume());
 	for (i[0] = real_mybox.begin[0]; i[0] != real_mybox.end[0]; i[0]++) {
-		for (i[1] = real_mybox.begin[1]; i[1] != real_mybox.end[1]; i[1]++) {
-			fftw_complex out[N / 2 + 1];
-			double in[N];
-			fftw_plan p;
-			for (i[2] = 0; i[2] != N; i[2]++) {
-				in[i[2]] = R[real_mybox.index(i)];
+		futs.push_back(hpx::async([](std::array<int,NDIM> j) {
+			fftwf_plan p;
+			fftwf_complex out[N / 2 + 1];
+			float in[N];
+			std::unique_lock<mutex_type> lock(mtx);
+			p = fftwf_plan_dft_r2c_1d(N, in, out, 0);
+			lock.unlock();
+			auto i = j;
+			for (i[1] = real_mybox.begin[1]; i[1] != real_mybox.end[1]; i[1]++) {
+				for (i[2] = 0; i[2] != N; i[2]++) {
+					in[i[2]] = R[real_mybox.index(i)];
+				}
+				fftwf_execute(p);
+				for (i[2] = 0; i[2] < N / 2 + 1; i[2]++) {
+					const int l = cmplx_mybox[ZDIM].index(i);
+					Y[l].real() = out[i[2]][0];
+					Y[l].imag() = out[i[2]][1];
+				}
 			}
-			p = fftw_plan_dft_r2c_1d(N, in, out, 0);
-			fftw_execute(p);
-			fftw_destroy_plan(p);
-			for (i[2] = 0; i[2] < N / 2 + 1; i[2]++) {
-				const int l = cmplx_mybox[ZDIM].index(i);
-				Y[l].real() = out[i[2]][0];
-				Y[l].imag() = out[i[2]][1];
-			}
-		}
+			lock.lock();
+			fftwf_destroy_plan(p);
+			lock.unlock();
+		}, i));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void fft3d_phase2(int dim) {
+	static mutex_type mtx;
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < fft3d_phase2_action > (c, dim));
@@ -98,24 +116,35 @@ void fft3d_phase2(int dim) {
 	Y = std::move(Y1);
 	std::array<int, NDIM> i;
 	for (i[0] = cmplx_mybox[dim].begin[0]; i[0] != cmplx_mybox[dim].end[0]; i[0]++) {
-		for (i[1] = cmplx_mybox[dim].begin[1]; i[1] != cmplx_mybox[dim].end[1]; i[1]++) {
-			fftw_complex out[N];
-			fftw_complex in[N];
-			fftw_plan p;
-			for (i[2] = 0; i[2] < N; i[2]++) {
-				const auto l = cmplx_mybox[dim].index(i);
-				in[i[2]][0] = Y[l].real();
-				in[i[2]][1] = Y[l].imag();
+		futs.push_back(hpx::async([dim](std::array<int,NDIM> j) {
+			fftwf_complex out[N];
+			fftwf_complex in[N];
+			fftwf_plan p;
+			std::unique_lock<mutex_type> lock(mtx);
+			p = fftwf_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+			lock.unlock();
+			auto i = j;
+			for (i[1] = cmplx_mybox[dim].begin[1]; i[1] != cmplx_mybox[dim].end[1]; i[1]++) {
+				assert(cmplx_mybox[dim].begin[2]==0);
+				assert(cmplx_mybox[dim].end[2]==N);
+				for (i[2] = 0; i[2] < N; i[2]++) {
+					const auto l = cmplx_mybox[dim].index(i);
+					assert(l >= 0 );
+					assert( l < Y.size());
+					in[i[2]][0] = Y[l].real();
+					in[i[2]][1] = Y[l].imag();
+				}
+				fftwf_execute(p);
+				for (i[2] = 0; i[2] < N; i[2]++) {
+					const int l = cmplx_mybox[dim].index(i);
+					Y[l].real() = out[i[2]][0];
+					Y[l].imag() = out[i[2]][1];
+				}
 			}
-			p = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-			fftw_execute(p);
-			fftw_destroy_plan(p);
-			for (i[2] = 0; i[2] < N; i[2]++) {
-				const int l = cmplx_mybox[dim].index(i);
-				Y[l].real() = out[i[2]][0];
-				Y[l].imag() = out[i[2]][1];
-			}
-		}
+			lock.lock();
+			fftwf_destroy_plan(p);
+			lock.unlock();
+		}, i));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }
@@ -280,7 +309,7 @@ static void find_boxes(range<int> box, std::vector<range<int>>& boxes, int begin
 	if (end - begin == 1) {
 		boxes[begin] = box;
 	} else {
-		const int xdim = box.longest_dim();
+		const int xdim = (box.end[0] - box.begin[0] > box.end[1] - box.begin[1]) ? 0 : 1;
 		auto left = box;
 		auto right = box;
 		const int mid = (begin + end) / 2;

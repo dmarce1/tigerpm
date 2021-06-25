@@ -34,6 +34,7 @@ set(tigerpm_header_files
 	tigerpm/range.hpp
 	tigerpm/test.hpp
 	tigerpm/tigerpm.hpp
+	tigerpm/timer.hpp
 )
 
 
@@ -41,7 +42,7 @@ set(tigerpm_header_files
 add_hpx_executable(
   tigerpm
   DEPENDENCIES
-    Boost::boost silo cudart fftw3
+    Boost::boost silo cudart fftw3f
   SOURCES
     ${tigerpm_source_files}
   HEADERS
