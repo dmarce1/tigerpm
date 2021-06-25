@@ -21,5 +21,6 @@ std::vector<cmplx> fft3d_read_complex(const range<int>&);
 void fft3d_accumulate_real(const range<int>&, const std::vector<float>&);
 void fft3d_accumulate_complex(const range<int>&, const std::vector<cmplx>&);
 void fft3d_destroy();
+void fft3d_force_real();
 
 #endif /* FFT_HPP_ */
