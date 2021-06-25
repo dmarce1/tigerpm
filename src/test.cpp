@@ -16,7 +16,7 @@ void run_test(std::string test) {
 
 static void fft_test() {
 	PRINT("Doing FFT test\n");
-	const int N = 1000;
+	const int N = 4;
 	fft3d_init(N);
 	std::vector<float> R(N * N * N);
 	for (int i = 0; i < N; i++) {
@@ -38,7 +38,7 @@ static void fft_test() {
 		for (int j = 0; j < N; j++) {
 			for (int k = 0; k < N / 2 + 1; k++) {
 				const int l = (i * N + j) * (N / 2 + 1) + k;
-				//		PRINT("%i %i %i %e %e\n", i, j, k, Y[l].real(), Y[l].imag());
+				PRINT("%i %i %i %e %e\n", i, j, k, Y[l].real(), Y[l].imag());
 			}
 		}
 	}

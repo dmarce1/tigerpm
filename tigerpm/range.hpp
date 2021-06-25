@@ -11,6 +11,23 @@
 #include <tigerpm/tigerpm.hpp>
 #include <array>
 
+inline std::array<int,NDIM> shift_up(std::array<int,NDIM> i) {
+	std::array<int,NDIM> j;
+	j[2] = i[0];
+	j[0] = i[1];
+	j[1] = i[2];
+	return j;
+}
+
+inline std::array<int,NDIM> shift_down(std::array<int,NDIM> i) {
+	std::array<int,NDIM> j;
+	j[1] = i[0];
+	j[2] = i[1];
+	j[0] = i[2];
+	return j;
+}
+
+
 template<class T>
 struct range {
 	std::array<T, NDIM> begin;
@@ -95,6 +112,20 @@ struct range {
 		const T mid = (end[max_dim] + begin[max_dim]) / T(2);
 		left.end[max_dim] = right.begin[max_dim] = mid;
 		return std::make_pair(left, right);
+	}
+
+	range<T> shift_up() const {
+		range<T> rc;
+		rc.begin = ::shift_up(begin);
+		rc.end = ::shift_up(end);
+		return rc;
+	}
+
+	range<T> shift_down() const {
+		range<T> rc;
+		rc.begin = ::shift_down(begin);
+		rc.end = ::shift_down(end);
+		return rc;
 	}
 
 	inline int index(std::array<T, NDIM> & i) const {

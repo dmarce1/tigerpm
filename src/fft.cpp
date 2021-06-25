@@ -20,10 +20,11 @@ static void find_boxes(range<int> box, std::vector<range<int>>& boxes, int begin
 static void split_box(range<int> box, std::vector<range<int>>& real_boxes);
 static void update();
 static void transpose(int, int);
-
-void fft3d_phase1();
-void fft3d_phase2(int);
+static void shift();
+static void fft3d_phase1();
+static void fft3d_phase2(int);
 static std::vector<cmplx> transpose_read(const range<int>&, int dim1, int dim2);
+static std::vector<cmplx> shift_read(const range<int>&);
 
 HPX_PLAIN_ACTION (fft3d_accumulate);
 HPX_PLAIN_ACTION (fft3d_init);
@@ -33,8 +34,10 @@ HPX_PLAIN_ACTION (fft3d_phase2);
 HPX_PLAIN_ACTION (fft3d_read_real);
 HPX_PLAIN_ACTION (fft3d_read_complex);
 HPX_PLAIN_ACTION (transpose_read);
+HPX_PLAIN_ACTION (shift_read);
 HPX_PLAIN_ACTION (fft3d_destroy);
 HPX_PLAIN_ACTION (transpose);
+HPX_PLAIN_ACTION (shift);
 HPX_PLAIN_ACTION (update);
 
 #define XDIM 0
@@ -48,11 +51,13 @@ void fft3d_execute() {
 	transpose(1, 2);
 	printf("FFT y\n");
 	fft3d_phase2(1);
-	printf("Transpose z-y\n");
+/*	printf("Transpose z-y\n");
 	transpose(2, 1);
 	update();
 	printf("Transpose x-z\n");
-	transpose(0, 2);
+	transpose(0, 2);*/
+	printf( "Shifting\n");
+	shift();
 	printf("FFT x\n");
 	fft3d_phase2(0);
 	printf("Transpose z-x\n");
@@ -71,7 +76,7 @@ void update() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void fft3d_phase1() {
+static void fft3d_phase1() {
 	static mutex_type mtx;
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -107,7 +112,7 @@ void fft3d_phase1() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void fft3d_phase2(int dim) {
+static void fft3d_phase2(int dim) {
 	static mutex_type mtx;
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -320,6 +325,8 @@ static void find_boxes(range<int> box, std::vector<range<int>>& boxes, int begin
 	}
 }
 
+
+
 static void transpose(int dim1, int dim2) {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -370,6 +377,64 @@ static std::vector<cmplx> transpose_read(const range<int>& this_box, int dim1, i
 				auto j = i;
 				std::swap(j[dim1], j[dim2]);
 				data[tbox.index(j)] = Y[cmplx_mybox[dim2].index(i)];
+			}
+		}
+	}
+	return std::move(data);
+}
+
+
+static void shift() {
+	std::vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async < shift_action > (c));
+	}
+	range<int> tbox = cmplx_mybox[XDIM].shift_down();
+	Y1.resize(cmplx_mybox[XDIM].volume());
+	for (int bi = 0; bi < cmplx_boxes[YDIM].size(); bi++) {
+		const auto tinter = cmplx_boxes[YDIM][bi].intersection(tbox);
+		std::vector<float> data;
+		if (!tinter.empty()) {
+			std::vector<range<int>> tinters;
+			split_box(tinter, tinters);
+			for (auto this_tinter : tinters) {
+				auto inter = this_tinter.shift_up();
+				auto fut = hpx::async < shift_read_action > (hpx_localities()[bi], this_tinter);
+				futs.push_back(fut.then([inter](hpx::future<std::vector<cmplx>> fut) {
+					auto data = fut.get();
+					std::array<int, NDIM> i;
+					for (i[0] = inter.begin[0]; i[0] != inter.end[0]; i[0]++) {
+						for (i[1] = inter.begin[1]; i[1] != inter.end[1]; i[1]++) {
+							for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
+								const int k = inter.index(i);
+								const int l = cmplx_mybox[XDIM].index(i);
+								assert(k < data.size());
+								assert(l < Y.size());
+								Y1[l] = data[k];
+							}
+						}
+					}
+				}));
+			}
+		}
+	}
+
+	hpx::wait_all(futs.begin(), futs.end());
+
+}
+
+
+
+static std::vector<cmplx> shift_read(const range<int>& this_box) {
+	std::vector<cmplx> data(this_box.volume());
+	assert(cmplx_mybox[dim2].contains(this_box));
+	auto tbox = this_box.shift_up();
+	std::array<int, NDIM> i;
+	for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
+		for (i[1] = this_box.begin[1]; i[1] != this_box.end[1]; i[1]++) {
+			for (i[2] = this_box.begin[2]; i[2] != this_box.end[2]; i[2]++) {
+				auto j = shift_up(i);
+				data[tbox.index(j)] = Y[cmplx_mybox[YDIM].index(i)];
 			}
 		}
 	}
