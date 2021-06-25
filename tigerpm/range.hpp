@@ -11,22 +11,21 @@
 #include <tigerpm/tigerpm.hpp>
 #include <array>
 
-inline std::array<int,NDIM> shift_up(std::array<int,NDIM> i) {
-	std::array<int,NDIM> j;
+inline std::array<int, NDIM> shift_up(std::array<int, NDIM> i) {
+	std::array<int, NDIM> j;
 	j[2] = i[0];
 	j[0] = i[1];
 	j[1] = i[2];
 	return j;
 }
 
-inline std::array<int,NDIM> shift_down(std::array<int,NDIM> i) {
-	std::array<int,NDIM> j;
+inline std::array<int, NDIM> shift_down(std::array<int, NDIM> i) {
+	std::array<int, NDIM> j;
 	j[1] = i[0];
 	j[2] = i[1];
 	j[0] = i[2];
 	return j;
 }
-
 
 template<class T>
 struct range {
@@ -52,8 +51,17 @@ struct range {
 	range& operator=(const range&) = default;
 	range& operator=(range&&) = default;
 
+	inline range shift(const std::array<T, NDIM>& s) const {
+		range r = *this;
+		for (int dim = 0; dim < NDIM; dim++) {
+			r.begin[dim] += s[dim];
+			r.end[dim] += s[dim];
+		}
+		return r;
+	}
+
 	range(const T& sz) {
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			begin[dim] = T(0);
 			end[dim] = sz;
 		}

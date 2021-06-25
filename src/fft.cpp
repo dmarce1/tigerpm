@@ -11,6 +11,7 @@ static std::vector<range<int>> real_boxes;
 static std::array<std::vector<range<int>>, NDIM> cmplx_boxes;
 static range<int> real_mybox;
 static std::array<range<int>, NDIM> cmplx_mybox;
+static std::vector<std::shared_ptr<spinlock_type>> mutexes;
 
 static std::vector<float> R;
 static std::vector<cmplx> Y;
@@ -295,70 +296,93 @@ void fft3d_accumulate_real(const range<int>& this_box, const std::vector<float>&
 		std::array<int, NDIM> i;
 		for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
 			for (i[1] = this_box.begin[1]; i[1] != this_box.end[1]; i[1]++) {
+				const auto& box = real_mybox;
+				const int mtxindex = (i[0] - box.begin[0]) * (box.end[1] - box.begin[1]) + (i[1] - box.begin[1]);
+				std::lock_guard<spinlock_type> lock(*mutexes[mtxindex]);
 				for (i[2] = this_box.begin[2]; i[2] != this_box.end[2]; i[2]++) {
-					R[real_mybox.index(i)] += data[this_box.index(i)];
+					R[box.index(i)] += data[this_box.index(i)];
 				}
 			}
 		}
 	} else {
 		for (int bi = 0; bi < real_boxes.size(); bi++) {
-			const auto inter = real_boxes[bi].intersection(this_box);
-			if (!inter.empty()) {
-				std::vector<range<int>> inters;
-				split_box(inter, inters);
-				for (auto this_inter : inters) {
-					std::vector<float> this_data;
-					this_data.resize(this_inter.volume());
-					std::array<int, NDIM> i;
-					for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
-						for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
-							for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
-								this_data[this_inter.index(i)] = data[this_box.index(i)];
+			std::array<int, NDIM> si;
+			for (si[0] = -N; si[0] <= +N; si[0] += N) {
+				for (si[1] = -N; si[1] <= +N; si[1] += N) {
+					for (si[2] = -N; si[2] <= +N; si[2] += N) {
+						const std::array<int, NDIM> nsi = { -si[0], -si[1], -si[2] };
+						const auto shifted_box = this_box.shift(si);
+						const auto inter = real_boxes[bi].intersection(shifted_box);
+						if (!inter.empty()) {
+							std::vector<range<int>> inters;
+							split_box(inter, inters);
+							for (auto this_inter : inters) {
+								std::vector<float> this_data;
+								this_data.resize(this_inter.volume());
+								std::array<int, NDIM> i;
+								for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
+									for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
+										for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
+											this_data[this_inter.index(i)] = data[this_box.index(i)];
+										}
+									}
+								}
+								auto fut = hpx::async < fft3d_accumulate_real_action
+										> (hpx_localities()[bi], this_inter, std::move(this_data));
+								futs.push_back(std::move(fut));
 							}
 						}
 					}
-					auto fut = hpx::async < fft3d_accumulate_real_action
-							> (hpx_localities()[bi], this_inter, std::move(this_data));
-					futs.push_back(std::move(fut));
 				}
 			}
 		}
 	}
-
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void fft3d_accumulate_complex(const range<int>& this_box, const std::vector<cmplx>& data) {
 	std::vector<hpx::future<void>> futs;
-	if (real_mybox.contains(this_box)) {
+	const auto& box = cmplx_mybox[ZDIM];
+	if (box.contains(this_box)) {
 		std::array<int, NDIM> i;
 		for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
 			for (i[1] = this_box.begin[1]; i[1] != this_box.end[1]; i[1]++) {
+				const int mtxindex = (i[0] - box.begin[0]) * (box.end[1] - box.begin[1]) + (i[1] - box.begin[1]);
+				std::lock_guard<spinlock_type> lock(*mutexes[mtxindex]);
 				for (i[2] = this_box.begin[2]; i[2] != this_box.end[2]; i[2]++) {
-					Y[real_mybox.index(i)] += data[this_box.index(i)];
+					Y[box.index(i)] += data[this_box.index(i)];
 				}
 			}
 		}
 	} else {
-		for (int bi = 0; bi < real_boxes.size(); bi++) {
-			const auto inter = real_boxes[bi].intersection(this_box);
-			if (!inter.empty()) {
-				std::vector<range<int>> inters;
-				split_box(inter, inters);
-				for (auto this_inter : inters) {
-					std::vector<cmplx> this_data;
-					this_data.resize(this_inter.volume());
-					std::array<int, NDIM> i;
-					for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
-						for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
-							for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
-								this_data[this_inter.index(i)] = data[this_box.index(i)];
+		for (int bi = 0; bi < cmplx_boxes[ZDIM].size(); bi++) {
+			std::array<int, NDIM> si;
+			for (si[0] = -N; si[0] <= +N; si[0] += N) {
+				for (si[1] = -N; si[1] <= +N; si[1] += N) {
+					for (si[2] = -N; si[2] <= +N; si[2] += N) {
+						const std::array<int, NDIM> nsi = { -si[0], -si[1], -si[2] };
+						const auto shifted_box = this_box.shift(si);
+						const auto inter = cmplx_boxes[ZDIM][bi].intersection(shifted_box);
+						if (!inter.empty()) {
+							std::vector<range<int>> inters;
+							split_box(inter, inters);
+							for (auto this_inter : inters) {
+								std::vector<cmplx> this_data;
+								this_data.resize(this_inter.volume());
+								std::array<int, NDIM> i;
+								for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
+									for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
+										for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
+											this_data[this_inter.index(i)] = data[this_box.index(i)];
+										}
+									}
+								}
+								auto fut = hpx::async < fft3d_accumulate_complex_action
+										> (hpx_localities()[bi], this_inter, std::move(this_data));
+								futs.push_back(std::move(fut));
 							}
 						}
 					}
-					auto fut = hpx::async < fft3d_accumulate_complex_action
-							> (hpx_localities()[bi], this_inter, std::move(this_data));
-					futs.push_back(std::move(fut));
 				}
 			}
 		}
@@ -391,6 +415,10 @@ void fft3d_init(int N_) {
 		cmplx_boxes[dim].resize(hpx_size());
 		find_boxes(box, cmplx_boxes[dim], 0, hpx_size());
 		cmplx_mybox[dim] = cmplx_boxes[dim][hpx_rank()];
+	}
+	mutexes.resize(N * N);
+	for (int i = 0; i < N * N; i++) {
+		mutexes[i] = std::make_shared<spinlock_type>();
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }

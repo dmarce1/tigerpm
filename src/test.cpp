@@ -16,7 +16,7 @@ void run_test(std::string test) {
 
 static void fft_test() {
 	PRINT("Doing FFT test\n");
-	const int N = 4;
+	const int N = 1290;
 	fft3d_init(N);
 	std::vector<float> R(N * N * N);
 	for (int i = 0; i < N; i++) {
@@ -38,14 +38,14 @@ static void fft_test() {
 	tm.start();
 	fft3d_inv_execute();
 	tm.stop();
-//	PRINT( "Inverse Fourier took %e seconds\n", tm.read());
+	PRINT( "Inverse Fourier took %e seconds\n", tm.read());
 //	box.end[2] = N / 2 + 1;
 	const auto Y = fft3d_read_real(box);
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
 			for (int k = 0; k < N / 2 + 1; k++) {
 				const int l = (i * N + j) * (N / 2 + 1) + k;
-				PRINT("%i %i %i %e\n", i, j, k, Y[l]);
+//				PRINT("%i %i %i %e\n", i, j, k, Y[l]);
 			}
 		}
 	}
