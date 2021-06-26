@@ -11,5 +11,7 @@
 
 
 
+void gravity_long_compute();
+std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array<double, NDIM>& pos);
 
 #endif /* GRAVITY_LONG_HPP_ */

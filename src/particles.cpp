@@ -9,6 +9,7 @@ std::array<std::vector<float>, NDIM> particles_U;
 #include <tigerpm/particles.hpp>
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/range.hpp>
+#include <tigerpm/util.hpp>
 
 #include <unordered_map>
 #include <gsl/gsl_rng.h>
@@ -36,7 +37,6 @@ static void domain_sort_end();
 static void domain_sort_begin();
 static int find_domain(std::array<int, NDIM> I);
 static void find_domains(domain_t*);
-static range<int> find_my_box();
 static void transmit_particles(std::vector<particle>);
 
 HPX_PLAIN_ACTION (domain_sort_end);
@@ -49,11 +49,9 @@ void particles_domain_sort() {
 	domain_sort_end();
 }
 
-
 range<int> particles_get_local_box() {
-	return find_my_box();
+	return find_my_box(get_options().chain_dim);
 }
-
 
 void particles_random_init() {
 	std::vector<hpx::future<void>> futs;
@@ -107,7 +105,7 @@ static void domain_sort_begin() {
 		root_domain = new domain_t;
 		find_domains(root_domain);
 	}
-	const auto mybox = find_my_box();
+	const auto mybox = find_my_box(get_options().chain_dim);
 	std::unordered_map<int, std::vector<particle>> sends;
 	PRINT("Domain sort begin on %i\n", hpx_rank());
 	const int nthreads = hpx::thread::hardware_concurrency();
@@ -120,20 +118,20 @@ static void domain_sort_begin() {
 				if (!mybox.contains(mi)) {
 					const auto rank = find_domain(mi);
 					assert(rank != hpx_rank());
-					std::lock_guard<spinlock_type> lock(send_mutex);
+					std::unique_lock<spinlock_type> lock(send_mutex);
 					auto& entry = sends[rank];
 					entry.push_back(particles_get_particle(i));
 					free_indices.push_back(i);
-					//			printf( "%i %i %i - %i to %i\n", mi[0], mi[1], mi[2], hpx_rank(), rank);
-				if (entry.size() == MAX_PARTS_PER_MSG) {
-					PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), rank);
-					futs1.push_back(hpx::async < transmit_particles_action > (hpx_localities()[rank], std::move(entry)));
+					if (entry.size() == MAX_PARTS_PER_MSG) {
+						PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), rank);
+						auto data = std::move(entry);
+						lock.unlock();
+						futs1.push_back(hpx::async < transmit_particles_action > (hpx_localities()[rank], std::move(data)));
+					}
 				}
 			}
-		}
-	}));
+		}));
 	}
-
 	hpx::wait_all(futs2.begin(), futs2.end());
 	for (auto i = sends.begin(); i != sends.end(); i++) {
 		if (i->second.size()) {
@@ -198,27 +196,6 @@ static void transmit_particles(std::vector<particle> parts) {
 	recv_parts.push_back(std::move(parts));
 }
 
-static range<int> find_my_box(range<int> box, int begin, int end) {
-	if (end - begin == 1) {
-		return box;
-	} else {
-		const int xdim = box.longest_dim();
-		auto left = box;
-		auto right = box;
-		const int mid = (begin + end) / 2;
-		const double w = double(mid - begin) / double(end - begin);
-		left.end[xdim] = right.begin[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
-		if (hpx_rank() < mid) {
-			assert(hpx_rank() >= begin);
-			return find_my_box(left, begin, mid);
-		} else {
-			assert(hpx_rank() >= mid);
-			assert(hpx_rank() < end);
-			return find_my_box(right, mid, end);
-		}
-	}
-}
-
 static int find_domain(std::array<int, NDIM> I) {
 	domain_t* tree = root_domain;
 	while (tree->left != nullptr) {
@@ -255,10 +232,6 @@ static void find_domains(domain_t* tree, range<int> box, int begin, int end) {
 static void find_domains(domain_t* tree) {
 	range<int> box(get_options().chain_dim);
 	return find_domains(tree, box, 0, hpx_size());
-}
-
-static range<int> find_my_box() {
-	return find_my_box(range<int>(get_options().chain_dim), 0, hpx_size());
 }
 
 int particles_size() {

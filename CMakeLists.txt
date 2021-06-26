@@ -21,6 +21,7 @@ set(tigerpm_source_files
     src/main.cpp
     src/options.cpp
     src/particles.cpp
+    src/util.cpp
     src/test.cpp
 )      
                        
@@ -40,6 +41,7 @@ set(tigerpm_header_files
 	tigerpm/test.hpp
 	tigerpm/tigerpm.hpp
 	tigerpm/timer.hpp
+	tigerpm/util.hpp
 )
 
 

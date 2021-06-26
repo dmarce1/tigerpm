@@ -2,9 +2,11 @@
 #include <tigerpm/fft.hpp>
 #include <tigerpm/timer.hpp>
 #include <tigerpm/particles.hpp>
+#include <tigerpm/gravity_long.hpp>
 
 static void fft_test();
 static void particle_test();
+static void gravity_long_test();
 
 void run_test(std::string test) {
 	printf("Testing\n");
@@ -12,6 +14,8 @@ void run_test(std::string test) {
 		fft_test();
 	} else if (test == "parts") {
 		particle_test();
+	} else if (test == "gravity_long") {
+		gravity_long_test();
 	} else {
 		PRINT("%s is an unknown test.\n", test.c_str());
 	}
@@ -68,3 +72,16 @@ static void particle_test() {
 	PRINT("Test took %e seconds\n", tm.read());
 	tm.reset();
 }
+
+static void gravity_long_test() {
+	timer tm1, tm2;
+	particles_random_init();
+	tm1.start();
+	particles_domain_sort();
+	tm1.stop();
+	tm2.start();
+	gravity_long_compute();
+	tm2.stop();
+	PRINT("%e s to sort, %e s to compute, %e total\n", tm1.read(), tm2.read(), tm1.read() + tm2.read());
+}
+

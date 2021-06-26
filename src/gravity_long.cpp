@@ -3,6 +3,7 @@
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/options.hpp>
 #include <tigerpm/particles.hpp>
+#include <tigerpm/util.hpp>
 
 static std::vector<float> phi;
 static range<int> source_box;
@@ -18,12 +19,87 @@ HPX_PLAIN_ACTION (apply_laplacian);
 void gravity_long_compute() {
 	const double N = get_options().part_dim;
 	fft3d_init(N);
+	PRINT( "Computing source\n");
 	compute_source();
 	fft3d_execute();
-	/* apply laplacian */
+	PRINT( "Apply LaPlacian\n");
+	apply_laplacian();
 	fft3d_inv_execute();
+	PRINT( "get phi\n");
 	get_phi;
 	fft3d_destroy();
+}
+
+#define NINTERP 4
+
+std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array<double, NDIM>& pos) {
+	double phi0;
+	std::array<double, NDIM> g;
+	std::array<float, NDIM> gret;
+	std::array<int, NDIM> I;
+	std::array<float, NDIM> X;
+	std::array<std::array<double, NINTERP>, NDIM> w;
+	std::array<std::array<double, NINTERP>, NDIM> dw;
+	const double N = get_options().part_dim;
+	for (int dim = 0; dim < NDIM; dim++) {
+		X[dim] = pos[dim] * N;
+		I[dim] = X[dim];
+		X[dim] -= I[dim] - 0.5;
+		I[dim]--;
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		const double x0 = 1.0;
+		const double x1 = X[dim];
+		const double x2 = X[dim] * x1;
+		const double x3 = x1 * x2;
+		w[dim][0] = -(1.0 / 16.0) * x0 + (1.0 / 24.0) * x1 + 0.25 * x2 - (1.0 / 6.0) * x3;
+		w[dim][1] = (9.0 / 16.0) * x0 - (9.0 / 8.0) * x1 - 0.25 * x2 + 0.5 * x3;
+		w[dim][2] = (9.0 / 16.0) * x0 + (9.0 / 8.0) * x1 - 0.25 * x2 - 0.5 * x3;
+		w[dim][3] = -(1.0 / 16.0) * x0 - (1.0 / 24.0) * x1 + 0.25 * x2 + (1.0 / 6.0) * x3;
+		dw[dim][0] = (1.0 / 24.0) * x0 + 0.5 * x1 - 0.5 * x2;
+		dw[dim][1] = -(9.0 / 8.0) * x0 - 0.5 * x1 + 1.5 * x2;
+		dw[dim][2] = (9.0 / 8.0) * x0 - 0.5 * x1 - 1.5 * x2;
+		dw[dim][3] = -(1.0 / 24.0) * x0 + 0.5 * x1 + 0.5 * x2;
+	}
+	std::array<int, NDIM> J;
+	for (int dim1 = 0; dim1 < NDIM; dim1++) {
+		g[dim1] = 0.0;
+		for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {
+			for (J[1] = I[1]; J[1] < I[1] + 4; J[1]++) {
+				for (J[2] = I[2]; J[2] < I[2] + 4; J[2]++) {
+					double w0 = 1.0;
+					for (int dim2 = 0; dim2 < NDIM; dim2++) {
+						const int i0 = J[dim2] - I[dim2];
+						if (dim1 == dim2) {
+							w0 *= w[dim2][i0];
+						} else {
+							w0 *= dw[dim2][i0];
+						}
+					}
+					const int l = source_box.index(J);
+					g[dim1] += w0 * phi[l];
+				}
+			}
+		}
+	}
+	phi0 = 0.0;
+	for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {
+		for (J[1] = I[1]; J[1] < I[1] + 4; J[1]++) {
+			for (J[2] = I[2]; J[2] < I[2] + 4; J[2]++) {
+				double w0 = 1.0;
+				for (int dim2 = 0; dim2 < NDIM; dim2++) {
+					const int i0 = J[dim2] - I[dim2];
+					w0 *= w[dim2][i0];
+				}
+				const int l = source_box.index(J);
+				phi0 += w0 * phi[l];
+			}
+		}
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		gret[dim] = -g[dim];
+	}
+	return std::make_pair((float) phi0, gret);
 }
 
 void compute_source() {
@@ -34,7 +110,7 @@ void compute_source() {
 	std::vector<float> source;
 	std::vector < std::shared_ptr < spinlock_type >> mutexes;
 
-	source_box = particles_get_local_box().pad(1);
+	source_box = find_my_box(get_options().part_dim).pad(1);
 	source.resize(source_box.volume(), 0.0f);
 	const double N = get_options().part_dim;
 	const int xdim = source_box.end[XDIM] - source_box.begin[XDIM];
@@ -99,7 +175,7 @@ void apply_laplacian() {
 	std::array<int, NDIM> i;
 	std::array<double, NDIM> k;
 	auto& Y = fft3d_complex_vector();
-	const double c0 = 2.0 * M_PI / get_options().box_size;
+	const double c0 = 2.0 * M_PI / N;
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
 		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
 			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
