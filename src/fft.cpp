@@ -125,11 +125,9 @@ range<int> fft3d_complex_range() {
 	return cmplx_mybox[ZDIM];
 }
 
-
 std::vector<cmplx>& fft3d_complex_vector() {
 	return Y;
 }
-
 
 void finish_force_real() {
 	std::vector<hpx::future<void>> futs;
@@ -278,7 +276,15 @@ void fft3d_accumulate_real(const range<int>& this_box, const std::vector<float>&
 								for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
 									for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
 										for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
-											this_data[this_inter.index(i)] = data[this_box.index(i)];
+											const int k = this_inter.index(i);
+											auto j = i;
+											for( int dim = 0; dim < NDIM; dim++) {
+												j[dim] -= si[dim];
+											}
+											const int l = this_box.index(j);
+											assert(k < this_data.size());
+											assert(l < data.size());
+											this_data[k] = data[l];
 										}
 									}
 								}
@@ -327,7 +333,11 @@ void fft3d_accumulate_complex(const range<int>& this_box, const std::vector<cmpl
 								for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
 									for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
 										for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
-											this_data[this_inter.index(i)] = data[this_box.index(i)];
+											auto j = i;
+											for( int dim = 0; dim < NDIM; dim++) {
+												j[dim] -= si[dim];
+											}
+											this_data[this_inter.index(i)] = data[this_box.index(j)];
 										}
 									}
 								}

@@ -167,9 +167,13 @@ struct range {
 	inline T volume() const {
 		T vol = T(1);
 		for (int dim = 0; dim < NDIM; dim++) {
-			vol *= end[dim] - begin[dim];
+			const T span = end[dim] - begin[dim];
+			if (span < T(0)) {
+				return T(0);
+			}
+			vol *= span;
 		}
-		return vol < T(0) ? T(0) : vol;
+		return vol;
 	}
 
 	template<class A>
