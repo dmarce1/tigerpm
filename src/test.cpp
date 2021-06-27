@@ -3,7 +3,9 @@
 #include <tigerpm/timer.hpp>
 #include <tigerpm/particles.hpp>
 #include <tigerpm/gravity_long.hpp>
+#include <tigerpm/kick_pm.hpp>
 
+static void kick_pm_test();
 static void fft_test();
 static void particle_test();
 static void gravity_long_test();
@@ -14,6 +16,8 @@ void run_test(std::string test) {
 		fft_test();
 	} else if (test == "parts") {
 		particle_test();
+	} else if (test == "kick_pm") {
+		kick_pm_test();
 	} else if (test == "gravity_long") {
 		gravity_long_test();
 	} else {
@@ -83,5 +87,24 @@ static void gravity_long_test() {
 	gravity_long_compute();
 	tm2.stop();
 	PRINT("%e s to sort, %e s to compute, %e total\n", tm1.read(), tm2.read(), tm1.read() + tm2.read());
+}
+
+static void kick_pm_test() {
+	timer tm1, tm2, tm3;
+	particles_random_init();
+	PRINT( "DOMAIN SORT\n");
+	tm1.start();
+	particles_domain_sort();
+	tm1.stop();
+	tm2.start();
+	PRINT( "FOURIER\n");
+	gravity_long_compute();
+	tm2.stop();
+	PRINT( "KICK\n");
+	tm3.start();
+	kick_pm();
+	tm3.stop();
+	PRINT("%e s to sort, %e s to compute gravity, %e s to kick, %e total\n", tm1.read(), tm2.read(), tm3.read(),
+			tm1.read() + tm2.read() + tm3.read());
 }
 

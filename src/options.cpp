@@ -40,7 +40,6 @@ bool process_options(int argc, char *argv[]) {
 	("config_file", po::value<std::string>(&(opts.config_file))->default_value(""), "configuration file") //
 	("box_size", po::value<double>(&(opts.box_size))->default_value(64), "size of the computational domain in mpc") //
 	("part_dim", po::value<int>(&(opts.part_dim))->default_value(256), "nparts^(1/3)") //
-	("chain_dim", po::value<int>(&(opts.chain_dim))->default_value(64), "chain mesh dimension size") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "test problem") //
 			;
 
@@ -69,6 +68,11 @@ bool process_options(int argc, char *argv[]) {
 		po::notify(vm);
 	}
 
+	if( opts.part_dim % CHAIN_RATIO != 0 ) {
+		PRINT( "part_dim must be a multiple of 4\n");
+		return false;
+	}
+	opts.chain_dim = opts.part_dim / CHAIN_RATIO;
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';

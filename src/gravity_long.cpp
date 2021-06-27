@@ -19,14 +19,14 @@ HPX_PLAIN_ACTION (apply_laplacian);
 void gravity_long_compute() {
 	const double N = get_options().part_dim;
 	fft3d_init(N);
-	PRINT( "Computing source\n");
+	PRINT("Computing source\n");
 	compute_source();
 	fft3d_execute();
-	PRINT( "Apply LaPlacian\n");
+	PRINT("Apply LaPlacian\n");
 	apply_laplacian();
 	fft3d_inv_execute();
-	PRINT( "get phi\n");
-	get_phi;
+	PRINT("get phi\n");
+	get_phi();
 	fft3d_destroy();
 }
 
@@ -41,6 +41,7 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 	std::array<std::array<double, NINTERP>, NDIM> w;
 	std::array<std::array<double, NINTERP>, NDIM> dw;
 	const double N = get_options().part_dim;
+	const double Ninv = 1.0 / N;
 	for (int dim = 0; dim < NDIM; dim++) {
 		X[dim] = pos[dim] * N;
 		I[dim] = X[dim];
@@ -77,7 +78,7 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 						}
 					}
 					const int l = source_box.index(J);
-					g[dim1] += w0 * phi[l];
+					g[dim1] += w0 * phi[l] * Ninv;
 				}
 			}
 		}
@@ -110,7 +111,12 @@ void compute_source() {
 	std::vector<float> source;
 	std::vector < std::shared_ptr < spinlock_type >> mutexes;
 
-	source_box = find_my_box(get_options().part_dim).pad(1);
+	source_box = find_my_box(get_options().chain_dim);
+	for (int dim = 0; dim < NDIM; dim++) {
+		source_box.begin[dim] *= CHAIN_RATIO;
+		source_box.end[dim] *= CHAIN_RATIO;
+	}
+	source_box = source_box.pad(1);
 	source.resize(source_box.volume(), 0.0f);
 	const double N = get_options().part_dim;
 	const int xdim = source_box.end[XDIM] - source_box.begin[XDIM];
@@ -184,8 +190,12 @@ void apply_laplacian() {
 					k[dim] *= c0;
 				}
 				const double k2 = k[0] * k[0] + k[1] * k[1] + k[2] * k[2];
-				const double k2inv = 1.0 / k2;
-				Y[box.index(i)] *= float(-k2inv);
+				if (k2 > 0.0) {
+					const double k2inv = 1.0 / k2;
+					Y[box.index(i)] *= float(-k2inv);
+				} else {
+					Y[box.index(i)] *= 0.0;
+				}
 			}
 		}
 	}

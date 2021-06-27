@@ -9,9 +9,13 @@
 #define TIGERFMM_HPP_
 
 
+#ifndef __CUDACC__
 #include <hpx/hpx.hpp>
+#endif
+
 #include <stdio.h>
 
+#define FORCE_TEST
 
 #define NDIM 3
 
@@ -19,9 +23,13 @@
 #define YDIM 1
 #define ZDIM 2
 
+#define CHAIN_RATIO 4
+
+#ifndef __CUDACC__
 using spinlock_type = hpx::lcos::local::spinlock;
 using mutex_type = hpx::lcos::local::mutex;
 using shared_mutex_type = hpx::lcos::local::shared_mutex;
+#endif
 
 
 #define PRINT(...) print(__VA_ARGS__)

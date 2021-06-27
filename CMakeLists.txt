@@ -10,14 +10,17 @@ enable_language(CUDA)
 set(CMAKE_CXX_FLAGS "-ffast-math -march=native -Wno-deprecated-declarations -Wno-format-security")
 execute_process(COMMAND nvcc -lcuda ${PROJECT_SOURCE_DIR}/src/cuda_detect.cu -o cuda_detect)
 execute_process(COMMAND ./cuda_detect OUTPUT_VARIABLE CUDA_ARCH)
-execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 
 
 set(tigerpm_source_files
+    src/cuda.cpp
     src/fft.cpp
     src/gravity_long.cpp
+    src/gravity_short.cpp
+    src/gravity_short.cu
     src/hpx.cpp
+    src/kick_pm.cpp
     src/main.cpp
     src/options.cpp
     src/particles.cpp
@@ -32,9 +35,11 @@ set(tigerpm_header_files
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
 	tigerpm/gravity_long.hpp
+	tigerpm/gravity_short.hpp
 	tigerpm/hpx.hpp
 	tigerpm/fixed.hpp
 	tigerpm/fft.hpp
+	tigerpm/kick_pm.hpp
 	tigerpm/options.hpp
 	tigerpm/particles.hpp
 	tigerpm/range.hpp

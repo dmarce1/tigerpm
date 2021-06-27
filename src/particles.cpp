@@ -4,6 +4,15 @@
 
 std::array<std::vector<fixed32>, NDIM> particles_X;
 std::array<std::vector<float>, NDIM> particles_U;
+std::vector<char> particles_R;
+#ifdef FORCE_TEST
+std::vector<float> particles_P;
+std::array<std::vector<float>, NDIM> particles_G;
+#endif
+
+using map_type = std::unordered_map<int, int>;
+
+#include <hpx/serialization/unordered_map.hpp>
 
 #include <tigerpm/options.hpp>
 #include <tigerpm/particles.hpp>
@@ -25,8 +34,14 @@ struct domain_t {
 };
 
 static domain_t* root_domain = nullptr;
-static std::array<std::vector<fixed32>, NDIM>& X = particles_X;
-static std::array<std::vector<float>, NDIM>& U = particles_U;
+static auto& X = particles_X;
+static auto& U = particles_U;
+static auto& R = particles_R;
+#ifdef FORCE_TEST
+static auto& P = particles_P;
+static auto& G = particles_G;
+#endif
+
 static std::vector<int> free_indices;
 static std::vector<std::vector<particle>> recv_parts;
 static spinlock_type send_mutex;
@@ -38,11 +53,15 @@ static void domain_sort_begin();
 static int find_domain(std::array<int, NDIM> I);
 static void find_domains(domain_t*);
 static void transmit_particles(std::vector<particle>);
+static std::unordered_map<int, int> get_particles_per_rank();
+static std::vector<particle> get_particles_sample(std::vector<int> sample_counts);
 
 HPX_PLAIN_ACTION (domain_sort_end);
 HPX_PLAIN_ACTION (domain_sort_begin);
 HPX_PLAIN_ACTION (transmit_particles);
 HPX_PLAIN_ACTION (particles_random_init);
+HPX_PLAIN_ACTION (get_particles_per_rank);
+HPX_PLAIN_ACTION (get_particles_sample);
 
 void particles_domain_sort() {
 	domain_sort_begin();
@@ -247,4 +266,89 @@ void particles_resize(size_t new_size) {
 		X[dim].resize(new_size);
 		U[dim].resize(new_size);
 	}
+	R.resize(new_size);
+#ifdef FORCE_TEST
+	for (int dim = 0; dim < NDIM; dim++) {
+		G[dim].resize(new_size);
+	}
+	P.resize(new_size);
+#endif
 }
+
+static std::unordered_map<int, int> get_particles_per_rank() {
+	std::vector < hpx::future<std::unordered_map<int, int>>>futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async < get_particles_per_rank_action > (c));
+	}
+
+	std::unordered_map<int, int> rc;
+	rc[hpx_rank()] = particles_size();
+
+	for (auto& fut : futs) {
+		auto data = fut.get();
+		for (auto i = data.begin(); i != data.end(); i++) {
+			rc[i->first] = i->second;
+		}
+	}
+
+	return rc;
+}
+
+std::vector<int> particles_per_rank() {
+	auto data = get_particles_per_rank_action()(hpx_localities()[0]);
+	std::vector<int> rc;
+	for (int i = 0; i < hpx_size(); i++) {
+		rc[i] = data[i];
+	}
+	return rc;
+}
+
+static std::vector<particle> get_particles_sample(std::vector<int> sample_counts) {
+	std::vector < hpx::future<std::vector<particle>>>futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async < get_particles_sample_action > (c, sample_counts));
+	}
+
+	std::set<int> indices;
+	std::vector<particle> samples;
+	for (int i = 0; i < sample_counts[hpx_rank()]; i++) {
+		const int index = rand() % particles_size();
+		if (indices.find(index) == indices.end()) {
+			indices.insert(index);
+			samples.push_back(particles_get_particle(index));
+		}
+	}
+
+	for (int i = 0; i < futs.size(); i++) {
+		const auto other = futs[i].get();
+		samples.insert(samples.end(), other.begin(), other.end());
+	}
+
+	return samples;
+
+}
+
+std::vector<particle> particles_sample(const std::vector<int>& sample_counts) {
+	return get_particles_sample_action()(hpx_localities()[0], sample_counts);
+}
+
+std::vector<particle> particles_sample(int Nsamples) {
+	auto parts_per_rank = particles_per_rank();
+	size_t total_parts = 0;
+	for (int i = 0; i < hpx_size(); i++) {
+		total_parts += parts_per_rank[i];
+	}
+	std::vector<int> samples_per_proc(hpx_size(), 0);
+	for (int i = 0; i < Nsamples; i++) {
+		const size_t index = (size_t(rand()) * size_t(rand())) % total_parts;
+		size_t total = 0;
+		int proc_index = -1;
+		while (index >= total) {
+			proc_index++;
+			total += parts_per_rank[proc_index];
+		}
+		samples_per_proc[proc_index]++;
+	}
+	return particles_sample(samples_per_proc);
+}
+
