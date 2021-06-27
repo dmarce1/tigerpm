@@ -3,7 +3,6 @@
 #include <tigerpm/particles.hpp>
 #include <tigerpm/util.hpp>
 
-
 __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey,
 		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz);
 
@@ -28,38 +27,47 @@ std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> gravity_sh
 	CUDA_CHECK(cudaMalloc(&dev_gx, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gy, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gz, Nsinks * sizeof(double)));
-	CUDA_CHECK(cudaMemset(dev_phi, 0.0, Nsinks));
-	CUDA_CHECK(cudaMemset(dev_gx, 0.0, Nsinks));
-	CUDA_CHECK(cudaMemset(dev_gy, 0.0, Nsinks));
-	CUDA_CHECK(cudaMemset(dev_gz, 0.0, Nsinks));
+	std::vector<double> zero(Nsinks,0.0);
+	CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_gx, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_gy, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_gz, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinkx, sinkx.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinky, sinky.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinkz, sinkz.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
+	PRINT( "%li free\n", cuda_free_mem());
 	const int parts_per_loop = cuda_free_mem() / (NDIM * sizeof(fixed32)) * 85 / 100;
 	int occupancy;
 	CUDA_CHECK(
 			cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, gravity_ewald_kernel,EWALD_BLOCK_SIZE, sizeof(double)*(NDIM+1)*EWALD_BLOCK_SIZE ));
-	int num_blocks = occupancy * cuda_smp_count();
-	std::vector < cudaStream_t > streams(num_blocks);
-	for (int i = 0; i < num_blocks; i++) {
+	int num_kernels = std::max((int)(occupancy * cuda_smp_count() / Nsinks),1);
+	std::vector < cudaStream_t > streams(num_kernels);
+	for (int i = 0; i < num_kernels; i++) {
 		cudaStreamCreate (&streams[i]);
 	}
+	PRINT( "%i particles per loop, %i kernels\n", parts_per_loop, num_kernels);
 	for (int i = 0; i < particles_size(); i += parts_per_loop) {
-		const int total_size = std::min(particles_size(), i + parts_per_loop) - i;
+		const int total_size = std::min(size_t(particles_size()), size_t(i) + size_t(parts_per_loop)) - size_t(i);
+		CUDA_CHECK(cudaMalloc(&dev_srcx, total_size * sizeof(fixed32)));
+		CUDA_CHECK(cudaMalloc(&dev_srcy, total_size * sizeof(fixed32)));
+		CUDA_CHECK(cudaMalloc(&dev_srcz, total_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMemcpy(dev_srcx, &particles_pos(0, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
 		CUDA_CHECK(cudaMemcpy(dev_srcy, &particles_pos(1, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
 		CUDA_CHECK(cudaMemcpy(dev_srcz, &particles_pos(2, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
-		for (int j = 0; i < num_blocks; j++) {
-			const int begin = size_t(j) * size_t(total_size) / size_t(num_blocks);
-			const int end = size_t(j + 1) * size_t(total_size) / size_t(num_blocks);
-			gravity_ewald_kernel<<<num_blocks,EWALD_BLOCK_SIZE,0,streams[i]>>>(dev_sinkx, dev_sinky, dev_sinkz, dev_srcx + begin, dev_srcy + begin,
+		for (int j = 0; j < num_kernels; j++) {
+			const int begin = size_t(j) * size_t(total_size) / size_t(num_kernels);
+			const int end = size_t(j + 1) * size_t(total_size) / size_t(num_kernels);
+			gravity_ewald_kernel<<<Nsinks,EWALD_BLOCK_SIZE,0,streams[i]>>>(dev_sinkx, dev_sinky, dev_sinkz, dev_srcx + begin, dev_srcy + begin,
 					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gz, dev_gz);
 		}
-		for (int i = 0; i < num_blocks; i++) {
+		for (int i = 0; i < num_kernels; i++) {
 			cudaStreamSynchronize (streams[i]);
 		}
+		CUDA_CHECK(cudaFree(dev_srcx));
+		CUDA_CHECK(cudaFree(dev_srcy));
+		CUDA_CHECK(cudaFree(dev_srcz));
 	}
-	for (int i = 0; i < num_blocks; i++) {
+	for (int i = 0; i < num_kernels; i++) {
 		cudaStreamDestroy (streams[i]);
 	}
 	rc.first.resize(Nsinks);

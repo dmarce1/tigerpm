@@ -296,7 +296,7 @@ static std::unordered_map<int, int> get_particles_per_rank() {
 
 std::vector<int> particles_per_rank() {
 	auto data = get_particles_per_rank_action()(hpx_localities()[0]);
-	std::vector<int> rc;
+	std::vector<int> rc(hpx_size());
 	for (int i = 0; i < hpx_size(); i++) {
 		rc[i] = data[i];
 	}
