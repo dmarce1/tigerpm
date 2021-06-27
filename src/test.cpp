@@ -107,7 +107,7 @@ static void kick_pm_test() {
 	tm3.stop();
 	PRINT("COMPARISON\n");
 	tm4.start();
-	gravity_short_ewald_compare(100);
+	gravity_short_ewald_compare(10);
 	tm4.stop();
 	PRINT("%e s to sort, %e s to compute gravity, %e s to kick, %e s on comparison, %e total\n", tm1.read(), tm2.read(),
 			tm3.read(), tm4.read(), tm1.read() + tm2.read() + tm3.read() + tm4.read());

@@ -38,8 +38,8 @@ bool process_options(int argc, char *argv[]) {
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
 	("config_file", po::value<std::string>(&(opts.config_file))->default_value(""), "configuration file") //
-	("box_size", po::value<double>(&(opts.box_size))->default_value(64), "size of the computational domain in mpc") //
-	("part_dim", po::value<int>(&(opts.part_dim))->default_value(64), "nparts^(1/3)") //
+	("box_size", po::value<double>(&(opts.box_size))->default_value(1), "size of the computational domain in mpc") //
+	("part_dim", po::value<int>(&(opts.part_dim))->default_value(100), "nparts^(1/3)") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "test problem") //
 			;
 

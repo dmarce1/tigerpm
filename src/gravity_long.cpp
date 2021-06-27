@@ -44,8 +44,8 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 	const double Ninv = 1.0 / N;
 	for (int dim = 0; dim < NDIM; dim++) {
 		X[dim] = pos[dim] * N;
-		I[dim] = X[dim];
-		X[dim] -= I[dim] - 0.5;
+		I[dim] = int(X[dim]);
+		X[dim] -= double(I[dim]) + 0.5;
 		I[dim]--;
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -72,18 +72,19 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 					for (int dim2 = 0; dim2 < NDIM; dim2++) {
 						const int i0 = J[dim2] - I[dim2];
 						if (dim1 == dim2) {
-							w0 *= w[dim2][i0];
-						} else {
 							w0 *= dw[dim2][i0];
+						} else {
+							w0 *= w[dim2][i0];
 						}
 					}
 					const int l = source_box.index(J);
-					g[dim1] += w0 * phi[l] * Ninv;
+					g[dim1] += w0 * phi[l] * N;
 				}
 			}
 		}
 	}
 	phi0 = 0.0;
+	double wsum = 0.0;
 	for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {
 		for (J[1] = I[1]; J[1] < I[1] + 4; J[1]++) {
 			for (J[2] = I[2]; J[2] < I[2] + 4; J[2]++) {
@@ -93,6 +94,7 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 					w0 *= w[dim2][i0];
 				}
 				const int l = source_box.index(J);
+				wsum += w0;
 				phi0 += w0 * phi[l];
 			}
 		}
@@ -149,19 +151,20 @@ void compute_source() {
 				const double w0yw1z = w0y * w1z;
 				const double w1yw0z = w1y * w0z;
 				const double w0yw0z = w0y * w0z;
+				const double c0 = 4.0 * M_PI * N;
 				{
 					std::lock_guard<spinlock_type> lock(*mutexes[i0 - source_box.begin[XDIM]]);
-					source[source_box.index(i0, j0, k0)] += w0x * w0yw0z;
-					source[source_box.index(i0, j0, k1)] += w0x * w0yw1z;
-					source[source_box.index(i0, j1, k0)] += w0x * w1yw0z;
-					source[source_box.index(i0, j1, k1)] += w0x * w1yw1z;
+					source[source_box.index(i0, j0, k0)] += c0 * w0x * w0yw0z;
+					source[source_box.index(i0, j0, k1)] += c0 * w0x * w0yw1z;
+					source[source_box.index(i0, j1, k0)] += c0 * w0x * w1yw0z;
+					source[source_box.index(i0, j1, k1)] += c0 * w0x * w1yw1z;
 				}
 				{
 					std::lock_guard<spinlock_type> lock(*mutexes[i1 - source_box.begin[XDIM]]);
-					source[source_box.index(i1, j0, k0)] += w1x * w0yw0z;
-					source[source_box.index(i1, j0, k1)] += w1x * w0yw1z;
-					source[source_box.index(i1, j1, k0)] += w1x * w1yw0z;
-					source[source_box.index(i1, j1, k1)] += w1x * w1yw1z;
+					source[source_box.index(i1, j0, k0)] += c0 * w1x * w0yw0z;
+					source[source_box.index(i1, j0, k1)] += c0 * w1x * w0yw1z;
+					source[source_box.index(i1, j1, k0)] += c0 * w1x * w1yw0z;
+					source[source_box.index(i1, j1, k1)] += c0 * w1x * w1yw1z;
 				}
 			}
 		}));
@@ -189,7 +192,7 @@ void apply_laplacian() {
 					k[dim] = i[dim] < N / 2 ? i[dim] : i[dim] - N;
 					k[dim] *= c0;
 				}
-				const double k2 = k[0] * k[0] + k[1] * k[1] + k[2] * k[2];
+				const double k2 = sqr(k[0], k[1], k[2]);
 				if (k2 > 0.0) {
 					const double k2inv = 1.0 / k2;
 					Y[box.index(i)] *= float(-k2inv);

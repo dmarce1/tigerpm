@@ -12,19 +12,27 @@ void kick_pm() {
 		futs.push_back(hpx::async < kick_pm_action > (c));
 	}
 
-	for (int i = 0; i < particles_size(); i++) {
-		std::array<double, NDIM> pos;
-		for (int dim = 0; dim < NDIM; dim++) {
-			pos[dim] = particles_pos(dim, i).to_double();
-		}
-		const auto gforce = gravity_long_force_at(pos);
+	const int nthreads = hpx::thread::hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		const auto func = [proc,nthreads]() {
+			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
+			const int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
+			for (int i = begin; i < end; i++) {
+				std::array<double, NDIM> pos;
+				for (int dim = 0; dim < NDIM; dim++) {
+					pos[dim] = particles_pos(dim, i).to_double();
+				}
+				const auto gforce = gravity_long_force_at(pos);
 //		printf( "%e %e %e\n", gforce.second[0],gforce.second[1],gforce.second[2]);
 #ifdef FORCE_TEST
-		for (int dim = 0; dim < NDIM; dim++) {
-			particles_gforce(dim, i) = gforce.second[dim];
-		}
-		particles_pot(i) = gforce.first;
+				for (int dim = 0; dim < NDIM; dim++) {
+					particles_gforce(dim, i) = gforce.second[dim];
+				}
+				particles_pot(i) = gforce.first;
 #endif
+			}
+		};
+		futs.push_back(hpx::async(func));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());

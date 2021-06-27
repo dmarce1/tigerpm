@@ -29,7 +29,6 @@ static return_type do_ewald(const std::vector<fixed32>& sinkx, const std::vector
 			}
 		}
 	}
-
 	return results;
 }
 
@@ -45,5 +44,8 @@ void gravity_short_ewald_compare(int Nsamples) {
 		sinkz[i] = samples[i].x[ZDIM];
 	}
 	auto results = do_ewald(sinkx, sinky, sinkz);
+	for( int i = 0; i < Nsamples; i++) {
+		printf( "%e\n", samples[i].g[0] / results.second[0][i]);
+	}
 
 }

@@ -27,25 +27,25 @@ std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> gravity_sh
 	CUDA_CHECK(cudaMalloc(&dev_gx, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gy, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gz, Nsinks * sizeof(double)));
-	std::vector<double> zero(Nsinks,0.0);
-	CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_gx, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_gy, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_gz, zero.data(), Nsinks*sizeof(double),cudaMemcpyHostToDevice));
+	std::vector<double> zero(Nsinks, 0.0);
+	CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_gx, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_gy, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_gz, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinkx, sinkx.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinky, sinky.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinkz, sinkz.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
-	PRINT( "%li free\n", cuda_free_mem());
+	PRINT("%li free\n", cuda_free_mem());
 	const int parts_per_loop = cuda_free_mem() / (NDIM * sizeof(fixed32)) * 85 / 100;
 	int occupancy;
 	CUDA_CHECK(
 			cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, gravity_ewald_kernel,EWALD_BLOCK_SIZE, sizeof(double)*(NDIM+1)*EWALD_BLOCK_SIZE ));
-	int num_kernels = std::max((int)(occupancy * cuda_smp_count() / Nsinks),1);
+	int num_kernels = std::max((int) (occupancy * cuda_smp_count() / Nsinks), 1);
 	std::vector < cudaStream_t > streams(num_kernels);
 	for (int i = 0; i < num_kernels; i++) {
 		cudaStreamCreate (&streams[i]);
 	}
-	PRINT( "%i particles per loop, %i kernels\n", parts_per_loop, num_kernels);
+	PRINT("%i particles per loop, %i kernels\n", parts_per_loop, num_kernels);
 	for (int i = 0; i < particles_size(); i += parts_per_loop) {
 		const int total_size = std::min(size_t(particles_size()), size_t(i) + size_t(parts_per_loop)) - size_t(i);
 		CUDA_CHECK(cudaMalloc(&dev_srcx, total_size * sizeof(fixed32)));
@@ -102,21 +102,24 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 	const fixed32 x = sinkx[bid];
 	const fixed32 y = sinky[bid];
 	const fixed32 z = sinkz[bid];
-
-	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0;
+	const float h = 1.0 / 100.0;
+	float hinv = 1.0 / h;
+	float h3inv = 1.0 / h / h / h;
+	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
 	for (int sourcei = tid; sourcei < Nsource; sourcei += EWALD_BLOCK_SIZE) {
 		const float X = distance(x, sourcex[sourcei]);
 		const float Y = distance(y, sourcey[sourcei]);
 		const float Z = distance(z, sourcez[sourcei]);
-		if (sourcei < Nsource) {
+		const float R2 = sqr(X, Y, Z);
+		if (R2 > h * h) {
 			for (int xi = -4; xi <= +4; xi++) {
 				for (int yi = -4; yi <= +4; yi++) {
-					for (int zi = -4; zi < +4; zi++) {
+					for (int zi = -4; zi <= +4; zi++) {
 						const float dx = X - xi;
 						const float dy = Y - yi;
 						const float dz = Z - zi;
 						const float r2 = sqr(dx, dy, dz);
-						if (r2 > 0.f && r2 < 2.6f * 2.6f) {
+						if (r2 < 2.6f * 2.6f) {
 							const float r = sqrt(r2);
 							const float rinv = 1.f / r;
 							const float r2inv = rinv * rinv;
@@ -137,28 +140,33 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 				}
 			}
 			phi[tid] += float(M_PI / 4.f);
-			for (int xi = -3; xi <= +3; xi++) {
-				for (int yi = -3; yi <= +3; yi++) {
-					for (int zi = -3; zi < +3; zi++) {
+			for (int xi = -2; xi <= +2; xi++) {
+				for (int yi = -2; yi <= +2; yi++) {
+					for (int zi = -2; zi <= +2; zi++) {
 						const float hx = xi;
 						const float hy = yi;
 						const float hz = zi;
 						const float h2 = sqr(hx, hy, hz);
 						if (h2 > 0.0f && h2 <= 8) {
 							const float hdotx = X * hx + Y * hy + Z * hz;
-							const float omega = 2.0f * M_PI * hdotx;
+							const float omega = float(2.0 * M_PI) * hdotx;
 							const float c = cosf(omega);
 							const float s = sinf(omega);
 							const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
 							const float c1 = -s * 2.0 * M_PI * c0;
 							phi[tid] += c0 * c;
-							gx[tid] += c1 * hx;
-							gy[tid] += c1 * hy;
-							gz[tid] += c1 * hz;
+							gx[tid] -= c1 * hx;
+							gy[tid] -= c1 * hy;
+							gz[tid] -= c1 * hz;
 						}
 					}
 				}
 			}
+		} else if (R2 > 0.0) {
+			phi[tid] += -(1.5 - 0.5 * R2) * hinv;
+			gx[tid] -= X * h3inv;
+			gy[tid] -= Y * h3inv;
+			gz[tid] -= Z * h3inv;
 		}
 	}
 	__syncthreads();
