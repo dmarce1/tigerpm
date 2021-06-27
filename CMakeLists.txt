@@ -54,7 +54,7 @@ set(tigerpm_header_files
 add_hpx_executable(
   tigerpm
   DEPENDENCIES
-    Boost::boost silo cudart fftw3f gsl
+    Boost::boost silo cudart fftw3f gsl gslcblas
   SOURCES
     ${tigerpm_source_files}
   HEADERS

@@ -49,37 +49,37 @@ HPX_PLAIN_ACTION (update);
 HPX_PLAIN_ACTION (finish_force_real);
 
 void fft3d_execute() {
-	printf("FFT z\n");
+	PRINT("FFT z\n");
 	fft3d_phase1();
-	printf("Transpose y-z\n");
+	PRINT("Transpose y-z\n");
 	transpose(1, 2);
-	printf("FFT y\n");
+	PRINT("FFT y\n");
 	fft3d_phase2(1, false);
-	printf("Shifting\n");
+	PRINT("Shifting\n");
 	shift(false);
-	printf("FFT x\n");
+	PRINT("FFT x\n");
 	fft3d_phase2(0, false);
-	printf("Transpose z-x\n");
+	PRINT("Transpose z-x\n");
 	transpose(2, 0);
 	update();
-	printf("done\n");
+	PRINT("done\n");
 
 }
 
 void fft3d_inv_execute() {
-	printf("Transpose z-x\n");
+	PRINT("Transpose z-x\n");
 	transpose(0, 2);
-	printf("inv FFT x\n");
+	PRINT("inv FFT x\n");
 	fft3d_phase2(0, true);
-	printf("Shifting\n");
+	PRINT("Shifting\n");
 	shift(true);
-	printf("inv FFT y\n");
+	PRINT("inv FFT y\n");
 	fft3d_phase2(1, true);
-	printf("Transpose y-z\n");
+	PRINT("Transpose y-z\n");
 	transpose(2, 1);
-	printf("inv FFT z\n");
+	PRINT("inv FFT z\n");
 	fft3d_phase3();
-	printf("done\n");
+	PRINT("done\n");
 
 }
 
