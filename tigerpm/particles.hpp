@@ -52,6 +52,7 @@ std::array<int, NDIM> particles_mesh_loc(int index);
 std::vector<int> particles_per_rank();
 std::vector<particle> particles_sample(const std::vector<int>&);
 std::vector<particle> particles_sample(int);
+void particles_sphere_init(float radius);
 
 inline fixed32& particles_pos(int dim, int index) {
 	return particles_X[dim][index];

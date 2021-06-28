@@ -60,6 +60,7 @@ HPX_PLAIN_ACTION (domain_sort_end);
 HPX_PLAIN_ACTION (domain_sort_begin);
 HPX_PLAIN_ACTION (transmit_particles);
 HPX_PLAIN_ACTION (particles_random_init);
+HPX_PLAIN_ACTION (particles_sphere_init);
 HPX_PLAIN_ACTION (get_particles_per_rank);
 HPX_PLAIN_ACTION (get_particles_sample);
 
@@ -70,6 +71,33 @@ void particles_domain_sort() {
 
 range<int> particles_get_local_box() {
 	return find_my_box(get_options().chain_dim);
+}
+
+void particles_sphere_init(float radius) {
+	std::vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async < particles_sphere_init_action > (c, radius));
+	}
+	const auto box = particles_get_local_box();
+	std::array<int, NDIM> i;
+	const double Ninv = 1.0 / get_options().chain_dim;
+	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
+		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
+			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
+				const double x = i[0] * Ninv - 0.5;
+				const double y = i[1] * Ninv - 0.5;
+				const double z = i[2] * Ninv - 0.5;
+				const double r2 = sqr(x, y, z);
+				if (r2 < radius * radius) {
+					particles_resize(particles_size() + 1);
+					particles_pos(0, particles_size() - 1) = x + 0.5;
+					particles_pos(1, particles_size() - 1) = y + 0.5;
+					particles_pos(2, particles_size() - 1) = z + 0.5;
+				}
+			}
+		}
+	}
+	printf( "particles size = %i\n", particles_size());
 }
 
 void particles_random_init() {

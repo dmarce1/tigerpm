@@ -102,7 +102,7 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 	const fixed32 x = sinkx[bid];
 	const fixed32 y = sinky[bid];
 	const fixed32 z = sinkz[bid];
-	const float h = 1.0 / 100.0;
+	const float h = 1.0 / 128.0;
 	float hinv = 1.0 / h;
 	float h3inv = 1.0 / h / h / h;
 	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
@@ -130,11 +130,9 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 							const float d0 = -erfc0 * rinv;
 							const float d1 = (expfactor + erfc0) * r3inv;
 							phi[tid] += d0;
-							for (int dim = 0; dim < NDIM; dim++) {
-								gx[tid] -= dx * d1;
-								gy[tid] -= dy * d1;
-								gz[tid] -= dz * d1;
-							}
+							gx[tid] -= dx * d1;
+							gy[tid] -= dy * d1;
+							gz[tid] -= dz * d1;
 						}
 					}
 				}

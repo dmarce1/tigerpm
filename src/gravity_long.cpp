@@ -41,7 +41,6 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 	std::array<std::array<double, NINTERP>, NDIM> w;
 	std::array<std::array<double, NINTERP>, NDIM> dw;
 	const double N = get_options().part_dim;
-	const double Ninv = 1.0 / N;
 	for (int dim = 0; dim < NDIM; dim++) {
 		X[dim] = pos[dim] * N;
 		I[dim] = int(X[dim]);
@@ -49,18 +48,19 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 		I[dim]--;
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
-		const double x0 = 1.0;
 		const double x1 = X[dim];
 		const double x2 = X[dim] * x1;
 		const double x3 = x1 * x2;
-		w[dim][0] = -(1.0 / 16.0) * x0 + (1.0 / 24.0) * x1 + 0.25 * x2 - (1.0 / 6.0) * x3;
-		w[dim][1] = (9.0 / 16.0) * x0 - (9.0 / 8.0) * x1 - 0.25 * x2 + 0.5 * x3;
-		w[dim][2] = (9.0 / 16.0) * x0 + (9.0 / 8.0) * x1 - 0.25 * x2 - 0.5 * x3;
-		w[dim][3] = -(1.0 / 16.0) * x0 - (1.0 / 24.0) * x1 + 0.25 * x2 + (1.0 / 6.0) * x3;
-		dw[dim][0] = (1.0 / 24.0) * x0 + 0.5 * x1 - 0.5 * x2;
-		dw[dim][1] = -(9.0 / 8.0) * x0 - 0.5 * x1 + 1.5 * x2;
-		dw[dim][2] = (9.0 / 8.0) * x0 - 0.5 * x1 - 1.5 * x2;
-		dw[dim][3] = -(1.0 / 24.0) * x0 + 0.5 * x1 + 0.5 * x2;
+		w[dim][0] = -(1.0 / 16.0) + (1.0 / 24.0) * x1 + 0.25 * x2 - (1.0 / 6.0) * x3;
+		w[dim][1] = (9.0 / 16.0) - (9.0 / 8.0) * x1 - 0.25 * x2 + 0.5 * x3;
+		w[dim][2] = (9.0 / 16.0) + (9.0 / 8.0) * x1 - 0.25 * x2 - 0.5 * x3;
+		w[dim][3] = -(1.0 / 16.0) - (1.0 / 24.0) * x1 + 0.25 * x2 + (1.0 / 6.0) * x3;
+
+		dw[dim][0] = (1.0 / 24.0) + 0.5 * x1 - 0.5 * x2;
+		dw[dim][1] = -(9.0 / 8.0) - 0.5 * x1 + 1.5 * x2;
+		dw[dim][2] = (9.0 / 8.0) - 0.5 * x1 - 1.5 * x2;
+		dw[dim][3] = -(1.0 / 24.0) + 0.5 * x1 + 0.5 * x2;
+
 	}
 	std::array<int, NDIM> J;
 	for (int dim1 = 0; dim1 < NDIM; dim1++) {
@@ -84,7 +84,6 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 		}
 	}
 	phi0 = 0.0;
-	double wsum = 0.0;
 	for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {
 		for (J[1] = I[1]; J[1] < I[1] + 4; J[1]++) {
 			for (J[2] = I[2]; J[2] < I[2] + 4; J[2]++) {
@@ -94,7 +93,6 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 					w0 *= w[dim2][i0];
 				}
 				const int l = source_box.index(J);
-				wsum += w0;
 				phi0 += w0 * phi[l];
 			}
 		}
@@ -192,10 +190,10 @@ void apply_laplacian() {
 					k[dim] = i[dim] < N / 2 ? i[dim] : i[dim] - N;
 					k[dim] *= c0;
 				}
-				const double k2 = sqr(k[0], k[1], k[2]);
-				if (k2 > 0.0) {
-					const double k2inv = 1.0 / k2;
-					Y[box.index(i)] *= float(-k2inv);
+				const double nk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
+				if (nk2 < 0.0) {
+					const double nk2inv = 1.0 / nk2;
+					Y[box.index(i)] *= float(nk2inv);
 				} else {
 					Y[box.index(i)] *= 0.0;
 				}

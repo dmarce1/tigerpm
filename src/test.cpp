@@ -92,7 +92,7 @@ static void gravity_long_test() {
 
 static void kick_pm_test() {
 	timer tm1, tm2, tm3, tm4;
-	particles_random_init();
+	particles_sphere_init(.25);
 	PRINT("DOMAIN SORT\n");
 	tm1.start();
 	particles_domain_sort();
@@ -107,7 +107,7 @@ static void kick_pm_test() {
 	tm3.stop();
 	PRINT("COMPARISON\n");
 	tm4.start();
-	gravity_short_ewald_compare(10);
+	gravity_short_ewald_compare(100);
 	tm4.stop();
 	PRINT("%e s to sort, %e s to compute gravity, %e s to kick, %e s on comparison, %e total\n", tm1.read(), tm2.read(),
 			tm3.read(), tm4.read(), tm1.read() + tm2.read() + tm3.read() + tm4.read());

@@ -1,6 +1,8 @@
 #include <tigerpm/gravity_short.hpp>
+#include <tigerpm/gravity_long.hpp>
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/particles.hpp>
+#include <tigerpm/util.hpp>
 
 using return_type = std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>>;
 
@@ -34,18 +36,48 @@ static return_type do_ewald(const std::vector<fixed32>& sinkx, const std::vector
 
 void gravity_short_ewald_compare(int Nsamples) {
 
-	auto samples = particles_sample(Nsamples);
+	/*	auto samples = particles_sample(Nsamples);
+	 std::vector<fixed32> sinkx(Nsamples);
+	 std::vector<fixed32> sinky(Nsamples);
+	 std::vector<fixed32> sinkz(Nsamples);
+	 for (int i = 0; i < Nsamples; i++) {
+	 sinkx[i] = samples[i].x[XDIM];
+	 sinky[i] = samples[i].x[YDIM];
+	 sinkz[i] = samples[i].x[ZDIM];
+	 }
+	 auto results = do_ewald(sinkx, sinky, sinkz);
+	 for( int i = 0; i < Nsamples; i++) {
+	 double f1 = 0.0, f2 = 0.0;
+	 double r2 = 0.0;
+	 for( int dim = 0; dim< NDIM; dim++) {
+	 f1 += sqr(samples[i].g[dim]);
+	 r2 += sqr(samples[i].x[dim].to_double() - 0.5);
+	 f2 += sqr(results.second[dim][i]);
+	 }
+	 const double r = sqrt(r2);
+	 f1 = sqrt(f1);
+	 f2 = sqrt(f2);
+	 printf( "%e %e %e \n", f1, f2, f2/f1 );
+	 }
+	 */
 	std::vector<fixed32> sinkx(Nsamples);
 	std::vector<fixed32> sinky(Nsamples);
 	std::vector<fixed32> sinkz(Nsamples);
 	for (int i = 0; i < Nsamples; i++) {
-		sinkx[i] = samples[i].x[XDIM];
-		sinky[i] = samples[i].x[YDIM];
-		sinkz[i] = samples[i].x[ZDIM];
+		sinkx[i] = double(i) / Nsamples + 0.5 / Nsamples;
+		sinky[i] = 0.5;
+		sinkz[i] = 0.5;
 	}
+	FILE* fp = fopen( "out.dat", "wt");
 	auto results = do_ewald(sinkx, sinky, sinkz);
-	for( int i = 0; i < Nsamples; i++) {
-		printf( "%e\n", samples[i].g[1] / results.second[1][i]);
+	for (int i = 0; i < Nsamples; i++) {
+		std::array<double, NDIM> x;
+		x[0] = sinkx[i].to_double();
+		x[1] = sinky[i].to_double();
+		x[2] = sinkz[i].to_double();
+		auto g = gravity_long_force_at(x);
+		fprintf(fp,"%e %e %e\n", x[0], results.second[0][i], g.second[0]);
 	}
+	fclose(fp);
 
 }
