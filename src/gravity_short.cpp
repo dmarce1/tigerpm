@@ -45,7 +45,7 @@ void gravity_short_ewald_compare(int Nsamples) {
 	}
 	auto results = do_ewald(sinkx, sinky, sinkz);
 	for( int i = 0; i < Nsamples; i++) {
-		printf( "%e\n", samples[i].g[0] / results.second[0][i]);
+		printf( "%e\n", samples[i].g[1] / results.second[1][i]);
 	}
 
 }

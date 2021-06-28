@@ -58,7 +58,7 @@ std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> gravity_sh
 			const int begin = size_t(j) * size_t(total_size) / size_t(num_kernels);
 			const int end = size_t(j + 1) * size_t(total_size) / size_t(num_kernels);
 			gravity_ewald_kernel<<<Nsinks,EWALD_BLOCK_SIZE,0,streams[i]>>>(dev_sinkx, dev_sinky, dev_sinkz, dev_srcx + begin, dev_srcy + begin,
-					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gz, dev_gz);
+					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gy, dev_gz);
 		}
 		for (int i = 0; i < num_kernels; i++) {
 			cudaStreamSynchronize (streams[i]);
@@ -126,7 +126,7 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 							const float r3inv = r2inv * rinv;
 							const float exp0 = expf(-4.f * r2);
 							const float erfc0 = erfcf(2.f * r);
-							const float expfactor = 4.0 / sqrt(M_PI) * r * exp0;
+							const float expfactor = float(4.0f / sqrt(M_PI)) * r * exp0;
 							const float d0 = -erfc0 * rinv;
 							const float d1 = (expfactor + erfc0) * r3inv;
 							phi[tid] += d0;
