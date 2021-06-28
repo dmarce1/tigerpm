@@ -30,7 +30,7 @@ void gravity_long_compute() {
 	fft3d_destroy();
 }
 
-#define NINTERP 5
+#define NINTERP 4
 
 std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array<double, NDIM>& pos) {
 	double phi0;
@@ -41,48 +41,28 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 	std::array<std::array<double, NINTERP>, NDIM> w;
 	std::array<std::array<double, NINTERP>, NDIM> dw;
 	const double N = get_options().part_dim;
+
 	for (int dim = 0; dim < NDIM; dim++) {
 		X[dim] = pos[dim] * N;
 		I[dim] = int(X[dim]);
-		X[dim] -= double(I[dim]) + 0.5;
-		I[dim]--;
-		if( X[dim] < 0.0 ) {
-			I[dim]--;
-		}
+		X[dim] -= double(I[dim]);
+		I[dim] -= 1;
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
-		{
-			const double x1 = X[dim];
-			const double x2 = X[dim] * x1;
-			const double x3 = x1 * x2;
-			if (x1 > 0.0) {
-				w[dim][0] = 0.0;
-				w[dim][1] = -(1.0 / 16.0) + (1.0 / 24.0) * x1 + 0.25 * x2 - (1.0 / 6.0) * x3;
-				w[dim][2] = (9.0 / 16.0) - (9.0 / 8.0) * x1 - 0.25 * x2 + 0.5 * x3;
-				w[dim][3] = (9.0 / 16.0) + (9.0 / 8.0) * x1 - 0.25 * x2 - 0.5 * x3;
-				w[dim][4] = -(1.0 / 16.0) - (1.0 / 24.0) * x1 + 0.25 * x2 + (1.0 / 6.0) * x3;
-			} else {
-				w[dim][0] = -(1.0 / 16.0) + (1.0 / 24.0) * x1 + 0.25 * x2 - (1.0 / 6.0) * x3;
-				w[dim][1] = (9.0 / 16.0) - (9.0 / 8.0) * x1 - 0.25 * x2 + 0.5 * x3;
-				w[dim][2] = (9.0 / 16.0) + (9.0 / 8.0) * x1 - 0.25 * x2 - 0.5 * x3;
-				w[dim][3] = -(1.0 / 16.0) - (1.0 / 24.0) * x1 + 0.25 * x2 + (1.0 / 6.0) * x3;
-				w[dim][4] = 0.0;
-			}
-		}
-		{{0, 0, 1, 0, 0},
-	{1/12, -(2/3), 0, 2/3, -(1/12)},
-	{-(1/24), 2/3, -(5/4), 2/3, -(1/24)},
-	{-(1/12), 1/6, 0, -(1/6), 1/12},
-	{1/ 24, -(1/6), 1/4, -(1/6), 1/24}}
-		{
-			const double x1 = X[dim] - 0.5;
-			const double x2 = x1 * x1;
-			const double x3 = x1 * x2;
-			dw[dim][0] =
-		}
+		double x1 = X[dim];
+		const double x2 = X[dim] * x1;
+		const double x3 = x1 * x2;
+		w[dim][0] = -0.5 * x1 + x2 - 0.5 * x3;
+		w[dim][1] = 1.0 - 2.5 * x2 + 1.5 * x3;
+		w[dim][2] = 0.5 * x1 + 2.0 * x2 - 1.5 * x3;
+		w[dim][3] = -0.5 * x2 + 0.5 * x3;
+		dw[dim][0] = -0.5 + 2.0 * x1 - 1.5 * x2;
+		dw[dim][1] = -5.0 * x1 + 4.5 * x2;
+		dw[dim][2] = 0.5 + 4.0 * x1 - 4.5 * x2;
+		dw[dim][3] = -x1 + 1.5 * x2;
 	}
 	std::array<int, NDIM> J;
-	for (int dim1 = 0; dim1 < NDIM; dim1++) {
+	for( int dim1 = 0; dim1 < NDIM; dim1++) {
 		g[dim1] = 0.0;
 		for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {
 			for (J[1] = I[1]; J[1] < I[1] + 4; J[1]++) {
@@ -90,7 +70,7 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 					double w0 = 1.0;
 					for (int dim2 = 0; dim2 < NDIM; dim2++) {
 						const int i0 = J[dim2] - I[dim2];
-						if (dim1 == dim2) {
+						if( dim1 == dim2) {
 							w0 *= dw[dim2][i0];
 						} else {
 							w0 *= w[dim2][i0];
@@ -101,6 +81,7 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 				}
 			}
 		}
+
 	}
 	phi0 = 0.0;
 	for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {

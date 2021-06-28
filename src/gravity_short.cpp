@@ -68,16 +68,29 @@ void gravity_short_ewald_compare(int Nsamples) {
 		sinky[i] = 0.5;
 		sinkz[i] = 0.5;
 	}
-	FILE* fp = fopen( "out.dat", "wt");
+	FILE* fp = fopen("out.dat", "wt");
 	auto results = do_ewald(sinkx, sinky, sinkz);
+	double l1sum = 0.0, l2sum = 0.0;
+	double l1norm = 0.0, l2norm = 0.0;
 	for (int i = 0; i < Nsamples; i++) {
-		std::array<double, NDIM> x;
+	std::array<double, NDIM> x;
 		x[0] = sinkx[i].to_double();
 		x[1] = sinky[i].to_double();
 		x[2] = sinkz[i].to_double();
 		auto g = gravity_long_force_at(x);
-		fprintf(fp,"%e %e %e\n", x[0], results.second[0][i], g.second[0]);
+		double f1 = 0.0, f2 = 0.0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			f1 += sqr(results.second[dim][i]);
+			f2 += sqr(g.second[dim]);
+		}
+		l1sum += std::abs(f1 - f2);
+		l1norm += std::abs(f1);
+		l2sum += sqr(f1 - f2);
+		l2norm += sqr(f1);
+		fprintf(fp, "%e %e %e\n", x[0], results.second[0][i], g.second[0]);
 	}
 	fclose(fp);
+	printf("L1 = %e \n", l1sum / l1norm);
+	printf("L2 = %e \n", std::sqrt(l2sum / l2norm));
 
 }
