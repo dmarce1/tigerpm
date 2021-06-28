@@ -102,7 +102,7 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 	const fixed32 x = sinkx[bid];
 	const fixed32 y = sinky[bid];
 	const fixed32 z = sinkz[bid];
-	const float h = 1.0 / 128.0;
+	const float h = 1.0 / 1024.0;
 	float hinv = 1.0 / h;
 	float h3inv = 1.0 / h / h / h;
 	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;

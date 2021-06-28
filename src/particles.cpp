@@ -97,7 +97,7 @@ void particles_sphere_init(float radius) {
 			}
 		}
 	}
-	printf( "particles size = %i\n", particles_size());
+//	printf( "particles size = %i\n", particles_size());
 }
 
 void particles_random_init() {
