@@ -10,3 +10,4 @@ struct chaincell {
 };
 
 void chainmesh_create();
+void chainmesh_exchange_boundaries();

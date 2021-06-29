@@ -49,6 +49,7 @@ void particles_resize(size_t new_size);
 void particles_random_init();
 void particles_domain_sort();
 range<int> particles_get_local_box();
+int particles_local_size();
 std::vector<int> particles_per_rank();
 std::vector<particle> particles_sample(const std::vector<int>&);
 std::vector<particle> particles_sample(int);

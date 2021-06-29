@@ -9,6 +9,7 @@ std::vector<char> particles_R;
 std::vector<float> particles_P;
 std::array<std::vector<float>, NDIM> particles_G;
 #endif
+static int local_size;
 
 using map_type = std::unordered_map<int, int>;
 
@@ -226,7 +227,12 @@ static void domain_sort_end() {
 	hpx::wait_all(futs.begin(), futs.end());
 	free_indices = decltype(free_indices)();
 	recv_parts = decltype(recv_parts)();
+	local_size = particles_size();
 
+}
+
+int particles_local_size() {
+	return local_size;
 }
 
 static void transmit_particles(std::vector<particle> parts) {
