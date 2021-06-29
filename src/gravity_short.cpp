@@ -73,7 +73,10 @@ void gravity_short_ewald_compare(int Nsamples) {
 	double l1sum = 0.0, l2sum = 0.0;
 	double l1norm = 0.0, l2norm = 0.0;
 	for (int i = 0; i < Nsamples; i++) {
-	std::array<double, NDIM> x;
+		if( i >= Nsamples /4 && i < 3* Nsamples/4) {
+			continue;
+		}
+		std::array<double, NDIM> x;
 		x[0] = sinkx[i].to_double();
 		x[1] = sinky[i].to_double();
 		x[2] = sinkz[i].to_double();

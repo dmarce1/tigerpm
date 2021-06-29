@@ -10,11 +10,14 @@ static void kick_pm_test();
 static void fft_test();
 static void particle_test();
 static void gravity_long_test();
+static void sort_test();
 
 void run_test(std::string test) {
 	printf("Testing\n");
 	if (test == "fft") {
 		fft_test();
+	} else if (test == "sort") {
+		sort_test();
 	} else if (test == "parts") {
 		particle_test();
 	} else if (test == "kick_pm") {
@@ -70,7 +73,7 @@ static void fft_test() {
 static void particle_test() {
 	PRINT("Doing particle test\n");
 	particles_random_init();
-	timer tm;
+		timer tm;
 	tm.start();
 	particles_domain_sort();
 	tm.stop();
@@ -113,3 +116,13 @@ static void kick_pm_test() {
 			tm3.read(), tm4.read(), tm1.read() + tm2.read() + tm3.read() + tm4.read());
 }
 
+
+static void sort_test() {
+	particles_random_init();
+	particles_domain_sort();
+	timer tm;
+	tm.start();
+	particles_sort();
+	tm.stop();
+	PRINT( "%e s\n", tm.read());
+}

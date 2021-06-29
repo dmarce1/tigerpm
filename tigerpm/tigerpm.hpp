@@ -15,7 +15,8 @@
 
 #include <stdio.h>
 
-#define FORCE_TEST
+//#define FORCE_TEST
+#define SORT_TEST
 
 #define NDIM 3
 

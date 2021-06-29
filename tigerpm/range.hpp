@@ -151,7 +151,7 @@ struct range {
 		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
 	}
 
-	inline int index(std::array<T, NDIM> & i) const {
+	inline int index(const std::array<T, NDIM> & i) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
 		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);

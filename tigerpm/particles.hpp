@@ -47,6 +47,7 @@ int particles_size();
 void particles_resize(size_t new_size);
 void particles_domain_sort();
 void particles_random_init();
+void particles_sort();
 range<int> particles_get_local_box();
 std::array<int, NDIM> particles_mesh_loc(int index);
 std::vector<int> particles_per_rank();

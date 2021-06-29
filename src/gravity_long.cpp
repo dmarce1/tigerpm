@@ -191,6 +191,7 @@ void apply_laplacian() {
 					k[dim] *= c0;
 				}
 				const double nk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
+		//	const double nk2 = -sqr(k[0],k[1],k[2]);
 				if (nk2 < 0.0) {
 					const double nk2inv = 1.0 / nk2;
 					Y[box.index(i)] *= float(nk2inv);
