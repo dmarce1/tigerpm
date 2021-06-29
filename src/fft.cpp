@@ -537,7 +537,7 @@ static void find_boxes(range<int> box, std::vector<range<int>>& boxes, int begin
 	if (end - begin == 1) {
 		boxes[begin] = box;
 	} else {
-		const int xdim = (box.end[0] - box.begin[0] > box.end[1] - box.begin[1]) ? 0 : 1;
+		const int xdim = (box.end[0] - box.begin[0] > 1) ? 0 : 1;
 		auto left = box;
 		auto right = box;
 		const int mid = (begin + end) / 2;
