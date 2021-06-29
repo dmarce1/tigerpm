@@ -96,7 +96,7 @@ static void gravity_long_test() {
 
 static void kick_pm_test() {
 	timer tm1, tm2, tm3, tm4;
-	particles_sphere_init(.25);
+	particles_random_init();
 	PRINT("DOMAIN SORT\n");
 	tm1.start();
 	particles_domain_sort();

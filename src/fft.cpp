@@ -631,7 +631,7 @@ static void shift(bool inv) {
 								const int k = inter.index(i);
 								const int l = cmplx_mybox[dim2].index(i);
 								assert(k < data.size());
-								assert(l < Y.size());
+								assert(l < Y1.size());
 								Y1[l] = data[k];
 							}
 						}
