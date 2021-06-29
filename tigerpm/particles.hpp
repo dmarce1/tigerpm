@@ -54,6 +54,7 @@ std::vector<particle> particles_sample(const std::vector<int>&);
 std::vector<particle> particles_sample(int);
 void particles_sphere_init(float radius);
 std::vector<int> particles_mesh_count();
+int particles_sort(int begin, int end, double xmid, int xdim);
 
 inline std::array<int, NDIM> particles_mesh_loc(int index) {
 	static const double N = get_options().chain_dim;

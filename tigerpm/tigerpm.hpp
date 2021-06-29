@@ -24,6 +24,7 @@
 #define YDIM 1
 #define ZDIM 2
 
+#define FOUR_RATIO 2
 #define CHAIN_RATIO 4
 #define CHAIN_BW 1
 

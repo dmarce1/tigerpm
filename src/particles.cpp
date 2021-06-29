@@ -104,7 +104,7 @@ void particles_random_init() {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < particles_random_init_action > (c));
 	}
-	const size_t nparts = std::pow(size_t(get_options().part_dim), size_t(NDIM));
+	const size_t nparts = std::pow(size_t(get_options().parts_dim), size_t(NDIM));
 	const size_t begin = size_t(hpx_rank()) * nparts / size_t(hpx_size());
 	const size_t end = size_t(hpx_rank() + 1) * nparts / size_t(hpx_size());
 	const int size = end - begin;
@@ -402,4 +402,35 @@ std::vector<int> particles_mesh_count() {
 	return int_counts;
 }
 
+int particles_sort(int begin, int end, double xm, int xdim) {
+	int lo = begin;
+	int hi = end;
+	fixed32 xmid(xm);
+	auto& xptr_dim = X[xdim];
+	auto& x = X[0];
+	auto& y = X[1];
+	auto& z = X[2];
+	auto& ux = U[0];
+	auto& uy = U[1];
+	auto& uz = U[2];
+	while (lo < hi) {
+		if (xptr_dim[lo] >= xmid) {
+			while (lo != hi) {
+				hi--;
+				if (xptr_dim[hi] < xmid) {
+					std::swap(x[hi], x[lo]);
+					std::swap(y[hi], y[lo]);
+					std::swap(z[hi], z[lo]);
+					std::swap(ux[hi], ux[lo]);
+					std::swap(uy[hi], uy[lo]);
+					std::swap(uz[hi], uz[lo]);
+					std::swap(R[hi], R[lo]);
+					break;
+				}
+			}
+		}
+		lo++;
+	}
+	return hi;
 
+}

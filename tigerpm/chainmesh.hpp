@@ -5,11 +5,8 @@
 #include <memory>
 
 struct chaincell {
-	std::vector<int> particles;
-	std::shared_ptr<std::atomic<int>> lock;
-	chaincell()  {
-		lock = std::make_shared<std::atomic<int>>(0);
-	}
+	int pbegin;
+	int pend;
 };
 
 void chainmesh_create();

@@ -573,7 +573,7 @@ static void transpose(int dim1, int dim2) {
 								const int k = inter.index(i);
 								const int l = cmplx_mybox[dim1].index(i);
 								assert(k < data.size());
-								assert(l < Y.size());
+								assert(l < Y1.size());
 								Y1[l] = data[k];
 							}
 						}

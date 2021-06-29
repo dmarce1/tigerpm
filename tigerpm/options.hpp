@@ -6,7 +6,8 @@
 struct options {
 
 	int chain_dim;
-	int part_dim;
+	int parts_dim;
+	int four_dim;
 
 	double box_size;
 
@@ -16,7 +17,8 @@ struct options {
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & chain_dim;
-		arc & part_dim;
+		arc & four_dim;
+		arc & parts_dim;
 		arc & box_size;
 		arc & config_file;
 		arc & test;

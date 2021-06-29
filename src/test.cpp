@@ -7,6 +7,7 @@
 #include <tigerpm/kick_pm.hpp>
 #include <tigerpm/chainmesh.hpp>
 
+static void chainmesh_test();
 static void kick_pm_test();
 static void fft_test();
 static void particle_test();
@@ -17,6 +18,8 @@ void run_test(std::string test) {
 	printf("Testing\n");
 	if (test == "fft") {
 		fft_test();
+	} else if (test == "chainmesh") {
+		chainmesh_test();
 	} else if (test == "sort") {
 		sort_test();
 	} else if (test == "parts") {
@@ -74,7 +77,7 @@ static void fft_test() {
 static void particle_test() {
 	PRINT("Doing particle test\n");
 	particles_random_init();
-		timer tm;
+	timer tm;
 	tm.start();
 	particles_domain_sort();
 	tm.stop();
@@ -119,6 +122,19 @@ static void kick_pm_test() {
 			tm3.read(), tm4.read(), tm1.read() + tm2.read() + tm3.read() + tm4.read());
 }
 
+static void chainmesh_test() {
+	timer tm1, tm2, tm3, tm4;
+	particles_random_init();
+	PRINT("DOMAIN SORT\n");
+	tm1.start();
+	particles_domain_sort();
+	tm1.stop();
+	tm2.start();
+	PRINT("SORT\n");
+	chainmesh_create();
+	tm2.stop();
+	PRINT("%e s to sort, %e s to sort, %e total\n", tm1.read(), tm2.read(), tm1.read() + tm2.read());
+}
 
 static void sort_test() {
 	particles_random_init();
@@ -127,5 +143,5 @@ static void sort_test() {
 	tm.start();
 	chainmesh_create();
 	tm.stop();
-	PRINT( "%e s\n", tm.read());
+	PRINT("%e s\n", tm.read());
 }

@@ -1,34 +1,53 @@
 #include <tigerpm/chainmesh.hpp>
 #include <tigerpm/particles.hpp>
+#include <tigerpm/util.hpp>
 
-std::vector<chaincell> cells;
+static std::vector<chaincell> cells;
+static range<int> mybox;
+static int thread_vol;
+
+static void sort(const range<int> chain_box, int pbegin, int pend);
 
 void chainmesh_create() {
-	const auto box = particles_get_local_box();
-	box.pad(CHAIN_BW);
-	cells.resize(box.volume());
-	const auto counts = particles_mesh_count();
-	for (int i = 0; i < counts.size(); i++) {
-		cells[i].particles.reserve(counts[i]);
-	}
-	const int nthreads = hpx::thread::hardware_concurrency();
-	std::vector<hpx::future<void>> futs;
-	for (int proc = 0; proc < nthreads; proc++) {
-		const auto func = [proc,nthreads,box]() {
-			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
-			const int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
-			for (int part_index = begin; part_index < end; part_index++) {
-				const auto loc = particles_mesh_loc(part_index);
-				const int chain_index = box.index(loc);
-				auto& cell = cells[chain_index];
-				while( (*cell.lock)++ != 0 ) {
-					(*cell.lock)--;
-				}
-				cell.particles.push_back(part_index);
-				(*cell.lock)--;
+	static int N = get_options().chain_dim;
+	mybox = find_my_box(N);
+	cells.resize(mybox.volume());
+	thread_vol = std::max(1, (int) (cells.size() / hpx::thread::hardware_concurrency() / 8));
+	sort(mybox, 0, particles_size());
+}
+
+static void sort(const range<int> chain_box, int pbegin, int pend) {
+	static int N = get_options().chain_dim;
+	static double Ninv = 1.0 / N;
+	const int vol = chain_box.volume();
+	if (vol == 1) {
+		auto& cell = cells[mybox.index(chain_box.begin)];
+		cell.pbegin = pbegin;
+		cell.pend = pend;
+	} else {
+		int long_dim;
+		int long_span = -1;
+		for (int dim = 0; dim < NDIM; dim++) {
+			const int span = chain_box.end[dim] - chain_box.begin[dim];
+			if (span > long_span) {
+				long_span = span;
+				long_dim = dim;
 			}
-		};
-		futs.push_back(hpx::async(func));
+		}
+		const int mid_box = chain_box.begin[long_dim] + long_span / 2;
+		const double mid_x = mid_box * Ninv;
+		auto chain_box_left = chain_box;
+		auto chain_box_right = chain_box;
+		chain_box_left.end[long_dim] = chain_box_right.begin[long_dim] = mid_box;
+		const auto pmid = particles_sort(pbegin, pend, mid_x, long_dim);
+		if (vol > thread_vol) {
+			auto futl = hpx::async(sort, chain_box_left, pbegin, pmid);
+			auto futr = hpx::async(sort, chain_box_right, pmid, pend);
+			futl.get();
+			futr.get();
+		} else {
+			sort(chain_box_left, pbegin, pmid);
+			sort(chain_box_right, pmid, pend);
+		}
 	}
-	hpx::wait_all(futs.begin(), futs.end());
 }

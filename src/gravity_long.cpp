@@ -17,7 +17,7 @@ HPX_PLAIN_ACTION (get_phi);
 HPX_PLAIN_ACTION (apply_laplacian);
 
 void gravity_long_compute() {
-	const double N = get_options().part_dim;
+	const double N = get_options().four_dim;
 	fft3d_init(N);
 	PRINT("Computing source\n");
 	compute_source();
@@ -40,7 +40,7 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 	std::array<float, NDIM> X;
 	std::array<std::array<double, NINTERP>, NDIM> w;
 	std::array<std::array<double, NINTERP>, NDIM> dw;
-	const double N = get_options().part_dim;
+	const double N = get_options().four_dim;
 
 	for (int dim = 0; dim < NDIM; dim++) {
 		X[dim] = pos[dim] * N;
@@ -64,9 +64,9 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 	std::array<int, NDIM> J;
 	for( int dim1 = 0; dim1 < NDIM; dim1++) {
 		g[dim1] = 0.0;
-		for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {
-			for (J[1] = I[1]; J[1] < I[1] + 4; J[1]++) {
-				for (J[2] = I[2]; J[2] < I[2] + 4; J[2]++) {
+		for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+			for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+				for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
 					double w0 = 1.0;
 					for (int dim2 = 0; dim2 < NDIM; dim2++) {
 						const int i0 = J[dim2] - I[dim2];
@@ -77,6 +77,8 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 						}
 					}
 					const int l = source_box.index(J);
+					assert(l>=0);
+					assert(l<phi.size());
 					g[dim1] += w0 * phi[l] * N;
 				}
 			}
@@ -84,15 +86,17 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 
 	}
 	phi0 = 0.0;
-	for (J[0] = I[0]; J[0] < I[0] + 4; J[0]++) {
-		for (J[1] = I[1]; J[1] < I[1] + 4; J[1]++) {
-			for (J[2] = I[2]; J[2] < I[2] + 4; J[2]++) {
+	for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+		for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+			for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
 				double w0 = 1.0;
 				for (int dim2 = 0; dim2 < NDIM; dim2++) {
 					const int i0 = J[dim2] - I[dim2];
 					w0 *= w[dim2][i0];
 				}
 				const int l = source_box.index(J);
+				assert(l>=0);
+				assert(l<phi.size());
 				phi0 += w0 * phi[l];
 			}
 		}
@@ -118,7 +122,7 @@ void compute_source() {
 	}
 	source_box = source_box.pad(2);
 	source.resize(source_box.volume(), 0.0f);
-	const double N = get_options().part_dim;
+	const double N = get_options().four_dim;
 	const int xdim = source_box.end[XDIM] - source_box.begin[XDIM];
 	mutexes.resize(xdim);
 	for (int i = 0; i < xdim; i++) {
@@ -177,7 +181,7 @@ void apply_laplacian() {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < apply_laplacian_action > (c));
 	}
-	const double N = get_options().part_dim;
+	const double N = get_options().four_dim;
 	const auto box = fft3d_complex_range();
 	std::array<int, NDIM> i;
 	std::array<double, NDIM> k;
