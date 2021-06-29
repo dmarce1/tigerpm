@@ -14,7 +14,6 @@ using map_type = std::unordered_map<int, int>;
 
 #include <hpx/serialization/unordered_map.hpp>
 
-#include <tigerpm/options.hpp>
 #include <tigerpm/particles.hpp>
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/range.hpp>
@@ -133,14 +132,6 @@ void particles_random_init() {
 
 }
 
-inline std::array<int, NDIM> particles_mesh_loc(int index) {
-	static const double N = get_options().chain_dim;
-	std::array<int, NDIM> i;
-	for (int dim = 0; dim < NDIM; dim++) {
-		i[dim] = X[dim][index].to_double() * N;
-	}
-	return i;
-}
 
 static void domain_sort_begin() {
 	std::vector<hpx::future<void>> futs1;
@@ -152,7 +143,7 @@ static void domain_sort_begin() {
 		root_domain = new domain_t;
 		find_domains(root_domain);
 	}
-	const auto mybox = find_my_box(get_options().chain_dim);
+	const auto mybox = particles_get_local_box();
 	std::unordered_map<int, std::vector<particle>> sends;
 	PRINT("Domain sort begin on %i\n", hpx_rank());
 	const int nthreads = hpx::thread::hardware_concurrency();
@@ -380,8 +371,9 @@ std::vector<particle> particles_sample(int Nsamples) {
 	return particles_sample(samples_per_proc);
 }
 
-static std::vector<int> mesh_count() {
+std::vector<int> particles_mesh_count() {
 	const auto box = find_my_box(get_options().chain_dim);
+	box.pad(CHAIN_BW);
 	const int box_vol = box.volume();
 	std::vector<std::atomic<int>> counts(box_vol);
 	for (int i = 0; i < box_vol; i++) {
@@ -410,61 +402,4 @@ static std::vector<int> mesh_count() {
 	return int_counts;
 }
 
-void particles_sort() {
-	auto counts = mesh_count();
-	std::vector<int> begins(counts.size());
-	std::vector<int> ends(counts.size());
-	begins[0] = 0;
-	for (int i = 0; i < counts.size() - 1; i++) {
-		begins[i + 1] = begins[i] + counts[i];
-	}
-	for (int i = 0; i < counts.size() - 1; i++) {
-		ends[i] = begins[i + 1];
-	}
-	ends.back() = begins.back() + counts.back();
-	counts = decltype(counts)();
-	const auto box = find_my_box(get_options().chain_dim);
-	int cell_index = 0;
-	while (cell_index < ends.size()) {
-		int part_index;
-		while ((part_index = begins[cell_index]++) < ends[cell_index]) {
-			auto loc = particles_mesh_loc(part_index);
-			if (box.index(loc) != cell_index) {
-				auto part = particles_get_particle(part_index);
-				int next_cell_index;
-				do {
-					next_cell_index = box.index(loc);
-					if (next_cell_index != cell_index) {
-						int next_part_index;
-						decltype(loc) next_loc;
-						int this_cell_index;
-						do {
-							next_part_index = begins[next_cell_index]++;
-							next_loc = particles_mesh_loc(next_part_index);
-							this_cell_index = box.index(next_loc);
-						} while (next_cell_index == this_cell_index);
-						const auto next_part = particles_get_particle(next_part_index);
-						particles_set_particle(part, next_part_index);
-						part = next_part;
-						loc = next_loc;
-					}
-				} while (next_cell_index != cell_index);
-				particles_set_particle(part, part_index);
-			}
-		}
-		cell_index++;
-	}
-#ifdef SORT_TEST
-	begins[0] = 0;
-	for (int i = 1; i < begins.size(); i++) {
-		begins[i] = ends[i - 1];
-	}
-	for (int i = 0; i < particles_size(); i++) {
-		const int cell_index = box.index(particles_mesh_loc(i));
-		if (i < begins[cell_index] || i >= ends[cell_index]) {
-			PRINT("Found particle out of range %i.\n", cell_index);
-		}
-	}
-#endif
-}
 

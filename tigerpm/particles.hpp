@@ -9,6 +9,7 @@
 #define PARTICLES_HPP_
 
 #include <tigerpm/fixed.hpp>
+#include <tigerpm/options.hpp>
 #include <tigerpm/range.hpp>
 
 #include <vector>
@@ -45,15 +46,23 @@ struct particle {
 
 int particles_size();
 void particles_resize(size_t new_size);
-void particles_domain_sort();
 void particles_random_init();
-void particles_sort();
+void particles_domain_sort();
 range<int> particles_get_local_box();
-std::array<int, NDIM> particles_mesh_loc(int index);
 std::vector<int> particles_per_rank();
 std::vector<particle> particles_sample(const std::vector<int>&);
 std::vector<particle> particles_sample(int);
 void particles_sphere_init(float radius);
+std::vector<int> particles_mesh_count();
+
+inline std::array<int, NDIM> particles_mesh_loc(int index) {
+	static const double N = get_options().chain_dim;
+	std::array<int, NDIM> i;
+	for (int dim = 0; dim < NDIM; dim++) {
+		i[dim] = particles_X[dim][index].to_double() * N;
+	}
+	return i;
+}
 
 inline fixed32& particles_pos(int dim, int index) {
 	return particles_X[dim][index];

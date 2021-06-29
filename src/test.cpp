@@ -5,6 +5,7 @@
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/gravity_short.hpp>
 #include <tigerpm/kick_pm.hpp>
+#include <tigerpm/chainmesh.hpp>
 
 static void kick_pm_test();
 static void fft_test();
@@ -109,9 +110,11 @@ static void kick_pm_test() {
 	kick_pm();
 	tm3.stop();
 	PRINT("COMPARISON\n");
+#ifdef FORCE_TEST
 	tm4.start();
 	gravity_short_ewald_compare(10000);
 	tm4.stop();
+#endif
 	PRINT("%e s to sort, %e s to compute gravity, %e s to kick, %e s on comparison, %e total\n", tm1.read(), tm2.read(),
 			tm3.read(), tm4.read(), tm1.read() + tm2.read() + tm3.read() + tm4.read());
 }
@@ -122,7 +125,7 @@ static void sort_test() {
 	particles_domain_sort();
 	timer tm;
 	tm.start();
-	particles_sort();
+	chainmesh_create();
 	tm.stop();
 	PRINT( "%e s\n", tm.read());
 }

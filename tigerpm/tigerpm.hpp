@@ -16,7 +16,7 @@
 #include <stdio.h>
 
 //#define FORCE_TEST
-#define SORT_TEST
+//#define SORT_TEST
 
 #define NDIM 3
 
@@ -25,6 +25,7 @@
 #define ZDIM 2
 
 #define CHAIN_RATIO 4
+#define CHAIN_BW 1
 
 #ifndef __CUDACC__
 using spinlock_type = hpx::lcos::local::spinlock;

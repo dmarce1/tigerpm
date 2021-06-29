@@ -14,6 +14,7 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 
 
 set(tigerpm_source_files
+	src/chainmesh.cpp
     src/cuda.cpp
     src/fft.cpp
     src/gravity_long.cpp
@@ -32,6 +33,7 @@ set(tigerpm_source_files
                         
 
 set(tigerpm_header_files
+	tigerpm/chainmesh.hpp
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
 	tigerpm/gravity_long.hpp
