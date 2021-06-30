@@ -3,111 +3,120 @@
 #include <tigerpm/util.hpp>
 #include <tigerpm/hpx.hpp>
 
-static vector<chaincell> cells;
+struct indices_hash {
+	size_t operator()(const array<int, NDIM>& indices) const {
+		std::hash<int> ihash;
+		size_t hash = 0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			hash ^= ihash(indices[dim]);
+		}
+		return hash;
+	}
+};
+
+struct indices_equal {
+	size_t operator()(const array<int, NDIM>& i1, const array<int, NDIM>& i2) const {
+		bool rc = true;
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (i1[dim] != i2[dim]) {
+				rc = false;
+				break;
+			}
+		}
+		return rc;
+	}
+};
+
+using cell_map_type = std::unordered_map<array<int,NDIM>, chaincell, indices_hash, indices_equal>;
+
+static cell_map_type cells;
 static range<int> mybox;
-static range<int> mybigbox;
 static int thread_vol;
 static shared_mutex_type mutex;
 
 static void sort(const range<int> chain_box, int pbegin, int pend);
+static void transmit_chain_particles(array<int, NDIM>, vector<particle>);
 
-void transmit_chain_particles(vector<particle> parts);
+HPX_PLAIN_ACTION(chainmesh_create);
+HPX_PLAIN_ACTION(chainmesh_exchange);
+HPX_PLAIN_ACTION(transmit_chain_particles);
 
-HPX_PLAIN_ACTION (transmit_chain_particles);
-HPX_PLAIN_ACTION (chainmesh_exchange_boundaries);
-HPX_PLAIN_ACTION (chainmesh_create);
+#define NPARTS_PER_LOCK 1024
 
-#define NPARTS_PER_LOCK 1000
-
-void transmit_chain_particles(vector<particle> parts) {
-	PRINT( "%i receiving %i particles\n", hpx_rank(), parts.size());
+static void transmit_chain_particles(array<int, NDIM> celli, vector<particle> parts) {
 	std::unique_lock<shared_mutex_type> lock(mutex);
 	const int offset = particles_size();
+	cells[celli].pbegin = particles_size();
 	particles_resize(particles_size() + parts.size());
+	cells[celli].pend = particles_size();
 	lock.unlock();
-	const int nthreads = hpx::thread::hardware_concurrency();
-	vector<hpx::future<void>> futs;
-	for (int proc = 0; proc < nthreads; proc++) {
-		const auto func = [proc, nthreads, offset, &parts]() {
-			const int begin = size_t(proc) * size_t(parts.size()) / size_t(nthreads);
-			const int end = size_t(proc+1) * size_t(parts.size()) / size_t(nthreads);
-			for (int i = begin; i < end; i += NPARTS_PER_LOCK) {
-				const int maxi = std::min(end, i + NPARTS_PER_LOCK);
-				mutex.lock_shared();
-				for (int j = i; j < maxi; j++) {
-					particles_set_particle(parts[j], j + offset);
-				}
-				mutex.unlock_shared();
-			}};
-		futs.push_back(hpx::async(func));
+//	PRINT("Receiving %i particles for cell %i %i %i on rank %i\n", parts.size(), celli[0], celli[1], celli[2],
+//			hpx_rank());
+	for (int i = 0; i < parts.size(); i += NPARTS_PER_LOCK) {
+		mutex.lock_shared();
+		const int jmax = std::min(i + NPARTS_PER_LOCK, (int) parts.size());
+		for (int j = i; j < jmax; j++) {
+			assert(j + offset >= 0);
+			assert(j + offset < particles_size());
+			particles_set_particle(parts[j], j + offset);
+		}
+		mutex.unlock_shared();
 	}
-	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void chainmesh_exchange_boundaries() {
+void chainmesh_exchange() {
+	const static int N = get_options().chain_dim;
 	vector<hpx::future<void>> futs;
-	vector<hpx::future<void>> futs2;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < chainmesh_exchange_boundaries_action > (c));
+		futs.push_back(hpx::async<chainmesh_exchange_action>(c));
 	}
 	vector<range<int>> allboxes(hpx_size());
-	vector<range<int>> interboxes;
-	vector<range<double>> interxboxes;
-	vector<int> ranks;
-	static int N = get_options().chain_dim;
-	static double Ninv = 1.0 / N;
 	find_all_boxes(allboxes, N);
-	mybox = allboxes[hpx_rank()];
+	const auto myvol = mybox.volume();
+	spinlock_type this_mutex;
 	for (int rank = 0; rank < allboxes.size(); rank++) {
-		if (rank != hpx_rank()) {
-			const auto inter = allboxes[rank].pad(1).intersection(mybox);
-			if (inter.volume()) {
-				range<double> interxbox;
-				for (int dim = 0; dim < NDIM; dim++) {
-					interxbox.begin[dim] = inter.begin[dim] * Ninv;
-					interxbox.end[dim] = inter.end[dim] * Ninv;
-				}
-				interxboxes.push_back(interxbox);
-				interboxes.push_back(inter);
-				ranks.push_back(rank);
-			}
-		}
-	}
-	range<int> interiorbox = mybox.pad(-1);
-	range<double> interiorx;
-	for (int dim = 0; dim < NDIM; dim++) {
-		interiorx.begin[dim] = interiorbox.begin[dim] * Ninv;
-		interiorx.end[dim] = interiorbox.end[dim] * Ninv;
-	}
-	vector < vector < particle >> parts(ranks.size());
-	vector<spinlock_type> mutexes(ranks.size());
-	const int nthreads = hpx::thread::hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		const auto func = [proc,nthreads,&mutexes,&interiorx,&ranks,&interxboxes,&parts]() {
-			const int begin = size_t(proc) * size_t(particles_local_size()) / size_t(nthreads);
-			const int end = size_t(proc + 1) * size_t(particles_local_size()) / size_t(nthreads);
-			for (int i = begin; i < end; i++) {
-				array<double, NDIM> x;
-				for (int dim = 0; dim < NDIM; dim++) {
-					x[dim] = particles_pos(dim, i).to_double();
-				}
-				if (!interiorx.contains(x)) {
-					const auto part = particles_get_particle(i);
-					for (int rank = 0; rank < ranks.size(); rank++) {
-						if (interxboxes[rank].contains(x)) {
-							std::lock_guard<spinlock_type> lock(mutexes[rank]);
-							parts[rank].push_back(part);
+		const auto box = allboxes[rank];
+		array<int, NDIM> si;
+		for (si[0] = -N; si[0] <= +N; si[0] += N) {
+			for (si[1] = -N; si[1] <= +N; si[1] += N) {
+				for (si[2] = -N; si[2] <= +N; si[2] += N) {
+					const auto inter = box.pad(1).shift(si).intersection(mybox);
+					const auto vol = inter.volume();
+					if (vol != 0 && vol != myvol) {
+						array<int, NDIM> i;
+						std::vector<hpx::future<void>> these_futs;
+						for (i[0] = inter.begin[0]; i[0] != inter.end[0]; i[0]++) {
+							for (i[1] = inter.begin[1]; i[1] != inter.end[1]; i[1]++) {
+								for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
+									these_futs.push_back(hpx::async([i,si,&futs,rank,&this_mutex]() {
+											mutex.lock_shared();
+											assert(cells.find(i) != cells.end());
+											vector<particle> parts;
+											const auto& cell = cells[i];
+											parts.reserve(cell.pend - cell.pbegin);
+											for (int k = cell.pbegin; k != cell.pend; k++) {
+												assert(k >= 0);
+												assert(k < particles_local_size());
+												parts.push_back(particles_get_particle(k));
+											}
+											mutex.unlock_shared();
+											auto j = i;
+											for (int dim = 0; dim < NDIM; dim++) {
+												j[dim] -= si[dim];
+											}
+											std::lock_guard<spinlock_type> lock(this_mutex);
+											futs.push_back(
+													hpx::async<transmit_chain_particles_action>(hpx_localities()[rank], j,
+															std::move(parts)));
+										}));
+								}
+							}
 						}
+						hpx::wait_all(these_futs.begin(), these_futs.end());
 					}
 				}
 			}
-		};
-		futs2.push_back(hpx::async(func));
-	}
-	hpx::wait_all(futs2.begin(), futs2.end());
-	for (int rank = 0; rank < ranks.size(); rank++) {
-		futs.push_back(
-				hpx::async < transmit_chain_particles_action > (hpx_localities()[ranks[rank]], std::move(parts[rank])));
+		}
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }
@@ -115,19 +124,12 @@ void chainmesh_exchange_boundaries() {
 void chainmesh_create() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < chainmesh_create_action > (c));
+		futs.push_back(hpx::async<chainmesh_create_action>(c));
 	}
 	static int N = get_options().chain_dim;
 	mybox = find_my_box(N);
-	mybigbox = mybox.pad(1);
-	cells.resize(mybigbox.volume());
-	for (int i = 0; i < cells.size(); i++) {
-		cells[i].pbegin = 0;
-		cells[i].pend = 0;
-	}
-	thread_vol = std::max(1, (int) (cells.size() / hpx::thread::hardware_concurrency() / 8));
-	futs.push_back(hpx::async(sort, mybigbox, 0, particles_local_size()));
-	sort(mybigbox, particles_local_size(), particles_size());
+	thread_vol = std::max(1, (int) (mybox.volume() / hpx::thread::hardware_concurrency() / 8));
+	sort(mybox, 0, particles_size());
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -136,11 +138,11 @@ static void sort(const range<int> chain_box, int pbegin, int pend) {
 	static double Ninv = 1.0 / N;
 	const int vol = chain_box.volume();
 	if (vol == 1) {
-		if (pbegin != pend) {
-			auto& cell = cells[mybigbox.index(chain_box.begin)];
-			cell.pbegin = pbegin;
-			cell.pend = pend;
-		}
+		std::unique_lock<shared_mutex_type> lock(mutex);
+		auto& cell = cells[chain_box.begin];
+		cell.pbegin = pbegin;
+		cell.pend = pend;
+		assert(cells.find(chain_box.begin) != cells.end());
 	} else {
 		int long_dim;
 		int long_span = -1;

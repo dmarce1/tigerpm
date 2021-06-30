@@ -25,8 +25,6 @@ using map_type = std::unordered_map<int, int>;
 
 #include <gsl/gsl_rng.h>
 
-#define MAX_PARTS_PER_MSG (4*1024*1024)
-
 struct domain_t {
 	domain_t* left;
 	domain_t* right;

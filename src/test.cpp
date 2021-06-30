@@ -136,14 +136,6 @@ static void chainmesh_test() {
 	tm.reset();
 	PRINT( "\n");
 
-	PRINT("BOUNDARIES\n");
-	tm.start();
-	chainmesh_exchange_boundaries();
-	tm.stop();
-	PRINT( "%e s\n", tm.read());
-	total += tm.read();
-	tm.reset();
-	PRINT( "\n");
 
 
 	PRINT("SORT\n");
@@ -154,6 +146,16 @@ static void chainmesh_test() {
 	total += tm.read();
 	tm.reset();
 	PRINT( "\n");
+
+	PRINT("BOUNDARIES\n");
+	tm.start();
+	chainmesh_exchange();
+	tm.stop();
+	PRINT( "%e s\n", tm.read());
+	total += tm.read();
+	tm.reset();
+	PRINT( "\n");
+
 
 	PRINT( "%e s total\n", total);
 

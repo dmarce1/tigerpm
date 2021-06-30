@@ -32,6 +32,9 @@
 
 #define CHAIN_BW 1
 
+
+#define MAX_PARTS_PER_MSG (4*1024*1024)
+
 #ifndef __CUDACC__
 using spinlock_type = hpx::lcos::local::spinlock;
 using mutex_type = hpx::lcos::local::mutex;
