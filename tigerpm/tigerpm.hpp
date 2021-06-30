@@ -10,7 +10,11 @@
 
 
 #ifndef __CUDACC__
+#ifdef USE_HPX
 #include <hpx/hpx.hpp>
+#else
+#include <hpx_lite/hpx/hpx_lite.hpp>
+#endif
 #endif
 
 #include <stdio.h>

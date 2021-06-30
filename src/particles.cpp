@@ -1,6 +1,7 @@
 #define PARTICLES_CPP
 
 #include <tigerpm/fixed.hpp>
+#include <unordered_map>
 
 array<vector<fixed32>, NDIM> particles_X;
 array<vector<float>, NDIM> particles_U;
@@ -13,14 +14,15 @@ static int local_size;
 
 using map_type = std::unordered_map<int, int>;
 
+#ifdef USE_HPX
 #include <hpx/serialization/unordered_map.hpp>
+#endif
 
 #include <tigerpm/particles.hpp>
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/range.hpp>
 #include <tigerpm/util.hpp>
 
-#include <unordered_map>
 #include <gsl/gsl_rng.h>
 
 #define MAX_PARTS_PER_MSG (4*1024*1024)
@@ -111,7 +113,7 @@ void particles_random_init() {
 	const int size = end - begin;
 	assert(size < std::numeric_limits<int>::max());
 	particles_resize(size);
-	const int nthreads = hpx::threads::hardware_concurrency();
+	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads]() {
 			const int seed = 4321*(hpx_size() * proc + hpx_rank() + 42);

@@ -129,7 +129,7 @@ void compute_source() {
 	for (int i = 0; i < xdim; i++) {
 		mutexes[i] = std::make_shared<spinlock_type>();
 	}
-	const int nthreads = hpx::threads::hardware_concurrency();
+	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,N,&source,&mutexes]() {
 			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
