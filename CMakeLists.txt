@@ -34,6 +34,7 @@ set(tigerpm_source_files
 
 set(tigerpm_header_files
 	tigerpm/chainmesh.hpp
+	tigerpm/containers.hpp
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
 	tigerpm/gravity_long.hpp

@@ -2,12 +2,12 @@
 
 #include <tigerpm/fixed.hpp>
 
-std::array<std::vector<fixed32>, NDIM> particles_X;
-std::array<std::vector<float>, NDIM> particles_U;
-std::vector<char> particles_R;
+array<vector<fixed32>, NDIM> particles_X;
+array<vector<float>, NDIM> particles_U;
+vector<char> particles_R;
 #ifdef FORCE_TEST
-std::vector<float> particles_P;
-std::array<std::vector<float>, NDIM> particles_G;
+vector<float> particles_P;
+array<vector<float>, NDIM> particles_G;
 #endif
 static int local_size;
 
@@ -42,19 +42,19 @@ static auto& P = particles_P;
 static auto& G = particles_G;
 #endif
 
-static std::vector<int> free_indices;
-static std::vector<std::vector<particle>> recv_parts;
+static vector<int> free_indices;
+static vector<vector<particle>> recv_parts;
 static spinlock_type send_mutex;
 static spinlock_type recv_mutex;
 static int sort_counter = 0;
 
 static void domain_sort_end();
 static void domain_sort_begin();
-static int find_domain(std::array<int, NDIM> I);
+static int find_domain(array<int, NDIM> I);
 static void find_domains(domain_t*);
-static void transmit_particles(std::vector<particle>);
+static void transmit_particles(vector<particle>);
 static std::unordered_map<int, int> get_particles_per_rank();
-static std::vector<particle> get_particles_sample(std::vector<int> sample_counts);
+static vector<particle> get_particles_sample(vector<int> sample_counts);
 
 HPX_PLAIN_ACTION (domain_sort_end);
 HPX_PLAIN_ACTION (domain_sort_begin);
@@ -74,12 +74,12 @@ range<int> particles_get_local_box() {
 }
 
 void particles_sphere_init(float radius) {
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < particles_sphere_init_action > (c, radius));
 	}
 	const auto box = particles_get_local_box();
-	std::array<int, NDIM> i;
+	array<int, NDIM> i;
 	const double Ninv = 1.0 / get_options().chain_dim;
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
 		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
@@ -101,7 +101,7 @@ void particles_sphere_init(float radius) {
 }
 
 void particles_random_init() {
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < particles_random_init_action > (c));
 	}
@@ -135,8 +135,8 @@ void particles_random_init() {
 
 
 static void domain_sort_begin() {
-	std::vector<hpx::future<void>> futs1;
-	std::vector<hpx::future<void>> futs2;
+	vector<hpx::future<void>> futs1;
+	vector<hpx::future<void>> futs2;
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async < domain_sort_begin_action > (c));
 	}
@@ -145,7 +145,7 @@ static void domain_sort_begin() {
 		find_domains(root_domain);
 	}
 	const auto mybox = particles_get_local_box();
-	std::unordered_map<int, std::vector<particle>> sends;
+	std::unordered_map<int, vector<particle>> sends;
 	PRINT("Domain sort begin on %i\n", hpx_rank());
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -186,7 +186,7 @@ static void domain_sort_begin() {
 }
 
 static void domain_sort_end() {
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < domain_sort_end_action > (c));
 	}
@@ -219,7 +219,7 @@ static void domain_sort_end() {
 			for( int j = 0; j < parts.size(); j++) {
 				particles_set_particle(parts[j],free_indices[j+free_index]);
 			}
-			parts = std::vector<particle>();
+			parts = vector<particle>();
 		}));
 		free_index += sz;
 	}
@@ -235,12 +235,12 @@ int particles_local_size() {
 	return local_size;
 }
 
-static void transmit_particles(std::vector<particle> parts) {
+static void transmit_particles(vector<particle> parts) {
 	std::lock_guard<spinlock_type> lock(recv_mutex);
 	recv_parts.push_back(std::move(parts));
 }
 
-static int find_domain(std::array<int, NDIM> I) {
+static int find_domain(array<int, NDIM> I) {
 	domain_t* tree = root_domain;
 	while (tree->left != nullptr) {
 		if (I[tree->xdim] < tree->mid) {
@@ -301,7 +301,7 @@ void particles_resize(size_t new_size) {
 }
 
 static std::unordered_map<int, int> get_particles_per_rank() {
-	std::vector < hpx::future<std::unordered_map<int, int>>>futs;
+	vector < hpx::future<std::unordered_map<int, int>>>futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < get_particles_per_rank_action > (c));
 	}
@@ -319,23 +319,23 @@ static std::unordered_map<int, int> get_particles_per_rank() {
 	return rc;
 }
 
-std::vector<int> particles_per_rank() {
+vector<int> particles_per_rank() {
 	auto data = get_particles_per_rank_action()(hpx_localities()[0]);
-	std::vector<int> rc(hpx_size());
+	vector<int> rc(hpx_size());
 	for (int i = 0; i < hpx_size(); i++) {
 		rc[i] = data[i];
 	}
 	return rc;
 }
 
-static std::vector<particle> get_particles_sample(std::vector<int> sample_counts) {
-	std::vector < hpx::future<std::vector<particle>>>futs;
+static vector<particle> get_particles_sample(vector<int> sample_counts) {
+	vector < hpx::future<vector<particle>>>futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < get_particles_sample_action > (c, sample_counts));
 	}
 
 	std::set<int> indices;
-	std::vector<particle> samples;
+	vector<particle> samples;
 	for (int i = 0; i < sample_counts[hpx_rank()]; i++) {
 		const int index = rand() % particles_size();
 		if (indices.find(index) == indices.end()) {
@@ -353,17 +353,17 @@ static std::vector<particle> get_particles_sample(std::vector<int> sample_counts
 
 }
 
-std::vector<particle> particles_sample(const std::vector<int>& sample_counts) {
+vector<particle> particles_sample(const vector<int>& sample_counts) {
 	return get_particles_sample_action()(hpx_localities()[0], sample_counts);
 }
 
-std::vector<particle> particles_sample(int Nsamples) {
+vector<particle> particles_sample(int Nsamples) {
 	auto parts_per_rank = particles_per_rank();
 	size_t total_parts = 0;
 	for (int i = 0; i < hpx_size(); i++) {
 		total_parts += parts_per_rank[i];
 	}
-	std::vector<int> samples_per_proc(hpx_size(), 0);
+	vector<int> samples_per_proc(hpx_size(), 0);
 	for (int i = 0; i < Nsamples; i++) {
 		const size_t index = (size_t(rand()) * size_t(rand())) % total_parts;
 		size_t total = 0;
@@ -377,16 +377,16 @@ std::vector<particle> particles_sample(int Nsamples) {
 	return particles_sample(samples_per_proc);
 }
 
-std::vector<int> particles_mesh_count() {
+vector<int> particles_mesh_count() {
 	const auto box = find_my_box(get_options().chain_dim);
 	box.pad(CHAIN_BW);
 	const int box_vol = box.volume();
-	std::vector<std::atomic<int>> counts(box_vol);
+	vector<std::atomic<int>> counts(box_vol);
 	for (int i = 0; i < box_vol; i++) {
 		counts[i] = 0;
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,box,&counts]() {
 			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
@@ -401,7 +401,7 @@ std::vector<int> particles_mesh_count() {
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-	std::vector<int> int_counts(box_vol);
+	vector<int> int_counts(box_vol);
 	for (int i = 0; i < box_vol; i++) {
 		int_counts[i] = int(counts[i]);
 	}

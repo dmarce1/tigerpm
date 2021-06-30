@@ -7,7 +7,7 @@
 HPX_PLAIN_ACTION (kick_pm);
 
 void kick_pm() {
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < kick_pm_action > (c));
 	}
@@ -18,7 +18,7 @@ void kick_pm() {
 			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
 			const int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
 			for (int i = begin; i < end; i++) {
-				std::array<double, NDIM> pos;
+				array<double, NDIM> pos;
 				for (int dim = 0; dim < NDIM; dim++) {
 					pos[dim] = particles_pos(dim, i).to_double();
 				}

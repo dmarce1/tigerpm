@@ -4,18 +4,18 @@
 #include <tigerpm/particles.hpp>
 #include <tigerpm/util.hpp>
 
-using return_type = std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>>;
+using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
-static return_type do_ewald(const std::vector<fixed32>& sinkx, const std::vector<fixed32>& sinky,
-		const std::vector<fixed32>& sinkz);
+static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
+		const vector<fixed32>& sinkz);
 
 HPX_PLAIN_ACTION (do_ewald);
 
-using return_type = std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>>;
+using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
-static return_type do_ewald(const std::vector<fixed32>& sinkx, const std::vector<fixed32>& sinky,
-		const std::vector<fixed32>& sinkz) {
-	std::vector < hpx::future < return_type >> futs;
+static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
+		const vector<fixed32>& sinkz) {
+	vector < hpx::future < return_type >> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < do_ewald_action > (c, sinkx, sinky, sinkz));
 	}
@@ -37,9 +37,9 @@ static return_type do_ewald(const std::vector<fixed32>& sinkx, const std::vector
 void gravity_short_ewald_compare(int Nsamples) {
 
 	/*	auto samples = particles_sample(Nsamples);
-	 std::vector<fixed32> sinkx(Nsamples);
-	 std::vector<fixed32> sinky(Nsamples);
-	 std::vector<fixed32> sinkz(Nsamples);
+	 vector<fixed32> sinkx(Nsamples);
+	 vector<fixed32> sinky(Nsamples);
+	 vector<fixed32> sinkz(Nsamples);
 	 for (int i = 0; i < Nsamples; i++) {
 	 sinkx[i] = samples[i].x[XDIM];
 	 sinky[i] = samples[i].x[YDIM];
@@ -60,9 +60,9 @@ void gravity_short_ewald_compare(int Nsamples) {
 	 printf( "%e %e %e \n", f1, f2, f2/f1 );
 	 }
 	 */
-	std::vector<fixed32> sinkx(Nsamples);
-	std::vector<fixed32> sinky(Nsamples);
-	std::vector<fixed32> sinkz(Nsamples);
+	vector<fixed32> sinkx(Nsamples);
+	vector<fixed32> sinky(Nsamples);
+	vector<fixed32> sinkz(Nsamples);
 	for (int i = 0; i < Nsamples; i++) {
 		sinkx[i] = double(i) / Nsamples + 0.5 / Nsamples;
 		sinky[i] = 0.5;
@@ -76,7 +76,7 @@ void gravity_short_ewald_compare(int Nsamples) {
 		if( i >= Nsamples /4 && i < 3* Nsamples/4) {
 			continue;
 		}
-		std::array<double, NDIM> x;
+		array<double, NDIM> x;
 		x[0] = sinkx[i].to_double();
 		x[1] = sinky[i].to_double();
 		x[2] = sinkz[i].to_double();

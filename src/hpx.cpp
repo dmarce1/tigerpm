@@ -2,14 +2,15 @@
 
 static int rank;
 static int nranks;
-static std::vector<hpx::id_type> localities;
-static std::vector<hpx::id_type> children;
+static vector<hpx::id_type> localities;
+static vector<hpx::id_type> children;
 
 HPX_PLAIN_ACTION (hpx_init);
 
 void hpx_init() {
 	rank = hpx::get_locality_id();
-	localities = hpx::find_all_localities();
+	auto tmp = hpx::find_all_localities();
+	localities.insert(localities.end(), tmp.begin(), tmp.end());
 	nranks = localities.size();
 	int base = (rank + 1) << 1;
 	const int index1 = base - 1;
@@ -21,7 +22,7 @@ void hpx_init() {
 		children.push_back(localities[index2]);
 	}
 
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < hpx_init_action > (c));
 	}
@@ -37,10 +38,10 @@ int hpx_size() {
 	return nranks;
 }
 
-const std::vector<hpx::id_type>& hpx_localities() {
+const vector<hpx::id_type>& hpx_localities() {
 	return localities;
 }
 
-const std::vector<hpx::id_type>& hpx_children() {
+const vector<hpx::id_type>& hpx_children() {
 	return children;
 }

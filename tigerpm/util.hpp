@@ -5,7 +5,7 @@
 #include <tigerpm/tigerpm.hpp>
 
 range<int> find_my_box(int N);
-void find_all_boxes(std::vector<range<int>>& boxes, int N);
+void find_all_boxes(vector<range<int>>& boxes, int N);
 
 
 template<class T>

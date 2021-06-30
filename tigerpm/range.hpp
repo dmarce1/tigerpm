@@ -11,16 +11,16 @@
 #include <tigerpm/tigerpm.hpp>
 #include <array>
 
-inline std::array<int, NDIM> shift_up(std::array<int, NDIM> i) {
-	std::array<int, NDIM> j;
+inline array<int, NDIM> shift_up(array<int, NDIM> i) {
+	array<int, NDIM> j;
 	j[2] = i[0];
 	j[0] = i[1];
 	j[1] = i[2];
 	return j;
 }
 
-inline std::array<int, NDIM> shift_down(std::array<int, NDIM> i) {
-	std::array<int, NDIM> j;
+inline array<int, NDIM> shift_down(array<int, NDIM> i) {
+	array<int, NDIM> j;
 	j[1] = i[0];
 	j[2] = i[1];
 	j[0] = i[2];
@@ -29,8 +29,8 @@ inline std::array<int, NDIM> shift_down(std::array<int, NDIM> i) {
 
 template<class T>
 struct range {
-	std::array<T, NDIM> begin;
-	std::array<T, NDIM> end;
+	array<T, NDIM> begin;
+	array<T, NDIM> end;
 
 	inline range intersection(const range& other) const {
 		range I;
@@ -51,7 +51,7 @@ struct range {
 	range& operator=(const range&) = default;
 	range& operator=(range&&) = default;
 
-	inline range shift(const std::array<T, NDIM>& s) const {
+	inline range shift(const array<T, NDIM>& s) const {
 		range r = *this;
 		for (int dim = 0; dim < NDIM; dim++) {
 			r.begin[dim] += s[dim];
@@ -82,7 +82,7 @@ struct range {
 		return rc;
 	}
 
-	inline bool contains(const std::array<T, NDIM>& p) const {
+	inline bool contains(const array<T, NDIM>& p) const {
 		for (int dim = 0; dim < NDIM; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				return false;
@@ -151,7 +151,7 @@ struct range {
 		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
 	}
 
-	inline int index(const std::array<T, NDIM> & i) const {
+	inline int index(const array<T, NDIM> & i) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
 		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);

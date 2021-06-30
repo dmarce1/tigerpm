@@ -15,13 +15,13 @@
 void fft3d_init(int N);
 void fft3d_execute();
 void fft3d_inv_execute();
-std::vector<float> fft3d_read_real(const range<int>&);
-std::vector<cmplx> fft3d_read_complex(const range<int>&);
-void fft3d_accumulate_real(const range<int>&, const std::vector<float>&);
-void fft3d_accumulate_complex(const range<int>&, const std::vector<cmplx>&);
+vector<float> fft3d_read_real(const range<int>&);
+vector<cmplx> fft3d_read_complex(const range<int>&);
+void fft3d_accumulate_real(const range<int>&, const vector<float>&);
+void fft3d_accumulate_complex(const range<int>&, const vector<cmplx>&);
 void fft3d_destroy();
 void fft3d_force_real();
 range<int> fft3d_complex_range();
-std::vector<cmplx>& fft3d_complex_vector();
+vector<cmplx>& fft3d_complex_vector();
 
 #endif /* FFT_HPP_ */

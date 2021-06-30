@@ -22,8 +22,8 @@ CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 }
 
 
-std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> gravity_short_ewald_call_kernel(
-		const std::vector<fixed32>& sinkx, const std::vector<fixed32>& sinky, const std::vector<fixed32>& sinkz);
+std::pair<vector<double>,  array<vector<double>, NDIM>> gravity_short_ewald_call_kernel(
+		const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz);
 
 void gravity_short_ewald_compare(int Nsamples);
 

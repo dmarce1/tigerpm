@@ -6,9 +6,9 @@
 __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey,
 		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz);
 
-std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> gravity_short_ewald_call_kernel(
-		const std::vector<fixed32>& sinkx, const std::vector<fixed32>& sinky, const std::vector<fixed32>& sinkz) {
-	std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> rc;
+std::pair<vector<double>, array<vector<double>, NDIM>> gravity_short_ewald_call_kernel(
+		const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
+	std::pair<vector<double>, array<vector<double>, NDIM>> rc;
 	fixed32* dev_sinkx;
 	fixed32* dev_sinky;
 	fixed32* dev_sinkz;
@@ -27,7 +27,7 @@ std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> gravity_sh
 	CUDA_CHECK(cudaMalloc(&dev_gx, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gy, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gz, Nsinks * sizeof(double)));
-	std::vector<double> zero(Nsinks, 0.0);
+	vector<double> zero(Nsinks, 0.0);
 	CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_gx, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_gy, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
@@ -41,7 +41,7 @@ std::pair<std::vector<double>, std::array<std::vector<double>, NDIM>> gravity_sh
 	CUDA_CHECK(
 			cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, gravity_ewald_kernel,EWALD_BLOCK_SIZE, sizeof(double)*(NDIM+1)*EWALD_BLOCK_SIZE ));
 	int num_kernels = std::max((int) (occupancy * cuda_smp_count() / Nsinks), 1);
-	std::vector < cudaStream_t > streams(num_kernels);
+	vector < cudaStream_t > streams(num_kernels);
 	for (int i = 0; i < num_kernels; i++) {
 		cudaStreamCreate (&streams[i]);
 	}

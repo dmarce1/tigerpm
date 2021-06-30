@@ -6,5 +6,5 @@
 void hpx_init();
 int hpx_rank();
 int hpx_size();
-const std::vector<hpx::id_type>& hpx_localities();
-const std::vector<hpx::id_type>& hpx_children();
+const vector<hpx::id_type>& hpx_localities();
+const vector<hpx::id_type>& hpx_children();

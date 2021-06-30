@@ -38,7 +38,7 @@ static void fft_test() {
 	PRINT("Doing FFT test\n");
 	const int N = 1290;
 	fft3d_init(N);
-	std::vector<float> R(N * N * N);
+	vector<float> R(N * N * N);
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
 			for (int k = 0; k < N; k++) {

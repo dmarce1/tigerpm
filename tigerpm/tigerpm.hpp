@@ -15,8 +15,10 @@
 
 #include <stdio.h>
 
+//#define CHECK_BOUNDS
 //#define FORCE_TEST
 //#define SORT_TEST
+
 
 #define NDIM 3
 
@@ -46,4 +48,5 @@ inline void print(const char* fmt, Args ...args) {
 #endif
 }
 
+#include <tigerpm/containers.hpp>
 #endif /* TIGERFMM_HPP_ */

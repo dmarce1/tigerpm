@@ -2,17 +2,17 @@
 #include <tigerpm/util.hpp>
 
 static range<int> find_my_box(range<int> box, int begin, int end);
-static void find_all_boxes(range<int> box, std::vector<range<int>>& boxes, int begin, int end);
+static void find_all_boxes(range<int> box, vector<range<int>>& boxes, int begin, int end);
 
 range<int> find_my_box(int N) {
 	return find_my_box(range<int>(N), 0, hpx_size());
 }
 
-void find_all_boxes(std::vector<range<int>>& boxes, int N) {
+void find_all_boxes(vector<range<int>>& boxes, int N) {
 	return find_all_boxes(range<int>(N), boxes, 0, hpx_size());
 }
 
-static void find_all_boxes(range<int> box, std::vector<range<int>>& boxes, int begin, int end) {
+static void find_all_boxes(range<int> box, vector<range<int>>& boxes, int begin, int end) {
 	if (end - begin == 1) {
 		boxes[begin] = box;
 	} else {

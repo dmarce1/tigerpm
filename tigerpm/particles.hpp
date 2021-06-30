@@ -15,21 +15,21 @@
 #include <vector>
 
 #ifndef PARTICLES_CPP
-extern std::array<std::vector<fixed32>, NDIM> particles_X;
-extern std::array<std::vector<float>, NDIM> particles_U;
-extern std::vector<char> particles_R;
+extern array<vector<fixed32>, NDIM> particles_X;
+extern array<vector<float>, NDIM> particles_U;
+extern vector<char> particles_R;
 #ifdef FORCE_TEST
-extern std::vector<float> particles_P;
-extern std::array<std::vector<float>, NDIM> particles_G;
+extern vector<float> particles_P;
+extern array<vector<float>, NDIM> particles_G;
 #endif
 #endif
 
 struct particle {
-	std::array<fixed32, NDIM> x;
-	std::array<float, NDIM> v;
+	array<fixed32, NDIM> x;
+	array<float, NDIM> v;
 	char r;
 #ifdef FORCE_TEST
-	std::array<float, NDIM> g;
+	array<float, NDIM> g;
 	float p;
 #endif
 	template<class A>
@@ -50,16 +50,16 @@ void particles_random_init();
 void particles_domain_sort();
 range<int> particles_get_local_box();
 int particles_local_size();
-std::vector<int> particles_per_rank();
-std::vector<particle> particles_sample(const std::vector<int>&);
-std::vector<particle> particles_sample(int);
+vector<int> particles_per_rank();
+vector<particle> particles_sample(const vector<int>&);
+vector<particle> particles_sample(int);
 void particles_sphere_init(float radius);
-std::vector<int> particles_mesh_count();
+vector<int> particles_mesh_count();
 int particles_sort(int begin, int end, double xmid, int xdim);
 
-inline std::array<int, NDIM> particles_mesh_loc(int index) {
+inline array<int, NDIM> particles_mesh_loc(int index) {
 	static const double N = get_options().chain_dim;
-	std::array<int, NDIM> i;
+	array<int, NDIM> i;
 	for (int dim = 0; dim < NDIM; dim++) {
 		i[dim] = particles_X[dim][index].to_double() * N;
 	}

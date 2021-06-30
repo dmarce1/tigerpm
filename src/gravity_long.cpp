@@ -5,7 +5,7 @@
 #include <tigerpm/particles.hpp>
 #include <tigerpm/util.hpp>
 
-static std::vector<float> phi;
+static vector<float> phi;
 static range<int> source_box;
 
 void compute_source();
@@ -32,14 +32,14 @@ void gravity_long_compute() {
 
 #define NINTERP 4
 
-std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array<double, NDIM>& pos) {
+std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos) {
 	double phi0;
-	std::array<double, NDIM> g;
-	std::array<float, NDIM> gret;
-	std::array<int, NDIM> I;
-	std::array<float, NDIM> X;
-	std::array<std::array<double, NINTERP>, NDIM> w;
-	std::array<std::array<double, NINTERP>, NDIM> dw;
+	array<double, NDIM> g;
+	array<float, NDIM> gret;
+	array<int, NDIM> I;
+	array<float, NDIM> X;
+	array<array<double, NINTERP>, NDIM> w;
+	array<array<double, NINTERP>, NDIM> dw;
 	const double N = get_options().four_dim;
 
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -61,7 +61,7 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 		dw[dim][2] = 0.5 + 4.0 * x1 - 4.5 * x2;
 		dw[dim][3] = -x1 + 1.5 * x2;
 	}
-	std::array<int, NDIM> J;
+	array<int, NDIM> J;
 	for( int dim1 = 0; dim1 < NDIM; dim1++) {
 		g[dim1] = 0.0;
 		for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
@@ -108,12 +108,12 @@ std::pair<float, std::array<float, NDIM>> gravity_long_force_at(const std::array
 }
 
 void compute_source() {
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < compute_source_action > (c));
 	}
-	std::vector<float> source;
-	std::vector < std::shared_ptr < spinlock_type >> mutexes;
+	vector<float> source;
+	vector < std::shared_ptr < spinlock_type >> mutexes;
 
 	source_box = find_my_box(get_options().chain_dim);
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -178,14 +178,14 @@ void compute_source() {
 }
 
 void apply_laplacian() {
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < apply_laplacian_action > (c));
 	}
 	const double N = get_options().four_dim;
 	const auto box = fft3d_complex_range();
-	std::array<int, NDIM> i;
-	std::array<double, NDIM> k;
+	array<int, NDIM> i;
+	array<double, NDIM> k;
 	auto& Y = fft3d_complex_vector();
 	const double c0 = 2.0 * M_PI / N;
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
@@ -211,7 +211,7 @@ void apply_laplacian() {
 }
 
 void get_phi() {
-	std::vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < get_phi_action > (c));
 	}
