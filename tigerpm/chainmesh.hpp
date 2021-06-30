@@ -11,3 +11,4 @@ struct chaincell {
 
 void chainmesh_create();
 void chainmesh_exchange();
+chaincell chainmesh_get(const array<int,NDIM>&);

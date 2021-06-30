@@ -22,6 +22,8 @@ set(tigerpm_source_files
     src/gravity_short.cu
     src/hpx.cpp
     src/kick_pm.cpp
+    src/kick_pme.cpp
+    src/kick_pme.cu
     src/main.cpp
     src/options.cpp
     src/particles.cpp
@@ -43,6 +45,7 @@ set(tigerpm_header_files
 	tigerpm/fixed.hpp
 	tigerpm/fft.hpp
 	tigerpm/kick_pm.hpp
+	tigerpm/kick_pme.hpp
 	tigerpm/options.hpp
 	tigerpm/particles.hpp
 	tigerpm/range.hpp

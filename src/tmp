@@ -1,0 +1,216 @@
+../src/chainmesh.cpp:#include <tigerpm/hpx.hpp>
+../src/chainmesh.cpp:	PRINT( "%i receiving %i particles\n", hpx_rank(), parts.size());
+../src/chainmesh.cpp:	const int nthreads = hpx::thread::hardware_concurrency();
+../src/chainmesh.cpp:	vector<hpx::future<void>> futs;
+../src/chainmesh.cpp:		futs.push_back(hpx::async(func));
+../src/chainmesh.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/chainmesh.cpp:	vector<hpx::future<void>> futs;
+../src/chainmesh.cpp:	vector<hpx::future<void>> futs2;
+../src/chainmesh.cpp:	for (auto c : hpx_children()) {
+../src/chainmesh.cpp:		futs.push_back(hpx::async < chainmesh_exchange_boundaries_action > (c));
+../src/chainmesh.cpp:	vector<range<int>> allboxes(hpx_size());
+../src/chainmesh.cpp:	mybox = allboxes[hpx_rank()];
+../src/chainmesh.cpp:		if (rank != hpx_rank()) {
+../src/chainmesh.cpp:	const int nthreads = hpx::thread::hardware_concurrency();
+../src/chainmesh.cpp:		futs2.push_back(hpx::async(func));
+../src/chainmesh.cpp:	hpx::wait_all(futs2.begin(), futs2.end());
+../src/chainmesh.cpp:				hpx::async < transmit_chain_particles_action > (hpx_localities()[ranks[rank]], std::move(parts[rank])));
+../src/chainmesh.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/chainmesh.cpp:	vector<hpx::future<void>> futs;
+../src/chainmesh.cpp:	for (auto c : hpx_children()) {
+../src/chainmesh.cpp:		futs.push_back(hpx::async < chainmesh_create_action > (c));
+../src/chainmesh.cpp:	thread_vol = std::max(1, (int) (cells.size() / hpx::thread::hardware_concurrency() / 8));
+../src/chainmesh.cpp:	futs.push_back(hpx::async(sort, mybigbox, 0, particles_local_size()));
+../src/chainmesh.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/chainmesh.cpp:			auto futl = hpx::async(sort, chain_box_left, pbegin, pmid);
+../src/chainmesh.cpp:			auto futr = hpx::async(sort, chain_box_right, pmid, pend);
+../src/cuda.cpp:#include <tigerpm/hpx.hpp>
+../src/cuda.cpp:	const int device_num = hpx_rank() % count;
+../src/fft.cpp:#include <tigerpm/hpx.hpp>
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < fft3d_force_real_action > (c));
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	if (hpx_rank() == 0) {
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < finish_force_real_action > (c));
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:		for (int ri = 0; ri < hpx_size(); ri++) {
+../src/fft.cpp:								auto fut = hpx::async < fft3d_read_real_action > (hpx_localities()[ri], this_inter);
+../src/fft.cpp:								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<float>> fut) {
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:		for (int ri = 0; ri < hpx_size(); ri++) {
+../src/fft.cpp:								auto fut = hpx::async < fft3d_read_complex_action > (hpx_localities()[ri], this_inter);
+../src/fft.cpp:								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<cmplx>> fut) {
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:								auto fut = hpx::async < fft3d_accumulate_real_action
+../src/fft.cpp:										> (hpx_localities()[bi], this_inter, std::move(this_data));
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:								auto fut = hpx::async < fft3d_accumulate_complex_action
+../src/fft.cpp:										> (hpx_localities()[bi], this_inter, std::move(this_data));
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < fft3d_init_action > (c, N_));
+../src/fft.cpp:	real_boxes.resize(hpx_size());
+../src/fft.cpp:	find_boxes(box, real_boxes, 0, hpx_size());
+../src/fft.cpp:	real_mybox = real_boxes[hpx_rank()];
+../src/fft.cpp:		cmplx_boxes[dim].resize(hpx_size());
+../src/fft.cpp:		find_boxes(box, cmplx_boxes[dim], 0, hpx_size());
+../src/fft.cpp:		cmplx_mybox[dim] = cmplx_boxes[dim][hpx_rank()];
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < fft3d_destroy_action > (c));
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < update_action > (c));
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < fft3d_phase1_action > (c));
+../src/fft.cpp:		futs.push_back(hpx::async([](array<int,NDIM> j) {
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < fft3d_phase2_action > (c, dim, inv));
+../src/fft.cpp:		futs.push_back(hpx::async([dim,inv,norm](array<int,NDIM> j) {
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < fft3d_phase3_action > (c));
+../src/fft.cpp:		futs.push_back(hpx::async([Ninv](array<int,NDIM> j) {
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < transpose_action > (c, dim1, dim2));
+../src/fft.cpp:				auto fut = hpx::async < transpose_read_action > (hpx_localities()[bi], this_tinter, dim1, dim2);
+../src/fft.cpp:				futs.push_back(fut.then([inter,dim1](hpx::future<vector<cmplx>> fut) {
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/fft.cpp:	vector<hpx::future<void>> futs;
+../src/fft.cpp:	for (auto c : hpx_children()) {
+../src/fft.cpp:		futs.push_back(hpx::async < shift_action > (c, inv));
+../src/fft.cpp:				auto fut = hpx::async < shift_read_action > (hpx_localities()[bi], this_tinter, inv);
+../src/fft.cpp:				futs.push_back(fut.then([inter,dim2](hpx::future<vector<cmplx>> fut) {
+../src/fft.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/gravity_long.cpp:#include <tigerpm/hpx.hpp>
+../src/gravity_long.cpp:	vector<hpx::future<void>> futs;
+../src/gravity_long.cpp:	for (auto c : hpx_children()) {
+../src/gravity_long.cpp:		futs.push_back(hpx::async < compute_source_action > (c));
+../src/gravity_long.cpp:	const int nthreads = hpx::thread::hardware_concurrency();
+../src/gravity_long.cpp:		futs.push_back(hpx::async([proc,nthreads,N,&source,&mutexes]() {
+../src/gravity_long.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/gravity_long.cpp:	vector<hpx::future<void>> futs;
+../src/gravity_long.cpp:	for (auto c : hpx_children()) {
+../src/gravity_long.cpp:		futs.push_back(hpx::async < apply_laplacian_action > (c));
+../src/gravity_long.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/gravity_long.cpp:	vector<hpx::future<void>> futs;
+../src/gravity_long.cpp:	for (auto c : hpx_children()) {
+../src/gravity_long.cpp:		futs.push_back(hpx::async < get_phi_action > (c));
+../src/gravity_long.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/gravity_short.cpp:#include <tigerpm/hpx.hpp>
+../src/gravity_short.cpp:	vector < hpx::future < return_type >> futs;
+../src/gravity_short.cpp:	for (auto c : hpx_children()) {
+../src/gravity_short.cpp:		futs.push_back(hpx::async < do_ewald_action > (c, sinkx, sinky, sinkz));
+../src/hpx.cpp:#include <tigerpm/hpx.hpp>
+../src/hpx.cpp:static vector<hpx::id_type> localities;
+../src/hpx.cpp:static vector<hpx::id_type> children;
+../src/hpx.cpp:HPX_PLAIN_ACTION (hpx_init);
+../src/hpx.cpp:void hpx_init() {
+../src/hpx.cpp:	rank = hpx::get_locality_id();
+../src/hpx.cpp:	auto tmp = hpx::find_all_localities();
+../src/hpx.cpp:	vector<hpx::future<void>> futs;
+../src/hpx.cpp:	for (auto c : hpx_children()) {
+../src/hpx.cpp:		futs.push_back(hpx::async < hpx_init_action > (c));
+../src/hpx.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/hpx.cpp:int hpx_rank() {
+../src/hpx.cpp:int hpx_size() {
+../src/hpx.cpp:const vector<hpx::id_type>& hpx_localities() {
+../src/hpx.cpp:const vector<hpx::id_type>& hpx_children() {
+../src/kick_pm.cpp:#include <tigerpm/hpx.hpp>
+../src/kick_pm.cpp:	vector<hpx::future<void>> futs;
+../src/kick_pm.cpp:	for (auto c : hpx_children()) {
+../src/kick_pm.cpp:		futs.push_back(hpx::async < kick_pm_action > (c));
+../src/kick_pm.cpp:	const int nthreads = hpx::thread::hardware_concurrency();
+../src/kick_pm.cpp:		futs.push_back(hpx::async(func));
+../src/kick_pm.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/main.cpp:#include <tigerpm/hpx.hpp>
+../src/main.cpp:int hpx_main(int argc, char *argv[]) {
+../src/main.cpp:	hpx_init();
+../src/main.cpp:	return hpx::finalize();
+../src/main.cpp:	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
+../src/main.cpp:	cfg.push_back("hpx.stacks.small_size=2097152");
+../src/main.cpp:	hpx::init(argc, argv, cfg);
+../src/options.cpp:#include <tigerpm/hpx.hpp>
+../src/options.cpp:	std::vector<hpx::future<void>> futs;
+../src/options.cpp:	for (auto c : hpx_children()) {
+../src/options.cpp:		futs.push_back(hpx::async < set_options_action > (c, opts));
+../src/options.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/options.cpp:	namespace po = hpx::program_options;
+../src/particles.cpp:#include <hpx/serialization/unordered_map.hpp>
+../src/particles.cpp:#include <tigerpm/hpx.hpp>
+../src/particles.cpp:	vector<hpx::future<void>> futs;
+../src/particles.cpp:	for (auto c : hpx_children()) {
+../src/particles.cpp:		futs.push_back(hpx::async < particles_sphere_init_action > (c, radius));
+../src/particles.cpp:	vector<hpx::future<void>> futs;
+../src/particles.cpp:	for (auto c : hpx_children()) {
+../src/particles.cpp:		futs.push_back(hpx::async < particles_random_init_action > (c));
+../src/particles.cpp:	const size_t begin = size_t(hpx_rank()) * nparts / size_t(hpx_size());
+../src/particles.cpp:	const size_t end = size_t(hpx_rank() + 1) * nparts / size_t(hpx_size());
+../src/particles.cpp:	const int nthreads = hpx::thread::hardware_concurrency();
+../src/particles.cpp:		futs.push_back(hpx::async([proc,nthreads]() {
+../src/particles.cpp:			const int seed = 4321*(hpx_size() * proc + hpx_rank() + 42);
+../src/particles.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/particles.cpp:	vector<hpx::future<void>> futs1;
+../src/particles.cpp:	vector<hpx::future<void>> futs2;
+../src/particles.cpp:	for (auto c : hpx_children()) {
+../src/particles.cpp:		futs1.push_back(hpx::async < domain_sort_begin_action > (c));
+../src/particles.cpp:	PRINT("Domain sort begin on %i\n", hpx_rank());
+../src/particles.cpp:	const int nthreads = hpx::thread::hardware_concurrency();
+../src/particles.cpp:		futs2.push_back(hpx::async([proc,nthreads,mybox,&sends,&futs1]() {
+../src/particles.cpp:					assert(rank != hpx_rank());
+../src/particles.cpp:						PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), rank);
+../src/particles.cpp:						futs1.push_back(hpx::async < transmit_particles_action > (hpx_localities()[rank], std::move(data)));
+../src/particles.cpp:	hpx::wait_all(futs2.begin(), futs2.end());
+../src/particles.cpp:			PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), i->first);
+../src/particles.cpp:			futs1.push_back(hpx::async < transmit_particles_action > (hpx_localities()[i->first], std::move(entry)));
+../src/particles.cpp:	hpx::wait_all(futs1.begin(), futs1.end());
+../src/particles.cpp:	vector<hpx::future<void>> futs;
+../src/particles.cpp:	for (auto c : hpx_children()) {
+../src/particles.cpp:		futs.push_back(hpx::async < domain_sort_end_action > (c));
+../src/particles.cpp:	PRINT("Received %i vectors on %i\n", recv_parts.size(), hpx_rank());
+../src/particles.cpp:		futs.push_back(hpx::async([i,free_index]() {
+../src/particles.cpp:			PRINT( "Adding %i parts on %i\n", parts.size(), hpx_rank());
+../src/particles.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/particles.cpp:	return find_domains(tree, box, 0, hpx_size());
+../src/particles.cpp:	vector < hpx::future<std::unordered_map<int, int>>>futs;
+../src/particles.cpp:	for (auto c : hpx_children()) {
+../src/particles.cpp:		futs.push_back(hpx::async < get_particles_per_rank_action > (c));
+../src/particles.cpp:	rc[hpx_rank()] = particles_size();
+../src/particles.cpp:	auto data = get_particles_per_rank_action()(hpx_localities()[0]);
+../src/particles.cpp:	vector<int> rc(hpx_size());
+../src/particles.cpp:	for (int i = 0; i < hpx_size(); i++) {
+../src/particles.cpp:	vector < hpx::future<vector<particle>>>futs;
+../src/particles.cpp:	for (auto c : hpx_children()) {
+../src/particles.cpp:		futs.push_back(hpx::async < get_particles_sample_action > (c, sample_counts));
+../src/particles.cpp:	for (int i = 0; i < sample_counts[hpx_rank()]; i++) {
+../src/particles.cpp:	return get_particles_sample_action()(hpx_localities()[0], sample_counts);
+../src/particles.cpp:	for (int i = 0; i < hpx_size(); i++) {
+../src/particles.cpp:	vector<int> samples_per_proc(hpx_size(), 0);
+../src/particles.cpp:	const int nthreads = hpx::thread::hardware_concurrency();
+../src/particles.cpp:	vector<hpx::future<void>> futs;
+../src/particles.cpp:		futs.push_back(hpx::async([proc,nthreads,box,&counts]() {
+../src/particles.cpp:	hpx::wait_all(futs.begin(), futs.end());
+../src/util.cpp:#include <tigerpm/hpx.hpp>
+../src/util.cpp:	return find_my_box(range<int>(N), 0, hpx_size());
+../src/util.cpp:	return find_all_boxes(range<int>(N), boxes, 0, hpx_size());
+../src/util.cpp:		if (hpx_rank() < mid) {
+../src/util.cpp:			assert(hpx_rank() >= begin);
+../src/util.cpp:			assert(hpx_rank() >= mid);
+../src/util.cpp:			assert(hpx_rank() < end);
