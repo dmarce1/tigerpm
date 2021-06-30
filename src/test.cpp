@@ -123,17 +123,40 @@ static void kick_pm_test() {
 }
 
 static void chainmesh_test() {
-	timer tm1, tm2, tm3, tm4;
+	timer tm;
+	double total = 0.0;
 	particles_random_init();
+
 	PRINT("DOMAIN SORT\n");
-	tm1.start();
+	tm.start();
 	particles_domain_sort();
-	tm1.stop();
-	tm2.start();
+	tm.stop();
+	PRINT( "%e s\n", tm.read());
+	total += tm.read();
+	tm.reset();
+	PRINT( "\n");
+
+	PRINT("BOUNDARIES\n");
+	tm.start();
+	chainmesh_exchange_boundaries();
+	tm.stop();
+	PRINT( "%e s\n", tm.read());
+	total += tm.read();
+	tm.reset();
+	PRINT( "\n");
+
+
 	PRINT("SORT\n");
+	tm.start();
 	chainmesh_create();
-	tm2.stop();
-	PRINT("%e s to sort, %e s to sort, %e total\n", tm1.read(), tm2.read(), tm1.read() + tm2.read());
+	tm.stop();
+	PRINT( "%e s\n", tm.read());
+	total += tm.read();
+	tm.reset();
+	PRINT( "\n");
+
+	PRINT( "%e s total\n", total);
+
 }
 
 static void sort_test() {

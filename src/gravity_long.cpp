@@ -117,8 +117,9 @@ void compute_source() {
 
 	source_box = find_my_box(get_options().chain_dim);
 	for (int dim = 0; dim < NDIM; dim++) {
-		source_box.begin[dim] *= CHAIN_RATIO;
-		source_box.end[dim] *= CHAIN_RATIO;
+		const static auto ratio = get_options().four_o_chain;
+		source_box.begin[dim] *= ratio;
+		source_box.end[dim] *= ratio;
 	}
 	source_box = source_box.pad(2);
 	source.resize(source_box.volume(), 0.0f);

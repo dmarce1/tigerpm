@@ -39,7 +39,9 @@ bool process_options(int argc, char *argv[]) {
 	("help", "produce help message")                                                                 //
 	("config_file", po::value<std::string>(&(opts.config_file))->default_value(""), "configuration file") //
 	("box_size", po::value<double>(&(opts.box_size))->default_value(1), "size of the computational domain in mpc") //
-	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(100), "nparts^(1/3)") //
+	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
+	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(4), "fourier dim over chain dim") //
+	("parts_o_four", po::value<int>(&(opts.parts_o_four))->default_value(4), "parts dim over four dim") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "test problem") //
 			;
 
@@ -67,13 +69,12 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
-
-	if( opts.parts_dim % (FOUR_RATIO*CHAIN_RATIO) != 0 ) {
-		PRINT( "parts_dim must be a multiple of %i\n", (FOUR_RATIO*CHAIN_RATIO));
-		return false;
+	opts.parts_o_chain = opts.parts_o_four * opts.four_o_chain;
+	if( opts.parts_dim % opts.parts_o_chain != 0 ) {
+		PRINT( "Parts dim must be a multiple of %i\n", opts.parts_o_chain);
 	}
-	opts.four_dim = opts.parts_dim / FOUR_RATIO;
-	opts.chain_dim = opts.four_dim / CHAIN_RATIO;
+	opts.four_dim = opts.parts_dim / opts.parts_o_four;
+	opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';
@@ -81,6 +82,9 @@ bool process_options(int argc, char *argv[]) {
 	PRINT("Simulation Options\n");
 
 	SHOW(box_size);
+	SHOW(parts_o_four);
+	SHOW(parts_o_chain);
+	SHOW(four_o_chain);
 	SHOW(chain_dim);
 	SHOW(four_dim);
 	SHOW(parts_dim);
