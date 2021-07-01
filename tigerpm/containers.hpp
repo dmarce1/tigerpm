@@ -65,8 +65,13 @@ public:
 	inline const T* data() const {
 		return A;
 	}
+	CUDA_EXPORT
 	inline T* data() {
 		return A;
+	}
+	CUDA_EXPORT
+	inline int size() const {
+		return N;
 	}
 
 	template<class Arc>

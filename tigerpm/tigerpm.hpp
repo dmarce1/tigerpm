@@ -19,7 +19,7 @@
 
 #include <stdio.h>
 
-//#define CHECK_BOUNDS
+#define CHECK_BOUNDS
 //#define FORCE_TEST
 //#define SORT_TEST
 

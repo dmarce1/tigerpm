@@ -16,10 +16,10 @@ __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (
 				/ (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23) };
 
 struct shmem_type {
-	fixed32 x[KICK_PME_BLOCK_SIZE];
-	fixed32 y[KICK_PME_BLOCK_SIZE];
-	fixed32 z[KICK_PME_BLOCK_SIZE];
-	int index[KICK_PME_BLOCK_SIZE];
+	array<fixed32, KICK_PME_BLOCK_SIZE> x;
+	array<fixed32, KICK_PME_BLOCK_SIZE> y;
+	array<fixed32, KICK_PME_BLOCK_SIZE> z;
+	array<int, KICK_PME_BLOCK_SIZE> index;
 };
 
 struct source_cell {
@@ -56,15 +56,17 @@ struct kernel_params {
 	float hsoft;
 	bool first_call;
 	int Nfour;
-	range<int> bigbox;
+	range<int> phi_box;
 #ifdef TEST_FORCE
 	float* gx;
 	float* gy;
 	float* gz;
 	float* pot;
 #endif
-	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count) {
+	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count, size_t phi_cell_count) {
 		nsink_cells = cell_count;
+		CUDA_CHECK(cudaMalloc(&source_cells, cell_count * NCELLS * sizeof(source_cell)));
+		CUDA_CHECK(cudaMalloc(&sink_cells, cell_count * sizeof(sink_cell)));
 		CUDA_CHECK(cudaMalloc(&x, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&y, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&z, source_size * sizeof(fixed32)));
@@ -72,11 +74,9 @@ struct kernel_params {
 		CUDA_CHECK(cudaMalloc(&vely, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&velz, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
-		CUDA_CHECK(cudaMalloc(&phi, big_cell_count * sizeof(float)));
+		CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&active_sinki, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&active_sourcei, sink_size * sizeof(char)));
-		CUDA_CHECK(cudaMalloc(&source_cells, cell_count * NCELLS * sizeof(source_cell)));
-		CUDA_CHECK(cudaMalloc(&sink_cells, cell_count * sizeof(source_cell)));
 #ifdef TEST_FORCE
 		CUDA_CHECK(cudaMalloc(&gx,source_size*sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&gy,source_size*sizeof(float)));
@@ -140,9 +140,15 @@ __global__ void kick_pme_kernel(kernel_params params) {
 		const sink_cell& sink = params.sink_cells[cell_index];
 		const auto& my_source_cell = params.source_cells[cell_index * NCELLS + NCELLS / 2];
 		const int nsinks = sink.end - sink.begin;
-		for (int i = tid; i < nsinks; i += KICK_PME_BLOCK_SIZE) {
+		const int imax = round_up(nsinks, KICK_PME_BLOCK_SIZE);
+		for (int i = tid; i < imax; i += KICK_PME_BLOCK_SIZE) {
 			const int this_index = sink.begin + i;
-			const bool is_active = int(params.rung[this_index] >= params.min_rung);
+			bool is_active;
+			if (i < nsinks) {
+				is_active = int(params.rung[this_index] >= params.min_rung);
+			} else {
+				is_active = false;
+			}
 			shmem.index[tid] = int(is_active);
 			for (int P = 1; P < KICK_PME_BLOCK_SIZE; P *= 2) {
 				int tmp;
@@ -166,7 +172,8 @@ __global__ void kick_pme_kernel(kernel_params params) {
 		}
 		const int maxsink = round_up(nactive, KICK_PME_BLOCK_SIZE);
 		for (int sink_index = tid; sink_index < maxsink; sink_index += KICK_PME_BLOCK_SIZE) {
-			float g[NDIM] = { 0.f, 0.f, 0.f };
+			array<float, NDIM> g;
+			g[0] = g[1] = g[2] = 0.f;
 			float phi = 0.f;
 			int srci;
 			int snki;
@@ -179,14 +186,17 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				sink_x = params.x[srci];
 				sink_y = params.y[srci];
 				sink_z = params.z[srci];
-				int I[NDIM];
-				int J[NDIM];
-				float X[NDIM] = { sink_x.to_float(), sink_y.to_float(), sink_z.to_float() };
-				float w[NINTERP][NINTERP];
-				float dw[NINTERP][NINTERP];
+				array<int, NDIM> I;
+				array<int, NDIM> J;
+				array<float, NDIM> X;
+				X[XDIM] = sink_x.to_float();
+				X[YDIM] = sink_y.to_float();
+				X[ZDIM] = sink_z.to_float();
+				array<array<float, NINTERP>, NINTERP> w;
+				array<array<float, NINTERP>, NINTERP> dw;
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] *= params.Nfour;
-					I[dim] = min(int(X[dim]), params.bigbox.end[dim] - 2);
+					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - 2);
 					X[dim] -= float(I[dim]);
 					I[dim]--;
 				}
@@ -217,7 +227,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 										w0 *= w[dim2][i0];
 									}
 								}
-								const int l = params.bigbox.index(J);
+								const int l = params.phi_box.index(J);
 								g[dim1] -= w0 * params.phi[l] * params.Nfour;
 							}
 						}
@@ -232,7 +242,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 								const int i0 = J[dim2] - I[dim2];
 								w0 *= w[dim2][i0];
 							}
-							const int l = params.bigbox.index(J);
+							const int l = params.phi_box.index(J);
 							phi += w0 * params.phi[l];
 						}
 					}
@@ -244,7 +254,9 @@ __global__ void kick_pme_kernel(kernel_params params) {
 					if (sink_index < nactive) {
 						int source_index = sibase + tid;
 						if (tid < min(src_cell.end, sibase + KICK_PME_BLOCK_SIZE)) {
-							const int j = source_index - src_cell.begin;
+							const int j = source_index - sibase;
+							assert(j >= 0);
+							assert(j < KICK_PME_BLOCK_SIZE);
 							shmem.x[j] = params.x[source_index];
 							shmem.y[j] = params.y[source_index];
 							shmem.z[j] = params.z[source_index];
@@ -252,7 +264,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 					}
 					__syncthreads();
 					if (sink_index < nactive) {
-						const int this_size = src_cell.end - src_cell.begin;
+						const int this_size = min(src_cell.end - sibase, KICK_PME_BLOCK_SIZE);
 						for (int j = 0; j < this_size; j++) {
 							const fixed32& src_x = shmem.x[j];
 							const fixed32& src_y = shmem.y[j];
@@ -317,6 +329,11 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
 				dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
 				rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
+				if (rung >= MAX_RUNG) {
+					PRINT("%e %e %e %i\n", g[0], g[1], g[2], rung);
+				}
+				assert(rung >= 0);
+				assert(rung < MAX_RUNG);
 				dt = 0.5f * rung_dt[rung] * params.t0;
 				vx = fmaf(g[XDIM], dt, vx);
 				vy = fmaf(g[YDIM], dt, vy);
@@ -357,12 +374,18 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 				}
 			}
 		}
-		params.allocate(nsources, nsinks, vol, bigvol);
+		auto phibox = box;
+		for (int dim = 0; dim < NDIM; dim++) {
+			phibox.begin[dim] *= get_options().four_o_chain;
+			phibox.end[dim] *= get_options().four_o_chain;
+		}
+		phibox = phibox.pad(2);
+		params.allocate(nsources, nsinks, vol, bigvol, phibox.volume());
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.GM = get_options().GM;
 		params.Nfour = get_options().four_dim;
-		params.bigbox = bigbox;
+		params.phi_box = phibox;
 		params.eta = get_options().eta;
 		params.first_call = first_call;
 		params.t0 = t0;
@@ -370,10 +393,10 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 		params.hsoft = get_options().hsoft;
 		std::vector<source_cell> source_cells(bigvol);
 		std::vector<source_cell> dev_source_cells(NCELLS * vol);
-		std::vector<sink_cell> sink_cells(bigvol);
+		std::vector<sink_cell> sink_cells(vol);
 		cudaStream_t stream;
-		cudaStreamCreate(&stream);
-		auto phi = gravity_long_get_phi(bigbox);
+		CUDA_CHECK(cudaStreamCreate(&stream));
+		auto phi = gravity_long_get_phi(phibox);
 		CUDA_CHECK(cudaMemcpyAsync(params.phi, phi.data(), sizeof(float) * phi.size(), cudaMemcpyHostToDevice, stream));
 		size_t count = 0;
 		for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
@@ -430,7 +453,7 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 					int p = 0;
 					for (j[0] = i[0] - 1; j[0] <= i[0] + 1; j[0]++) {
 						for (j[1] = i[1] - 1; j[1] <= i[1] + 1; j[1]++) {
-							for (j[2] = i[1] - 1; j[1] <= i[2] + 1; j[2]++) {
+							for (j[2] = i[2] - 1; j[2] <= i[2] + 1; j[2]++) {
 								const int k = bigbox.index(j);
 								dev_source_cells[p + NCELLS * l] = source_cells[k];
 								p++;
@@ -443,10 +466,10 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 		}
 		CUDA_CHECK(
 				cudaMemcpyAsync(params.sink_cells, sink_cells.data(), sizeof(sink_cell) * sink_cells.size(),
-						cudaMemcpyHostToDevice));
+						cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(
 				cudaMemcpyAsync(params.source_cells, dev_source_cells.data(), sizeof(source_cell) * dev_source_cells.size(),
-						cudaMemcpyHostToDevice));
+						cudaMemcpyHostToDevice, stream));
 		int occupancy;
 		CUDA_CHECK(
 				cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_pme_kernel,KICK_PME_BLOCK_SIZE, sizeof(shmem_type)));
@@ -481,8 +504,8 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 				}
 			}
 		}
-		cudaStreamSynchronize(stream);
+		CUDA_CHECK(cudaStreamSynchronize(stream));
 		params.free();
-		cudaStreamDestroy(stream);
+		CUDA_CHECK(cudaStreamDestroy(stream));
 	}
 }

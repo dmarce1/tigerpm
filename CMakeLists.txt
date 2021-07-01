@@ -74,7 +74,7 @@ target_compile_options(tigerpm PUBLIC "-DUSE_HPX")
 target_compile_options(tigerpm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math ;
                         >)
-set_source_files_properties(src/kick_pme.cu PROPERTIES COMPILE_FLAGS "--maxrregcount 32 -G")
+set_source_files_properties(src/kick_pme.cu PROPERTIES COMPILE_FLAGS "--maxrregcount 32")
                         
 set_property(TARGET tigerpm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 

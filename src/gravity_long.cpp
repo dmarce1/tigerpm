@@ -16,6 +16,11 @@ HPX_PLAIN_ACTION(compute_source);
 HPX_PLAIN_ACTION(get_phi);
 HPX_PLAIN_ACTION(apply_laplacian);
 
+range<int> gravity_long_get_phi_box() {
+	return source_box;
+}
+
+
 vector<float> gravity_long_get_phi(const range<int>& this_box) {
 	vector<float> this_phi(this_box.volume());
 	array<int, NDIM> i;

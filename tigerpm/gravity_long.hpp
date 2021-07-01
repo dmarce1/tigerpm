@@ -20,6 +20,7 @@ using gravity_long_type = int;
 
 void gravity_long_compute(gravity_long_type type = GRAVITY_LONG_PM);
 vector<float> gravity_long_get_phi(const range<int>&);
+range<int> gravity_long_get_phi_box();
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
 
