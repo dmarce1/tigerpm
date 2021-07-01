@@ -1,5 +1,4 @@
 #include <tigerpm/kick_pme.hpp>
-#include <tigerpm/range.hpp>
 #include <tigerpm/chainmesh.hpp>
 #include <tigerpm/particles.hpp>
 #include <tigerpm/gravity_short.hpp>
@@ -187,7 +186,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				float dw[NINTERP][NINTERP];
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] *= params.Nfour;
-					I[dim] = int(X[dim]);
+					I[dim] = min(int(X[dim]), params.bigbox.end[dim] - 2);
 					X[dim] -= float(I[dim]);
 					I[dim]--;
 				}

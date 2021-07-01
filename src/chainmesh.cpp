@@ -147,6 +147,13 @@ void chainmesh_create() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+
+range<int> chainmesh_interior_box(){
+	static int N = get_options().chain_dim;
+	return find_my_box(N);
+}
+
+
 static void sort(const range<int> chain_box, int pbegin, int pend) {
 	int minthreadparts = std::max(1, (int) (particles_size() / hpx::thread::hardware_concurrency() / 8));
 	static int N = get_options().chain_dim;

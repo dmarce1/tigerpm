@@ -50,7 +50,7 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	array<double, NDIM> g;
 	array<float, NDIM> gret;
 	array<int, NDIM> I;
-	array<float, NDIM> X;
+	array<double, NDIM> X;
 	array<array<double, NINTERP>, NDIM> w;
 	array<array<double, NINTERP>, NDIM> dw;
 	const double N = get_options().four_dim;

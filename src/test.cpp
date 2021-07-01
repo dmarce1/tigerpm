@@ -5,10 +5,12 @@
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/gravity_short.hpp>
 #include <tigerpm/kick_pm.hpp>
+#include <tigerpm/kick_pme.hpp>
 #include <tigerpm/chainmesh.hpp>
 
 static void chainmesh_test();
 static void kick_pm_test();
+static void kick_pme_test();
 static void fft_test();
 static void particle_test();
 static void gravity_long_test();
@@ -24,6 +26,8 @@ void run_test(std::string test) {
 		sort_test();
 	} else if (test == "parts") {
 		particle_test();
+	} else if (test == "kick_pme") {
+		kick_pme_test();
 	} else if (test == "kick_pm") {
 		kick_pm_test();
 	} else if (test == "gravity_long") {
@@ -131,35 +135,75 @@ static void chainmesh_test() {
 	tm.start();
 	particles_domain_sort();
 	tm.stop();
-	PRINT( "%e s\n", tm.read());
+	PRINT("%e s\n", tm.read());
 	total += tm.read();
 	tm.reset();
-	PRINT( "\n");
-
-
+	PRINT("\n");
 
 	PRINT("SORT\n");
 	tm.start();
 	chainmesh_create();
 	tm.stop();
-	PRINT( "%e s\n", tm.read());
+	PRINT("%e s\n", tm.read());
 	total += tm.read();
 	tm.reset();
-	PRINT( "\n");
+	PRINT("\n");
 
 	PRINT("BOUNDARIES\n");
 	tm.start();
 	chainmesh_exchange_begin();
 	chainmesh_exchange_end();
 	tm.stop();
-	PRINT( "%e s\n", tm.read());
+	PRINT("%e s\n", tm.read());
 	total += tm.read();
 	tm.reset();
-	PRINT( "\n");
+	PRINT("\n");
 
+	PRINT("%e s total\n", total);
 
-	PRINT( "%e s total\n", total);
+}
 
+static void kick_pme_test() {
+	timer tm;
+	particles_random_init();
+
+	PRINT("DOMAIN SORT\n");
+	tm.start();
+	particles_domain_sort();
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+
+	PRINT("FOURIER\n");
+	tm.start();
+	gravity_long_compute(GRAVITY_LONG_PME);
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+
+	PRINT("SORT\n");
+	tm.start();
+	chainmesh_create();
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+	PRINT("\n");
+
+	PRINT("BOUNDARIES\n");
+	tm.start();
+	chainmesh_exchange_begin();
+	chainmesh_exchange_end();
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+	PRINT("\n");
+
+	PRINT("KICK\n");
+	tm.start();
+	kick_pme(0, 1.0, 1.0, true);
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
 }
 
 static void sort_test() {
