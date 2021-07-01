@@ -9,21 +9,21 @@ static vector<float> phi;
 static range<int> source_box;
 
 void compute_source();
-void apply_laplacian();
+void apply_laplacian(gravity_long_type);
 void get_phi();
 
-HPX_PLAIN_ACTION (compute_source);
-HPX_PLAIN_ACTION (get_phi);
-HPX_PLAIN_ACTION (apply_laplacian);
+HPX_PLAIN_ACTION(compute_source);
+HPX_PLAIN_ACTION(get_phi);
+HPX_PLAIN_ACTION(apply_laplacian);
 
-void gravity_long_compute() {
+void gravity_long_compute(gravity_long_type type) {
 	const double N = get_options().four_dim;
 	fft3d_init(N);
 	PRINT("Computing source\n");
 	compute_source();
 	fft3d_execute();
 	PRINT("Apply LaPlacian\n");
-	apply_laplacian();
+	apply_laplacian(type);
 	fft3d_inv_execute();
 	PRINT("get phi\n");
 	get_phi();
@@ -62,7 +62,7 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 		dw[dim][3] = -x1 + 1.5 * x2;
 	}
 	array<int, NDIM> J;
-	for( int dim1 = 0; dim1 < NDIM; dim1++) {
+	for (int dim1 = 0; dim1 < NDIM; dim1++) {
 		g[dim1] = 0.0;
 		for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
 			for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
@@ -70,15 +70,15 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 					double w0 = 1.0;
 					for (int dim2 = 0; dim2 < NDIM; dim2++) {
 						const int i0 = J[dim2] - I[dim2];
-						if( dim1 == dim2) {
+						if (dim1 == dim2) {
 							w0 *= dw[dim2][i0];
 						} else {
 							w0 *= w[dim2][i0];
 						}
 					}
 					const int l = source_box.index(J);
-					assert(l>=0);
-					assert(l<phi.size());
+					assert(l >= 0);
+					assert(l < phi.size());
 					g[dim1] += w0 * phi[l] * N;
 				}
 			}
@@ -95,8 +95,8 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 					w0 *= w[dim2][i0];
 				}
 				const int l = source_box.index(J);
-				assert(l>=0);
-				assert(l<phi.size());
+				assert(l >= 0);
+				assert(l < phi.size());
 				phi0 += w0 * phi[l];
 			}
 		}
@@ -110,10 +110,10 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 void compute_source() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < compute_source_action > (c));
+		futs.push_back(hpx::async<compute_source_action>(c));
 	}
 	vector<float> source;
-	vector < std::shared_ptr < spinlock_type >> mutexes;
+	vector<std::shared_ptr<spinlock_type>> mutexes;
 
 	source_box = find_my_box(get_options().chain_dim);
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -177,12 +177,13 @@ void compute_source() {
 	fft3d_accumulate_real(source_box, std::move(source));
 }
 
-void apply_laplacian() {
+void apply_laplacian(gravity_long_type type) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < apply_laplacian_action > (c));
+		futs.push_back(hpx::async<apply_laplacian_action>(c, type));
 	}
 	const double N = get_options().four_dim;
+	const double rs2 = sqr(get_options().rs * N);
 	const auto box = fft3d_complex_range();
 	array<int, NDIM> i;
 	array<double, NDIM> k;
@@ -196,12 +197,15 @@ void apply_laplacian() {
 					k[dim] *= c0;
 				}
 				const double nk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
-		//	const double nk2 = -sqr(k[0],k[1],k[2]);
+				const int index = box.index(i);
 				if (nk2 < 0.0) {
 					const double nk2inv = 1.0 / nk2;
-					Y[box.index(i)] *= float(nk2inv);
+					Y[index] *= float(nk2inv);
 				} else {
-					Y[box.index(i)] *= 0.0;
+					Y[index] *= 0.0;
+				}
+				if (type == GRAVITY_LONG_PME) {
+					Y[index] *= exp(nk2 * rs2);
 				}
 			}
 		}
@@ -213,7 +217,7 @@ void apply_laplacian() {
 void get_phi() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < get_phi_action > (c));
+		futs.push_back(hpx::async<get_phi_action>(c));
 	}
 
 	phi = fft3d_read_real(source_box);

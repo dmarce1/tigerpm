@@ -8,13 +8,16 @@
 #ifndef GRAVITY_LONG_HPP_
 #define GRAVITY_LONG_HPP_
 
-
 #include <tigerpm/tigerpm.hpp>
 
 #include <array>
 #include <utility>
 
-void gravity_long_compute();
+using gravity_long_type = int;
+#define GRAVITY_LONG_PM 0
+#define GRAVITY_LONG_PME 1
+
+void gravity_long_compute(gravity_long_type type = GRAVITY_LONG_PM);
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
 

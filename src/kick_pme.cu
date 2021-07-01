@@ -33,6 +33,7 @@ static size_t mem_requirements(range<int> box) {
 	mem += NCELLS * bigbox.volume() * sizeof(source_cell);
 	mem += box.volume() * sizeof(sink_cell);
 	mem += 2 * sizeof(int) * box.volume();
+	mem += bigbox.volume() * sizeof(float);
 #ifdef TEST_FORCE
 	mem += (NDIM+1) * sizeof(float) * box.volume();
 #endif
@@ -46,6 +47,7 @@ struct kernel_params {
 	float* velx;
 	float* vely;
 	float* velz;
+	float* phi;
 	char* rung;
 	source_cell* source_cells;
 	sink_cell* sink_cells;
@@ -61,7 +63,7 @@ struct kernel_params {
 	float* gz;
 	float* pot;
 #endif
-	void allocate(size_t source_size, size_t sink_size, size_t cell_count) {
+	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count) {
 		nsink_cells = cell_count;
 		CUDA_CHECK(cudaMalloc(&x, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&y, source_size * sizeof(fixed32)));
@@ -70,6 +72,7 @@ struct kernel_params {
 		CUDA_CHECK(cudaMalloc(&vely, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&velz, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
+		CUDA_CHECK(cudaMalloc(&phi, big_cell_count * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&active_sinki, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&active_sourcei, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&source_cells, cell_count * NCELLS * sizeof(source_cell)));
@@ -88,6 +91,7 @@ struct kernel_params {
 		CUDA_CHECK(cudaFree(velx));
 		CUDA_CHECK(cudaFree(vely));
 		CUDA_CHECK(cudaFree(velz));
+		CUDA_CHECK(cudaFree(phi));
 		CUDA_CHECK(cudaFree(active_sinki));
 		CUDA_CHECK(cudaFree(active_sourcei));
 		CUDA_CHECK(cudaFree(rung));
@@ -228,7 +232,7 @@ void kick_pme(range<int> box, int min_rung, float rs, float GM) {
 				}
 			}
 		}
-		params.allocate(nsources, nsinks, vol);
+		params.allocate(nsources, nsinks, vol, bigvol);
 		params.min_rung = min_rung;
 		params.rs = rs;
 		params.GM = GM;

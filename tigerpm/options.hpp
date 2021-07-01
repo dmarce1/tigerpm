@@ -14,6 +14,7 @@ struct options {
 
 
 	double box_size;
+	double rs;
 
 	std::string config_file;
 	std::string test;
