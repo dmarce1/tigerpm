@@ -63,7 +63,8 @@ struct kernel_params {
 	float* gz;
 	float* pot;
 #endif
-	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count, size_t phi_cell_count) {
+	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count,
+			size_t phi_cell_count) {
 		nsink_cells = cell_count;
 		CUDA_CHECK(cudaMalloc(&source_cells, cell_count * NCELLS * sizeof(source_cell)));
 		CUDA_CHECK(cudaMalloc(&sink_cells, cell_count * sizeof(sink_cell)));
@@ -75,8 +76,8 @@ struct kernel_params {
 		CUDA_CHECK(cudaMalloc(&velz, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
-		CUDA_CHECK(cudaMalloc(&active_sinki, sink_size * sizeof(char)));
-		CUDA_CHECK(cudaMalloc(&active_sourcei, sink_size * sizeof(char)));
+		CUDA_CHECK(cudaMalloc(&active_sinki, sink_size * sizeof(int)));
+		CUDA_CHECK(cudaMalloc(&active_sourcei, sink_size * sizeof(int)));
 #ifdef TEST_FORCE
 		CUDA_CHECK(cudaMalloc(&gx,source_size*sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&gy,source_size*sizeof(float)));
@@ -115,7 +116,13 @@ static size_t mem_requirements(range<int> box) {
 	mem += NCELLS * bigbox.volume() * sizeof(source_cell);
 	mem += box.volume() * sizeof(sink_cell);
 	mem += 2 * sizeof(int) * box.volume();
-	mem += bigbox.volume() * sizeof(float);
+	auto phibox = box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		phibox.begin[dim] *= get_options().four_o_chain;
+		phibox.end[dim] *= get_options().four_o_chain;
+	}
+	phibox = phibox.pad(2);
+	mem += phibox.volume() * sizeof(float);
 	mem += sizeof(kernel_params);
 #ifdef TEST_FORCE
 	mem += (NDIM+1) * sizeof(float) * box.volume();
@@ -136,11 +143,14 @@ __global__ void kick_pme_kernel(kernel_params params) {
 	const float hinv = 1.f / params.hsoft;
 	const float h3inv = hinv * sqr(hinv);
 	for (int cell_index = cell_begin; cell_index < cell_end; cell_index++) {
-		int nactive = 0;
+		const int offset = params.sink_cells[cell_index].begin;
+		int* active_sinki = params.active_sinki + offset;
+		int* active_sourcei = params.active_sourcei + offset;
 		const sink_cell& sink = params.sink_cells[cell_index];
 		const auto& my_source_cell = params.source_cells[cell_index * NCELLS + NCELLS / 2];
 		const int nsinks = sink.end - sink.begin;
 		const int imax = round_up(nsinks, KICK_PME_BLOCK_SIZE);
+		int nactive = 0;
 		for (int i = tid; i < imax; i += KICK_PME_BLOCK_SIZE) {
 			const int this_index = sink.begin + i;
 			bool is_active;
@@ -162,13 +172,12 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				}
 			}
 			__syncthreads();
-			int this_count = shmem.index[KICK_PME_BLOCK_SIZE - 1];
-			const int active_index = tid > 0 ? shmem.index[tid - 1] : 0;
+			int active_index = (tid > 0 ? shmem.index[tid - 1] : 0) + nactive;
 			if (is_active) {
-				params.active_sinki[active_index] = this_index;
-				params.active_sourcei[active_index] = my_source_cell.begin + i;
+				active_sinki[active_index] = this_index;
+				active_sourcei[active_index] = my_source_cell.begin + i;
 			}
-			nactive += this_count;
+			nactive += shmem.index[KICK_PME_BLOCK_SIZE - 1];
 		}
 		const int maxsink = round_up(nactive, KICK_PME_BLOCK_SIZE);
 		for (int sink_index = tid; sink_index < maxsink; sink_index += KICK_PME_BLOCK_SIZE) {
@@ -181,8 +190,8 @@ __global__ void kick_pme_kernel(kernel_params params) {
 			fixed32 sink_y;
 			fixed32 sink_z;
 			if (sink_index < nactive) {
-				srci = params.active_sourcei[sink_index];
-				snki = params.active_sinki[sink_index];
+				srci = active_sourcei[sink_index];
+				snki = active_sinki[sink_index];
 				sink_x = params.x[srci];
 				sink_y = params.y[srci];
 				sink_z = params.z[srci];
@@ -194,6 +203,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				X[ZDIM] = sink_z.to_float();
 				array<array<float, NINTERP>, NINTERP> w;
 				array<array<float, NINTERP>, NINTERP> dw;
+
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] *= params.Nfour;
 					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - 2);
@@ -253,7 +263,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				for (int sibase = src_cell.begin; sibase < src_cell.end; sibase += KICK_PME_BLOCK_SIZE) {
 					if (sink_index < nactive) {
 						int source_index = sibase + tid;
-						if (tid < min(src_cell.end, sibase + KICK_PME_BLOCK_SIZE)) {
+						if (source_index < min(src_cell.end, sibase + KICK_PME_BLOCK_SIZE)) {
 							const int j = source_index - sibase;
 							assert(j >= 0);
 							assert(j < KICK_PME_BLOCK_SIZE);
@@ -329,13 +339,14 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
 				dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
 				rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
-				PRINT( "%e %e %e %i\n", g[0], g[1], g[2], rung);
 				assert(rung >= 0);
 				assert(rung < MAX_RUNG);
 				dt = 0.5f * rung_dt[rung] * params.t0;
 				vx = fmaf(g[XDIM], dt, vx);
 				vy = fmaf(g[YDIM], dt, vy);
 				vz = fmaf(g[ZDIM], dt, vz);
+				PRINT("%e %e %e %i\n", g[0], g[1], g[2], rung);
+
 			}
 		}
 	}

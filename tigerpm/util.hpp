@@ -10,7 +10,7 @@ void find_all_boxes(vector<range<int>>& boxes, int N);
 
 template<class T>
 CUDA_EXPORT inline T round_up(T num, T mod) {
-	return ((num - 1) / mod + 1) * mod;
+	return num > 0 ? ((num - 1) / mod + 1) * mod : 0;
 }
 
 template<class T>
