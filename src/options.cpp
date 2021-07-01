@@ -85,6 +85,9 @@ bool process_options(int argc, char *argv[]) {
 	opts.four_dim = opts.parts_dim / opts.parts_o_four;
 	opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
 	opts.rs = 1.0 / opts.four_dim;
+	opts.GM = 1.0;
+	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
+	opts.eta = 0.2 / sqrt(2);
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';

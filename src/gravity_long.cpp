@@ -16,6 +16,19 @@ HPX_PLAIN_ACTION(compute_source);
 HPX_PLAIN_ACTION(get_phi);
 HPX_PLAIN_ACTION(apply_laplacian);
 
+vector<float> gravity_long_get_phi(const range<int>& this_box) {
+	vector<float> this_phi(this_box.volume());
+	array<int, NDIM> i;
+	for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
+		for (i[1] = this_box.begin[1]; i[1] != this_box.end[1]; i[1]++) {
+			for (i[2] = this_box.begin[2]; i[2] != this_box.end[2]; i[2]++) {
+				this_phi[this_box.index(i)] = phi[source_box.index(i)];
+			}
+		}
+	}
+	return this_phi;
+}
+
 void gravity_long_compute(gravity_long_type type) {
 	const double N = get_options().four_dim;
 	fft3d_init(N);

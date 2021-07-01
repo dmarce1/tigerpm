@@ -9,6 +9,7 @@
 #define RANGE_HPP_
 
 #include <tigerpm/tigerpm.hpp>
+#include <tigerpm/cuda.hpp>
 #include <array>
 
 inline array<int, NDIM> shift_up(array<int, NDIM> i) {
@@ -151,7 +152,13 @@ struct range {
 		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
 	}
 
+	CUDA_EXPORT
 	inline int index(const array<T, NDIM> & i) const {
+		return index(i.data());
+	}
+
+	CUDA_EXPORT
+	inline int index(const T * i) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
 		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);

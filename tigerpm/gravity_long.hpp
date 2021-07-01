@@ -9,6 +9,7 @@
 #define GRAVITY_LONG_HPP_
 
 #include <tigerpm/tigerpm.hpp>
+#include <tigerpm/range.hpp>
 
 #include <array>
 #include <utility>
@@ -18,6 +19,7 @@ using gravity_long_type = int;
 #define GRAVITY_LONG_PME 1
 
 void gravity_long_compute(gravity_long_type type = GRAVITY_LONG_PM);
+vector<float> gravity_long_get_phi(const range<int>&);
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
 
