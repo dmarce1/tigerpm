@@ -123,6 +123,7 @@ void particles_random_init() {
 				for( int dim = 0; dim < NDIM; dim++) {
 					particles_pos(dim,i) = gsl_rng_uniform(rndgen);
 					particles_vel(dim,i) = 0.0f;
+					particles_rung(i) = 0;
 				}
 			}
 			gsl_rng_free(rndgen);

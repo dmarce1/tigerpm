@@ -154,7 +154,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				int tmp;
 				__syncthreads();
 				if (tid >= P) {
-					tmp = shmem.index[tid - 1];
+					tmp = shmem.index[tid - P];
 				}
 				__syncthreads();
 				if (tid >= P) {
@@ -329,9 +329,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
 				dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
 				rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
-				if (rung >= MAX_RUNG) {
-					PRINT("%e %e %e %i\n", g[0], g[1], g[2], rung);
-				}
+				PRINT( "%e %e %e %i\n", g[0], g[1], g[2], rung);
 				assert(rung >= 0);
 				assert(rung < MAX_RUNG);
 				dt = 0.5f * rung_dt[rung] * params.t0;
