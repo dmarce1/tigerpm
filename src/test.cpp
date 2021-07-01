@@ -149,7 +149,8 @@ static void chainmesh_test() {
 
 	PRINT("BOUNDARIES\n");
 	tm.start();
-	chainmesh_exchange();
+	chainmesh_exchange_begin();
+	chainmesh_exchange_end();
 	tm.stop();
 	PRINT( "%e s\n", tm.read());
 	total += tm.read();

@@ -10,5 +10,6 @@ struct chaincell {
 };
 
 void chainmesh_create();
-void chainmesh_exchange();
+void chainmesh_exchange_begin();
+void chainmesh_exchange_end();
 chaincell chainmesh_get(const array<int,NDIM>&);
