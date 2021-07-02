@@ -4,18 +4,18 @@
 #include <tigerpm/hpx.hpp>
 
 struct indices_hash {
-	size_t operator()(const array<int, NDIM>& indices) const {
+	inline size_t operator()(const array<int, NDIM>& indices) const {
 		std::hash<int> ihash;
 		size_t hash = 0;
 		for (int dim = 0; dim < NDIM; dim++) {
-			hash ^= ihash(indices[dim]);
+			hash ^= ihash(indices[dim]) << (dim * 10);
 		}
 		return hash;
 	}
 };
 
 struct indices_equal {
-	size_t operator()(const array<int, NDIM>& i1, const array<int, NDIM>& i2) const {
+	inline size_t operator()(const array<int, NDIM>& i1, const array<int, NDIM>& i2) const {
 		bool rc = true;
 		for (int dim = 0; dim < NDIM; dim++) {
 			if (i1[dim] != i2[dim]) {
@@ -147,12 +147,10 @@ void chainmesh_create() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-
-range<int> chainmesh_interior_box(){
+range<int> chainmesh_interior_box() {
 	static int N = get_options().chain_dim;
 	return find_my_box(N);
 }
-
 
 static void sort(const range<int> chain_box, int pbegin, int pend) {
 	int minthreadparts = std::max(1, (int) (particles_size() / hpx::thread::hardware_concurrency() / 8));
@@ -168,9 +166,9 @@ static void sort(const range<int> chain_box, int pbegin, int pend) {
 	} else {
 		int long_dim;
 		int long_span = -1;
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = NDIM-1; dim >= 0; dim--) {
 			const int span = chain_box.end[dim] - chain_box.begin[dim];
-			if (span > long_span) {
+			if (span > 1) {
 				long_span = span;
 				long_dim = dim;
 			}

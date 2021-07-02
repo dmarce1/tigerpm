@@ -4,16 +4,20 @@
 #include <tigerpm/gravity_short.hpp>
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/util.hpp>
+#include <tigerpm/timer.hpp>
+#include <algorithm>
 
-#define MAX_RUNG 24
+#define MAX_RUNG 32
 #define NINTERP 4
 #define NCELLS 27
-#define KICK_PME_BLOCK_SIZE 128
+#define KICK_PME_BLOCK_SIZE 64
 
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4),
 		1.0 / (1 << 5), 1.0 / (1 << 6), 1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11),
 		1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0 / (1 << 16), 1.0 / (1 << 17), 1.0
-				/ (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23) };
+				/ (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0
+				/ (1 << 24), 1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0
+				/ (1 << 30), 1.0 / (1 << 31) };
 
 struct shmem_type {
 	array<fixed32, KICK_PME_BLOCK_SIZE> x;
@@ -107,25 +111,18 @@ struct kernel_params {
 	}
 };
 
-static size_t mem_requirements(range<int> box) {
+static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, int phivol) {
 	size_t mem = 0;
-	const auto bigbox = box.pad(1);
-	mem += NDIM * sizeof(fixed32) * bigbox.volume();
-	mem += NDIM * sizeof(float) * box.volume();
-	mem += sizeof(char) * box.volume();
-	mem += NCELLS * bigbox.volume() * sizeof(source_cell);
-	mem += box.volume() * sizeof(sink_cell);
-	mem += 2 * sizeof(int) * box.volume();
-	auto phibox = box;
-	for (int dim = 0; dim < NDIM; dim++) {
-		phibox.begin[dim] *= get_options().four_o_chain;
-		phibox.end[dim] *= get_options().four_o_chain;
-	}
-	phibox = phibox.pad(2);
-	mem += phibox.volume() * sizeof(float);
+	mem += NDIM * sizeof(fixed32) * nsources;
+	mem += NDIM * sizeof(float) * nsinks;
+	mem += sizeof(char) * nsinks;
+	mem += NCELLS * bigvol * sizeof(source_cell);
+	mem += vol * sizeof(sink_cell);
+	mem += 2 * sizeof(int) * vol;
+	mem += phivol * sizeof(float);
 	mem += sizeof(kernel_params);
 #ifdef TEST_FORCE
-	mem += (NDIM+1) * sizeof(float) * box.volume();
+	mem += (NDIM+1) * sizeof(float) * nsinks;
 #endif
 	return mem;
 }
@@ -339,57 +336,111 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
 				dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
 				rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
+				if (rung < 0 || rung >= MAX_RUNG) {
+					PRINT("Rung out of range %i\n", rung);
+				}
 				assert(rung >= 0);
 				assert(rung < MAX_RUNG);
 				dt = 0.5f * rung_dt[rung] * params.t0;
 				vx = fmaf(g[XDIM], dt, vx);
 				vy = fmaf(g[YDIM], dt, vy);
 				vz = fmaf(g[ZDIM], dt, vz);
-				PRINT("%e %e %e %i\n", g[0], g[1], g[2], rung);
+				//PRINT("%e %e %e %i\n", g[0], g[1], g[2], rung);
 
 			}
 		}
 	}
 }
 
+struct cpymem {
+	void* dest;
+	void* src;
+	size_t size;
+};
+
+#define NSTREAMS 16
+
+void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cudaStream_t stream) {
+	vector<cpymem> compressed;
+	std::sort(copies.begin(), copies.end(), [](cpymem a, cpymem b) {
+		return a.dest < b.dest;
+	});
+	for (int i = 0; i < copies.size(); i++) {
+		cpymem copy = copies[i];
+		for (int j = i + 1; j < copies.size(); j++) {
+			if (((char*) copy.dest + copy.size == copies[j].dest) && ((char*) copy.src + copy.size == copies[j].src)) {
+				copy.size += copies[j].size;
+				i++;
+			} else {
+				break;
+			}
+		}
+		compressed.push_back(copy);
+	}
+	array<cudaStream_t, NSTREAMS> streams;
+	for (int i = 0; i < NSTREAMS; i++) {
+		CUDA_CHECK(cudaStreamCreate(&streams[i]));
+	}
+	PRINT("Compressed from %i to %i copies\n", copies.size(), compressed.size());
+	for (int i = 0; i < compressed.size(); i++) {
+		CUDA_CHECK(
+				cudaMemcpyAsync(compressed[i].dest, compressed[i].src, compressed[i].size, direction, streams[i%NSTREAMS]));
+	}
+	for (int i = 0; i < NSTREAMS; i++) {
+		CUDA_CHECK(cudaStreamSynchronize(streams[i]));
+		CUDA_CHECK(cudaStreamDestroy(streams[i]));
+	}
+}
+
 void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_call) {
-	const size_t mem_required = mem_requirements(box);
-	if (mem_required > cuda_free_mem() * 85 / 100) {
+	PRINT("Sorting cells\n");
+	timer tm;
+	size_t nsources = 0;
+	size_t nsinks = 0;
+	array<int, NDIM> i;
+	const auto bigbox = box.pad(1);
+	const size_t bigvol = bigbox.volume();
+	const size_t vol = box.volume();
+	print("%i\n", bigvol);
+	for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
+		for (i[1] = bigbox.begin[1]; i[1] != bigbox.end[1]; i[1]++) {
+			for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
+				auto this_cell = chainmesh_get(i);
+				nsources += this_cell.pend - this_cell.pbegin;
+			}
+		}
+	}
+	for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
+		for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
+			for (i[2] = box.begin[2]; i[2] != box.end[2]; i[2]++) {
+				auto this_cell = chainmesh_get(i);
+				nsinks += this_cell.pend - this_cell.pbegin;
+			}
+		}
+	}
+	auto phibox = box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		phibox.begin[dim] *= get_options().four_o_chain;
+		phibox.end[dim] *= get_options().four_o_chain;
+	}
+	phibox = phibox.pad(2);
+	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume());
+	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
+	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
+	if (mem_required > free_mem) {
 		const auto child_boxes = box.split();
+		PRINT("Splitting\n");
 		kick_pme(child_boxes.first, min_rung, scale, t0, first_call);
 		kick_pme(child_boxes.second, min_rung, scale, t0, first_call);
 	} else {
 		cuda_set_device();
-		const auto bigbox = box.pad(1);
-		const size_t bigvol = bigbox.volume();
-		const size_t vol = box.volume();
+		PRINT("Data transfer\n");
+		tm.start();
 		kernel_params params;
-		size_t nsources = 0;
-		size_t nsinks = 0;
-		array<int, NDIM> i;
-		for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
-			for (i[1] = bigbox.begin[1]; i[1] != bigbox.end[1]; i[1]++) {
-				for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
-					auto this_cell = chainmesh_get(i);
-					nsources += this_cell.pend - this_cell.pbegin;
-				}
-			}
-		}
-		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
-			for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
-				for (i[2] = box.begin[2]; i[2] != box.end[2]; i[2]++) {
-					auto this_cell = chainmesh_get(i);
-					nsinks += this_cell.pend - this_cell.pbegin;
-				}
-			}
-		}
-		auto phibox = box;
-		for (int dim = 0; dim < NDIM; dim++) {
-			phibox.begin[dim] *= get_options().four_o_chain;
-			phibox.end[dim] *= get_options().four_o_chain;
-		}
-		phibox = phibox.pad(2);
 		params.allocate(nsources, nsinks, vol, bigvol, phibox.volume());
+		tm.stop();
+		PRINT("%e\n", tm.read());
+		tm.start();
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.GM = get_options().GM;
@@ -400,26 +451,32 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 		params.t0 = t0;
 		params.scale = scale;
 		params.hsoft = get_options().hsoft;
-		std::vector<source_cell> source_cells(bigvol);
-		std::vector<source_cell> dev_source_cells(NCELLS * vol);
-		std::vector<sink_cell> sink_cells(vol);
+		vector<source_cell> source_cells(bigvol);
+		vector<source_cell> dev_source_cells(NCELLS * vol);
+		vector<sink_cell> sink_cells(vol);
 		cudaStream_t stream;
 		CUDA_CHECK(cudaStreamCreate(&stream));
 		auto phi = gravity_long_get_phi(phibox);
 		CUDA_CHECK(cudaMemcpyAsync(params.phi, phi.data(), sizeof(float) * phi.size(), cudaMemcpyHostToDevice, stream));
 		size_t count = 0;
+		vector<cpymem> copies;
 		for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
 			for (i[1] = bigbox.begin[1]; i[1] != bigbox.end[1]; i[1]++) {
 				for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
 					auto this_cell = chainmesh_get(i);
 					const auto this_size = this_cell.pend - this_cell.pbegin;
 					const auto begin = this_cell.pbegin;
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.x + count, &particles_pos(XDIM, begin), sizeof(fixed32) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.y + count, &particles_pos(YDIM, begin), sizeof(fixed32) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.z + count, &particles_pos(ZDIM, begin), sizeof(fixed32) * this_size, cudaMemcpyHostToDevice, stream));
+					cpymem cpy;
+					cpy.size = sizeof(fixed32) * this_size;
+					cpy.dest = params.x + count;
+					cpy.src = &particles_pos(XDIM, begin);
+					copies.push_back(cpy);
+					cpy.dest = params.y + count;
+					cpy.src = &particles_pos(YDIM, begin);
+					copies.push_back(cpy);
+					cpy.dest = params.z + count;
+					cpy.src = &particles_pos(ZDIM, begin);
+					copies.push_back(cpy);
 					const int l = bigbox.index(i);
 					source_cells[l].begin = count;
 					count += this_size;
@@ -434,24 +491,35 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 					auto this_cell = chainmesh_get(i);
 					const auto this_size = this_cell.pend - this_cell.pbegin;
 					const auto begin = this_cell.pbegin;
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.velx + count, &particles_vel(XDIM, begin), sizeof(float) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.vely + count, &particles_vel(YDIM, begin), sizeof(float) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.velz + count, &particles_vel(ZDIM, begin), sizeof(float) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.rung + count, &particles_rung(begin), sizeof(char) * this_size,
-									cudaMemcpyHostToDevice, stream));
+					cpymem cpy;
+					cpy.size = sizeof(float) * this_size;
+					cpy.dest = params.velx + count;
+					cpy.src = &particles_vel(XDIM, begin);
+					copies.push_back(cpy);
+					cpy.dest = params.vely + count;
+					cpy.src = &particles_vel(YDIM, begin);
+					copies.push_back(cpy);
+					cpy.dest = params.velz + count;
+					cpy.src = &particles_vel(ZDIM, begin);
+					copies.push_back(cpy);
+					cpy.size = sizeof(char) * this_size;
+					cpy.dest = params.rung + count;
+					cpy.src = &particles_rung(begin);
+					copies.push_back(cpy);
 #ifdef TEST_FORCE
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.gx + count, &particles_gforce(XDIM, begin), sizeof(float) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.gy + count, &particles_gforce(YDIM, begin), sizeof(float) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.gz + count, &particles_gforce(ZDIM, begin), sizeof(float) * this_size, cudaMemcpyHostToDevice, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(params.pot + count, &particles_pot(begin), sizeof(float) * this_size, cudaMemcpyHostToDevice, stream));
+					cpy.size = sizeof(float) * this_size;
+					cpy.dest = params.gx + count;
+					cpy.src = &particles_gforce(XDIM, begin);
+					copies.push_back(cpy);
+					cpy.dest = params.gy + count;
+					cpy.src = &particles_gforce(YDIM, begin);
+					copies.push_back(cpy);
+					cpy.dest = params.gz + count;
+					cpy.src = &particles_gforce(ZDIM, begin);
+					copies.push_back(cpy);
+					cpy.dest = params.pot + count;
+					cpy.src = &particles_pot(begin);
+					copies.push_back(cpy);
 #endif
 					const int l = box.index(i);
 					sink_cells[l].begin = count;
@@ -479,11 +547,26 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 		CUDA_CHECK(
 				cudaMemcpyAsync(params.source_cells, dev_source_cells.data(), sizeof(source_cell) * dev_source_cells.size(),
 						cudaMemcpyHostToDevice, stream));
+		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		int occupancy;
 		CUDA_CHECK(
 				cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_pme_kernel,KICK_PME_BLOCK_SIZE, sizeof(shmem_type)));
 		int num_blocks = occupancy * cuda_smp_count();
+		CUDA_CHECK(cudaStreamSynchronize(stream));
+		tm.stop();
+		PRINT("%e\n", tm.read());
+		tm.reset();
+		tm.start();
+		PRINT("Launching kernel\n");
 		kick_pme_kernel<<<num_blocks,KICK_PME_BLOCK_SIZE,0,stream>>>(params);
+		count = 0;
+		CUDA_CHECK(cudaStreamSynchronize(stream));
+		tm.stop();
+		PRINT("%e\n", tm.read());
+		tm.reset();
+		tm.start();
+		PRINT("Transfer back\n");
+		copies.resize(0);
 		count = 0;
 		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
 			for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
@@ -491,30 +574,45 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 					auto this_cell = chainmesh_get(i);
 					const auto this_size = this_cell.pend - this_cell.pbegin;
 					const auto begin = this_cell.pbegin;
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_vel(XDIM, begin), params.velx + count,sizeof(float) * this_size, cudaMemcpyDeviceToHost, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_vel(YDIM, begin), params.vely + count, sizeof(float) * this_size, cudaMemcpyDeviceToHost, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_vel(ZDIM, begin), params.velz + count, sizeof(float) * this_size, cudaMemcpyDeviceToHost, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_rung(begin), params.rung + count, sizeof(char) * this_size,
-									cudaMemcpyDeviceToHost));
+					cpymem cpy;
+					cpy.size = sizeof(float) * this_size;
+					cpy.src = params.velx + count;
+					cpy.dest = &particles_vel(XDIM, begin);
+					copies.push_back(cpy);
+					cpy.src = params.vely + count;
+					cpy.dest = &particles_vel(YDIM, begin);
+					copies.push_back(cpy);
+					cpy.src = params.velz + count;
+					cpy.dest = &particles_vel(ZDIM, begin);
+					copies.push_back(cpy);
+					cpy.size = sizeof(char) * this_size;
+					cpy.src = params.rung + count;
+					cpy.dest = &particles_rung(begin);
+					copies.push_back(cpy);
+					cpy.size = sizeof(float) * this_size;
 #ifdef TEST_FORCE
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_gforce(XDIM, begin), params.gx + count, sizeof(float) * this_size, cudaMemcpyDeviceToHost, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_gforce(YDIM, begin), params.gy + count, sizeof(float) * this_size, cudaMemcpyDeviceToHost, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_gforce(ZDIM, begin), params.gz + count, sizeof(float) * this_size, cudaMemcpyDeviceToHost, stream));
-					CUDA_CHECK(
-							cudaMemcpyAsync(&particles_pot(begin), params.pot + count, sizeof(float) * this_size, cudaMemcpyDeviceToHost, stream));
+					cpy.src = params.gx + count;
+					cpy.dest = &particles_gforce(XDIM, begin);
+					copies.push_back(cpy);
+					cpy.src = params.gy + count;
+					cpy.dest = &particles_gforce(YDIM, begin);
+					copies.push_back(cpy);
+					cpy.src = params.gz + count;
+					cpy.dest = &particles_gforce(ZDIM, begin);
+					copies.push_back(cpy);
+					cpy.src = params.pot + count;
+					cpy.dest = &particles_pot(begin);
+					copies.push_back(cpy);
 #endif
+					count += this_size;
 				}
 			}
 		}
 		CUDA_CHECK(cudaStreamSynchronize(stream));
+		process_copies(std::move(copies), cudaMemcpyDeviceToHost, stream);
 		params.free();
 		CUDA_CHECK(cudaStreamDestroy(stream));
+		tm.stop();
+		PRINT("%e\n", tm.read());
 	}
 }

@@ -25,9 +25,9 @@
 		}
 #endif
 
-template<class T>
-class vector: public std::vector<T> {
-	using base_type = std::vector<T>;
+template<class T, class Alloc = std::allocator<T>>
+class vector: public std::vector<T, Alloc> {
+	using base_type = std::vector<T, Alloc>;
 	using base_type::base_type;
 
 public:
@@ -76,7 +76,7 @@ public:
 
 	template<class Arc>
 	void serialize(Arc&& arc, unsigned) {
-		for( int i = 0; i < N; i++) {
+		for (int i = 0; i < N; i++) {
 			arc & A[i];
 		}
 	}
