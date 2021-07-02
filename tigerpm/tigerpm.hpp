@@ -24,6 +24,7 @@
 //#define SORT_TEST
 
 
+#define PHI_BW 3
 #define NDIM 3
 
 #define XDIM 0

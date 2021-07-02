@@ -138,7 +138,7 @@ void compute_source() {
 		source_box.begin[dim] *= ratio;
 		source_box.end[dim] *= ratio;
 	}
-	source_box = source_box.pad(2);
+	source_box = source_box.pad(PHI_BW);
 	source.resize(source_box.volume(), 0.0f);
 	const double N = get_options().four_dim;
 	const int xdim = source_box.end[XDIM] - source_box.begin[XDIM];

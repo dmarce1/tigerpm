@@ -8,16 +8,14 @@
 #include <algorithm>
 
 #define MAX_RUNG 32
-#define NINTERP 4
+#define NINTERP 6
 #define NCELLS 27
 #define KICK_PME_BLOCK_SIZE 1024
 
-__constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4),
-		1.0 / (1 << 5), 1.0 / (1 << 6), 1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11),
-		1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0 / (1 << 16), 1.0 / (1 << 17), 1.0
-				/ (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0
-				/ (1 << 24), 1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0
-				/ (1 << 30), 1.0 / (1 << 31) };
+__constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
+		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
+		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
 struct shmem_type {
 	array<fixed32, KICK_PME_BLOCK_SIZE> x;
@@ -72,8 +70,7 @@ struct kernel_params {
 	float* gz;
 	float* pot;
 #endif
-	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count,
-			size_t phi_cell_count) {
+	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count, size_t phi_cell_count) {
 		nsink_cells = cell_count;
 		CUDA_CHECK(cudaMalloc(&source_cells, cell_count * NCELLS * sizeof(source_cell)));
 		CUDA_CHECK(cudaMalloc(&sink_cells, cell_count * sizeof(sink_cell)));
@@ -226,22 +223,33 @@ __global__ void kick_pme_kernel() {
 				array<array<float, NINTERP>, NINTERP> dw;
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] *= params.Nfour;
-					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - 2);
+					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
 					X[dim] -= float(I[dim]);
-					I[dim]--;
+					I[dim] -= 2;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
-					const float& x1 = X[dim];
-					const float x2 = X[dim] * x1;
-					const float x3 = x1 * x2;
-					w[dim][0] = -0.5f * x1 + x2 - 0.5f * x3;
-					w[dim][1] = 1.0f - 2.5f * x2 + 1.5f * x3;
-					w[dim][2] = 0.5f * x1 + 2.0f * x2 - 1.5f * x3;
-					w[dim][3] = -0.5f * x2 + 0.5f * x3;
-					dw[dim][0] = -0.5f + 2.0f * x1 - 1.5f * x2;
-					dw[dim][1] = -5.0f * x1 + 4.5f * x2;
-					dw[dim][2] = 0.5f + 4.0f * x1 - 4.5f * x2;
-					dw[dim][3] = -x1 + 1.5f * x2;
+					float x1 = X[dim];
+					float x2 = X[dim] * x1;
+					float x3 = x1 * x2;
+					float x4 = x2 * x2;
+					float x5 = x3 * x2;
+					w[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+					w[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+					w[dim][2] = 1.0f - (5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+					w[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+					w[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+					w[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+					x5 = 5.0f * x4;
+					x4 = 4.0f * x3;
+					x3 = 3.0f * x2;
+					x2 = 2.0f * x1;
+					x1 = 1.0f;
+					dw[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+					dw[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+					dw[dim][2] = -(5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+					dw[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+					dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+					dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
 				}
 				for (int dim1 = 0; dim1 < NDIM; dim1++) {
 					for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
@@ -432,7 +440,7 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 		phibox.begin[dim] *= get_options().four_o_chain;
 		phibox.end[dim] *= get_options().four_o_chain;
 	}
-	phibox = phibox.pad(2);
+	phibox = phibox.pad(PHI_BW);
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume());
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
 	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
@@ -556,23 +564,17 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 			}
 		}
 		PRINT("sink count = %i\n", count);
-		CUDA_CHECK(
-				cudaMemcpyAsync(params.sink_cells, sink_cells.data(), sizeof(sink_cell) * sink_cells.size(),
-						cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(
-				cudaMemcpyAsync(params.source_cells, dev_source_cells.data(), sizeof(source_cell) * dev_source_cells.size(),
-						cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(params.sink_cells, sink_cells.data(), sizeof(sink_cell) * sink_cells.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(params.source_cells, dev_source_cells.data(), sizeof(source_cell) * dev_source_cells.size(), cudaMemcpyHostToDevice, stream));
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		cudaFuncAttributes attr;
 		cudaFuncGetAttributes(&attr, kick_pme_kernel);
 		if (attr.maxThreadsPerBlock < KICK_PME_BLOCK_SIZE) {
-			PRINT("This CUDA device will not run kick_pme_kernel with the required number of threads (%i)\n",
-					KICK_PME_BLOCK_SIZE);
+			PRINT("This CUDA device will not run kick_pme_kernel with the required number of threads (%i)\n", KICK_PME_BLOCK_SIZE);
 			abort();
 		}
 		int occupancy;
-		CUDA_CHECK(
-				cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_pme_kernel,KICK_PME_BLOCK_SIZE, sizeof(shmem_type)));
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_pme_kernel,KICK_PME_BLOCK_SIZE, sizeof(shmem_type)));
 		int num_blocks = occupancy * cuda_smp_count();
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
