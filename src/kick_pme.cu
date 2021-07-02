@@ -10,7 +10,7 @@
 #define MAX_RUNG 32
 #define NINTERP 4
 #define NCELLS 27
-#define KICK_PME_BLOCK_SIZE 64
+#define KICK_PME_BLOCK_SIZE 1024
 
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4),
 		1.0 / (1 << 5), 1.0 / (1 << 6), 1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11),
@@ -127,6 +127,22 @@ static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, in
 	return mem;
 }
 
+__device__ inline float erfcexp(float x, float *e) {
+	const float p(0.3275911f);
+	const float a1(0.254829592f);
+	const float a2(-0.284496736f);
+	const float a3(1.421413741f);
+	const float a4(-1.453152027f);
+	const float a5(1.061405429f);
+	const float t1 = 1.f / fmaf(p, x, 1.f);
+	const float t2 = t1 * t1;
+	const float t3 = t2 * t1;
+	const float t4 = t2 * t2;
+	const float t5 = t2 * t3;
+	*e = expf(-x * x);
+	return fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *e;
+}
+
 __global__ void kick_pme_kernel(kernel_params params) {
 	__shared__ shmem_type shmem;
 	const int& tid = threadIdx.x;
@@ -175,6 +191,7 @@ __global__ void kick_pme_kernel(kernel_params params) {
 				active_sourcei[active_index] = my_source_cell.begin + i;
 			}
 			nactive += shmem.index[KICK_PME_BLOCK_SIZE - 1];
+			__syncthreads();
 		}
 		const int maxsink = round_up(nactive, KICK_PME_BLOCK_SIZE);
 		for (int sink_index = tid; sink_index < maxsink; sink_index += KICK_PME_BLOCK_SIZE) {
@@ -286,8 +303,8 @@ __global__ void kick_pme_kernel(kernel_params params) {
 								rinv = rsqrtf(r2);
 								const float r0 = r * inv2rs;
 								const float r02 = r0 * r0;
-								const float erfc0 = erfcf(r0);
-								const float exp0 = expf(-r02);
+								float exp0;
+								const float erfc0 = erfcexp(r02, &exp0);
 								rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
 								rinv *= erfc0;
 							} else {
