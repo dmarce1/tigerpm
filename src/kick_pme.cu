@@ -58,6 +58,11 @@ struct kernel_params {
 	float t0;
 	float scale;
 	float hsoft;
+	float inv2rs;
+	float twooversqrtpi;
+	float h2;
+	float hinv;
+	float h3inv;
 	bool first_call;
 	int Nfour;
 	range<int> phi_box;
@@ -143,18 +148,22 @@ __device__ inline float erfcexp(float x, float *e) {
 	return fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *e;
 }
 
-__global__ void kick_pme_kernel(kernel_params params) {
+__constant__ kernel_params dev_params;
+
+__global__ void kick_pme_kernel() {
+	const kernel_params& params = dev_params;
 	__shared__ shmem_type shmem;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	const int& gsz = gridDim.x;
+	const float& inv2rs = params.inv2rs;
+	const float& twooversqrtpi = params.twooversqrtpi;
+	const float& h2 = params.h2;
+	const float& hinv = params.hinv;
+	const float& h3inv = params.h3inv;
+
 	const int cell_begin = size_t(bid) * (size_t) params.nsink_cells / (size_t) gsz;
 	const int cell_end = size_t(bid + 1) * (size_t) params.nsink_cells / (size_t) gsz;
-	const float inv2rs = 1.0f / params.rs / 2.0f;
-	const float twooversqrtpi = 2.0f / sqrtf(M_PI);
-	const float h2 = sqr(params.hsoft);
-	const float hinv = 1.f / params.hsoft;
-	const float h3inv = hinv * sqr(hinv);
 	for (int cell_index = cell_begin; cell_index < cell_end; cell_index++) {
 		const int offset = params.sink_cells[cell_index].begin;
 		int* active_sinki = params.active_sinki + offset;
@@ -468,6 +477,11 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 		params.t0 = t0;
 		params.scale = scale;
 		params.hsoft = get_options().hsoft;
+		params.inv2rs = 1.0f / params.rs / 2.0f;
+		params.twooversqrtpi = 2.0f / sqrtf(M_PI);
+		params.h2 = sqr(params.hsoft);
+		params.hinv = 1.f / params.hsoft;
+		params.h3inv = params.hinv * sqr(params.hinv);
 		vector<source_cell> source_cells(bigvol);
 		vector<source_cell> dev_source_cells(NCELLS * vol);
 		vector<sink_cell> sink_cells(vol);
@@ -565,6 +579,13 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 				cudaMemcpyAsync(params.source_cells, dev_source_cells.data(), sizeof(source_cell) * dev_source_cells.size(),
 						cudaMemcpyHostToDevice, stream));
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
+		cudaFuncAttributes attr;
+		cudaFuncGetAttributes(&attr, kick_pme_kernel);
+		if (attr.maxThreadsPerBlock < KICK_PME_BLOCK_SIZE) {
+			PRINT("This CUDA device will not run kick_pme_kernel with the required number of threads (%i)\n",
+					KICK_PME_BLOCK_SIZE);
+			abort();
+		}
 		int occupancy;
 		CUDA_CHECK(
 				cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_pme_kernel,KICK_PME_BLOCK_SIZE, sizeof(shmem_type)));
@@ -575,7 +596,8 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 		tm.reset();
 		tm.start();
 		PRINT("Launching kernel\n");
-		kick_pme_kernel<<<num_blocks,KICK_PME_BLOCK_SIZE,0,stream>>>(params);
+		CUDA_CHECK(cudaMemcpyToSymbol(dev_params, &params, sizeof(kernel_params)));
+		kick_pme_kernel<<<num_blocks,KICK_PME_BLOCK_SIZE,0,stream>>>();
 		count = 0;
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
