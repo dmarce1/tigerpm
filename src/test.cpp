@@ -165,7 +165,7 @@ static void chainmesh_test() {
 
 static void kick_pme_test() {
 	timer tm;
-	particles_sphere_init(0.5);
+	particles_random_init();
 
 	PRINT("DOMAIN SORT\n");
 	tm.start();
