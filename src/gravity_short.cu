@@ -2,12 +2,13 @@
 #include <tigerpm/gravity_short.hpp>
 #include <tigerpm/particles.hpp>
 #include <tigerpm/util.hpp>
+#include <tigerpm/options.hpp>
 
 __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey,
-		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz);
+		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz, float hsoft);
 
-std::pair<vector<double>, array<vector<double>, NDIM>> gravity_short_ewald_call_kernel(
-		const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
+std::pair<vector<double>, array<vector<double>, NDIM>> gravity_short_ewald_call_kernel(const vector<fixed32>& sinkx,
+		const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
 	std::pair<vector<double>, array<vector<double>, NDIM>> rc;
 	fixed32* dev_sinkx;
 	fixed32* dev_sinky;
@@ -41,9 +42,9 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_short_ewald_call_
 	CUDA_CHECK(
 			cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, gravity_ewald_kernel,EWALD_BLOCK_SIZE, sizeof(double)*(NDIM+1)*EWALD_BLOCK_SIZE ));
 	int num_kernels = std::max((int) (occupancy * cuda_smp_count() / Nsinks), 1);
-	vector < cudaStream_t > streams(num_kernels);
+	vector<cudaStream_t> streams(num_kernels);
 	for (int i = 0; i < num_kernels; i++) {
-		cudaStreamCreate (&streams[i]);
+		cudaStreamCreate(&streams[i]);
 	}
 	PRINT("%i particles per loop, %i kernels\n", parts_per_loop, num_kernels);
 	for (int i = 0; i < particles_size(); i += parts_per_loop) {
@@ -58,17 +59,17 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_short_ewald_call_
 			const int begin = size_t(j) * size_t(total_size) / size_t(num_kernels);
 			const int end = size_t(j + 1) * size_t(total_size) / size_t(num_kernels);
 			gravity_ewald_kernel<<<Nsinks,EWALD_BLOCK_SIZE,0,streams[i]>>>(dev_sinkx, dev_sinky, dev_sinkz, dev_srcx + begin, dev_srcy + begin,
-					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gy, dev_gz);
+					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gy, dev_gz, get_options().hsoft);
 		}
 		for (int i = 0; i < num_kernels; i++) {
-			cudaStreamSynchronize (streams[i]);
+			cudaStreamSynchronize(streams[i]);
 		}
 		CUDA_CHECK(cudaFree(dev_srcx));
 		CUDA_CHECK(cudaFree(dev_srcy));
 		CUDA_CHECK(cudaFree(dev_srcz));
 	}
 	for (int i = 0; i < num_kernels; i++) {
-		cudaStreamDestroy (streams[i]);
+		cudaStreamDestroy(streams[i]);
 	}
 	rc.first.resize(Nsinks);
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -89,7 +90,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_short_ewald_call_
 }
 
 __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey,
-		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz) {
+		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz, float h) {
 
 	__shared__ double phi[EWALD_BLOCK_SIZE];
 	__shared__ double gx[EWALD_BLOCK_SIZE];
@@ -102,16 +103,16 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 	const fixed32 x = sinkx[bid];
 	const fixed32 y = sinky[bid];
 	const fixed32 z = sinkz[bid];
-	const float h = 1.0 / 1024.0;
+	float h2 = h * h;
 	float hinv = 1.0 / h;
-	float h3inv = 1.0 / h / h / h;
+	float h3inv = hinv * hinv * hinv;
 	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
 	for (int sourcei = tid; sourcei < Nsource; sourcei += EWALD_BLOCK_SIZE) {
 		const float X = distance(x, sourcex[sourcei]);
 		const float Y = distance(y, sourcey[sourcei]);
 		const float Z = distance(z, sourcez[sourcei]);
 		const float R2 = sqr(X, Y, Z);
-		if (R2 > h * h) {
+		if (R2 > h2) {
 			for (int xi = -4; xi <= +4; xi++) {
 				for (int yi = -4; yi <= +4; yi++) {
 					for (int zi = -4; zi <= +4; zi++) {
@@ -160,11 +161,23 @@ __global__ void gravity_ewald_kernel(fixed32* sinkx, fixed32* sinky, fixed32* si
 					}
 				}
 			}
-		} else if (R2 > 0.0) {
-			phi[tid] += -(1.5 - 0.5 * R2) * hinv;
-			gx[tid] -= X * h3inv;
-			gy[tid] -= Y * h3inv;
-			gz[tid] -= Z * h3inv;
+		} else {
+			float rinv, rinv3;
+			const float q = sqrtf(R2) * hinv;
+			const float q2 = q * q;
+			rinv3 = +15.0f / 8.0f;
+			rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
+			rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
+			rinv3 *= h3inv;
+			rinv = -5.0f / 16.0f;
+			rinv = fmaf(rinv, q2, 21.0f / 16.0f);
+			rinv = fmaf(rinv, q2, -35.0f / 16.0f);
+			rinv = fmaf(rinv, q2, 35.0f / 16.0f);
+			rinv *= hinv;
+			gx[tid] -= X * rinv3;
+			gy[tid] -= Y * rinv3;
+			gz[tid] -= Z * rinv3;
+			phi[tid] -= rinv;
 		}
 	}
 	__syncthreads();

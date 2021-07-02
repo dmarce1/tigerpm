@@ -77,24 +77,22 @@ void particles_sphere_init(float radius) {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<particles_sphere_init_action>(c, radius));
 	}
-	const auto box = particles_get_local_box();
 	array<int, NDIM> i;
 	const double Ninv = 1.0 / get_options().chain_dim;
-	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
-		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
-			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
-				const double x = i[0] * Ninv - 0.5;
-				const double y = i[1] * Ninv - 0.5;
-				const double z = i[2] * Ninv - 0.5;
-				const double r2 = sqr(x, y, z);
-				if (r2 < radius * radius) {
-					particles_resize(particles_size() + 1);
-					particles_pos(0, particles_size() - 1) = x + 0.5;
-					particles_pos(1, particles_size() - 1) = y + 0.5;
-					particles_pos(2, particles_size() - 1) = z + 0.5;
-				}
-			}
-		}
+	const size_t nparts = std::pow(size_t(get_options().parts_dim), size_t(NDIM));
+	for (int i = 0; i < nparts; i++) {
+		double r2, x, y, z;
+		do {
+			x = rand() / double(RAND_MAX) - 0.5;
+			y = rand() / double(RAND_MAX) - 0.5;
+			z = rand() / double(RAND_MAX) - 0.5;
+			r2 = sqr(x, y, z);
+		} while (r2 > radius * radius);
+		particles_resize(particles_size() + 1);
+		particles_pos(0, particles_size() - 1) = x + 0.5;
+		particles_pos(1, particles_size() - 1) = y + 0.5;
+		particles_pos(2, particles_size() - 1) = z + 0.5;
+
 	}
 //	printf( "particles size = %i\n", particles_size());
 }
@@ -344,7 +342,8 @@ static vector<particle> get_particles_sample(vector<int> sample_counts) {
 		const int index = rand() % particles_size();
 		if (indices.find(index) == indices.end()) {
 			indices.insert(index);
-			samples.push_back(particles_get_particle(index));
+			const auto part = particles_get_particle(index);
+			samples.push_back(part);
 		}
 	}
 

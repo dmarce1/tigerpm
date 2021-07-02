@@ -165,7 +165,7 @@ static void chainmesh_test() {
 
 static void kick_pme_test() {
 	timer tm;
-	particles_random_init();
+	particles_sphere_init(0.5);
 
 	PRINT("DOMAIN SORT\n");
 	tm.start();
@@ -200,10 +200,21 @@ static void kick_pme_test() {
 
 	PRINT("KICK\n");
 	tm.start();
-	kick_pme(0, 1.0, 1.0, true);
+	kick_pme_begin(0, 1.0, 1.0, true);
+	kick_pme_end();
 	tm.stop();
 	PRINT("%e s\n", tm.read());
 	tm.reset();
+
+#ifdef FORCE_TEST
+	PRINT("COMPARE\n");
+	tm.start();
+	gravity_short_ewald_compare(100);
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+#endif
+
 }
 
 static void sort_test() {

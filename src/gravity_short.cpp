@@ -6,18 +6,16 @@
 
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
-static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
-		const vector<fixed32>& sinkz);
+static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz);
 
-HPX_PLAIN_ACTION (do_ewald);
+HPX_PLAIN_ACTION(do_ewald);
 
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
-static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
-		const vector<fixed32>& sinkz) {
-	vector < hpx::future < return_type >> futs;
+static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
+	vector<hpx::future<return_type>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < do_ewald_action > (c, sinkx, sinky, sinkz));
+		futs.push_back(hpx::async<do_ewald_action>(c, sinkx, sinky, sinkz));
 	}
 
 	auto results = gravity_short_ewald_call_kernel(sinkx, sinky, sinkz);
@@ -36,30 +34,36 @@ static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>&
 
 void gravity_short_ewald_compare(int Nsamples) {
 
-	/*	auto samples = particles_sample(Nsamples);
-	 vector<fixed32> sinkx(Nsamples);
-	 vector<fixed32> sinky(Nsamples);
-	 vector<fixed32> sinkz(Nsamples);
-	 for (int i = 0; i < Nsamples; i++) {
-	 sinkx[i] = samples[i].x[XDIM];
-	 sinky[i] = samples[i].x[YDIM];
-	 sinkz[i] = samples[i].x[ZDIM];
-	 }
-	 auto results = do_ewald(sinkx, sinky, sinkz);
-	 for( int i = 0; i < Nsamples; i++) {
-	 double f1 = 0.0, f2 = 0.0;
-	 double r2 = 0.0;
-	 for( int dim = 0; dim< NDIM; dim++) {
-	 f1 += sqr(samples[i].g[dim]);
-	 r2 += sqr(samples[i].x[dim].to_double() - 0.5);
-	 f2 += sqr(results.second[dim][i]);
-	 }
-	 const double r = sqrt(r2);
-	 f1 = sqrt(f1);
-	 f2 = sqrt(f2);
-	 printf( "%e %e %e \n", f1, f2, f2/f1 );
-	 }
-	 */
+	auto samples = particles_sample(Nsamples);
+	vector<fixed32> sinkx(Nsamples);
+	vector<fixed32> sinky(Nsamples);
+	vector<fixed32> sinkz(Nsamples);
+	for (int i = 0; i < Nsamples; i++) {
+		sinkx[i] = samples[i].x[XDIM];
+		sinky[i] = samples[i].x[YDIM];
+		sinkz[i] = samples[i].x[ZDIM];
+	}
+	double l2sum = 0.0;
+	double l2norm = 0.0;
+	auto results = do_ewald(sinkx, sinky, sinkz);
+	for (int i = 0; i < Nsamples; i++) {
+		double f1 = 0.0, f2 = 0.0;
+		double r2 = 0.0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			f1 += sqr(samples[i].g[dim]);
+			r2 += sqr(samples[i].x[dim].to_double() - 0.5);
+			f2 += sqr(results.second[dim][i]);
+		}
+		const double r = sqrt(r2);
+		f1 = sqrt(f1);
+		f2 = sqrt(f2);
+		l2sum += sqr(f1-f2);
+		l2norm += sqr(f2);
+		printf("%e %e %e \n", f1, f2, f2 / f1);
+	}
+	l2sum = sqrt(l2sum/l2norm);
+	PRINT( "L2 Error = %e\n", l2sum);
+	 /*
 	vector<fixed32> sinkx(Nsamples);
 	vector<fixed32> sinky(Nsamples);
 	vector<fixed32> sinkz(Nsamples);
@@ -94,6 +98,5 @@ void gravity_short_ewald_compare(int Nsamples) {
 	}
 	fclose(fp);
 	printf("L1 = %e \n", l1sum / l1norm);
-	printf("L2 = %e \n", std::sqrt(l2sum / l2norm));
-
+	printf("L2 = %e \n", std::sqrt(l2sum / l2norm));*/
 }

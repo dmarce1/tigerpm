@@ -66,7 +66,7 @@ struct kernel_params {
 	bool first_call;
 	int Nfour;
 	range<int> phi_box;
-#ifdef TEST_FORCE
+#ifdef FORCE_TEST
 	float* gx;
 	float* gy;
 	float* gz;
@@ -87,11 +87,11 @@ struct kernel_params {
 		CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&active_sinki, sink_size * sizeof(int)));
 		CUDA_CHECK(cudaMalloc(&active_sourcei, sink_size * sizeof(int)));
-#ifdef TEST_FORCE
-		CUDA_CHECK(cudaMalloc(&gx,source_size*sizeof(float)));
-		CUDA_CHECK(cudaMalloc(&gy,source_size*sizeof(float)));
-		CUDA_CHECK(cudaMalloc(&gz,source_size*sizeof(float)));
-		CUDA_CHECK(cudaMalloc(&pot,source_size*sizeof(float)));
+#ifdef FORCE_TEST
+		CUDA_CHECK(cudaMalloc(&gx, source_size * sizeof(float)));
+		CUDA_CHECK(cudaMalloc(&gy, source_size * sizeof(float)));
+		CUDA_CHECK(cudaMalloc(&gz, source_size * sizeof(float)));
+		CUDA_CHECK(cudaMalloc(&pot, source_size * sizeof(float)));
 #endif
 	}
 	void free() {
@@ -107,7 +107,7 @@ struct kernel_params {
 		CUDA_CHECK(cudaFree(rung));
 		CUDA_CHECK(cudaFree(source_cells));
 		CUDA_CHECK(cudaFree(sink_cells));
-#ifdef TEST_FORCE
+#ifdef FORCE_TEST
 		CUDA_CHECK(cudaFree(gx));
 		CUDA_CHECK(cudaFree(gy));
 		CUDA_CHECK(cudaFree(gz));
@@ -126,8 +126,8 @@ static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, in
 	mem += 2 * sizeof(int) * vol;
 	mem += phivol * sizeof(float);
 	mem += sizeof(kernel_params);
-#ifdef TEST_FORCE
-	mem += (NDIM+1) * sizeof(float) * nsinks;
+#ifdef FORCE_TEST
+	mem += (NDIM + 1) * sizeof(float) * nsinks;
 #endif
 	return mem;
 }
@@ -161,14 +161,12 @@ __global__ void kick_pme_kernel() {
 	const float& h2 = params.h2;
 	const float& hinv = params.hinv;
 	const float& h3inv = params.h3inv;
-
 	const int cell_begin = size_t(bid) * (size_t) params.nsink_cells / (size_t) gsz;
 	const int cell_end = size_t(bid + 1) * (size_t) params.nsink_cells / (size_t) gsz;
 	for (int cell_index = cell_begin; cell_index < cell_end; cell_index++) {
-		const int offset = params.sink_cells[cell_index].begin;
-		int* active_sinki = params.active_sinki + offset;
-		int* active_sourcei = params.active_sourcei + offset;
 		const sink_cell& sink = params.sink_cells[cell_index];
+		int* active_sinki = params.active_sinki + sink.begin;
+		int* active_sourcei = params.active_sourcei + sink.begin;
 		const auto& my_source_cell = params.source_cells[cell_index * NCELLS + NCELLS / 2];
 		const int nsinks = sink.end - sink.begin;
 		const int imax = round_up(nsinks, KICK_PME_BLOCK_SIZE);
@@ -226,7 +224,6 @@ __global__ void kick_pme_kernel() {
 				X[ZDIM] = sink_z.to_float();
 				array<array<float, NINTERP>, NINTERP> w;
 				array<array<float, NINTERP>, NINTERP> dw;
-
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] *= params.Nfour;
 					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - 2);
@@ -247,7 +244,6 @@ __global__ void kick_pme_kernel() {
 					dw[dim][3] = -x1 + 1.5f * x2;
 				}
 				for (int dim1 = 0; dim1 < NDIM; dim1++) {
-					g[dim1] = 0.0;
 					for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
 						for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
 							for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
@@ -266,7 +262,6 @@ __global__ void kick_pme_kernel() {
 						}
 					}
 				}
-				phi = 0.0;
 				for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
 					for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
 						for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
@@ -284,16 +279,15 @@ __global__ void kick_pme_kernel() {
 			for (int ni = 0; ni < NCELLS; ni++) {
 				const auto& src_cell = params.source_cells[cell_index * NCELLS + ni];
 				for (int sibase = src_cell.begin; sibase < src_cell.end; sibase += KICK_PME_BLOCK_SIZE) {
-					if (sink_index < nactive) {
-						int source_index = sibase + tid;
-						if (source_index < min(src_cell.end, sibase + KICK_PME_BLOCK_SIZE)) {
-							const int j = source_index - sibase;
-							assert(j >= 0);
-							assert(j < KICK_PME_BLOCK_SIZE);
-							shmem.x[j] = params.x[source_index];
-							shmem.y[j] = params.y[source_index];
-							shmem.z[j] = params.z[source_index];
-						}
+					int source_index = sibase + tid;
+					__syncthreads();
+					if (source_index < src_cell.end) {
+						const int j = source_index - sibase;
+						assert(j >= 0);
+						assert(j < KICK_PME_BLOCK_SIZE);
+						shmem.x[j] = params.x[source_index];
+						shmem.y[j] = params.y[source_index];
+						shmem.z[j] = params.z[source_index];
 					}
 					__syncthreads();
 					if (sink_index < nactive) {
@@ -311,9 +305,8 @@ __global__ void kick_pme_kernel() {
 								const float r = sqrtf(r2);
 								rinv = rsqrtf(r2);
 								const float r0 = r * inv2rs;
-								const float r02 = r0 * r0;
 								float exp0;
-								const float erfc0 = erfcexp(r02, &exp0);
+								const float erfc0 = erfcexp(r0, &exp0);
 								rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
 								rinv *= erfc0;
 							} else {
@@ -342,7 +335,7 @@ __global__ void kick_pme_kernel() {
 				g[YDIM] *= params.GM;
 				g[ZDIM] *= params.GM;
 				phi *= params.GM;
-#ifdef TEST_FORCE
+#ifdef FORCE_TEST
 				params.gx[snki] = g[XDIM];
 				params.gy[snki] = g[YDIM];
 				params.gz[snki] = g[ZDIM];
@@ -371,8 +364,7 @@ __global__ void kick_pme_kernel() {
 				vx = fmaf(g[XDIM], dt, vx);
 				vy = fmaf(g[YDIM], dt, vy);
 				vz = fmaf(g[ZDIM], dt, vz);
-				//PRINT("%e %e %e %i\n", g[0], g[1], g[2], rung);
-
+				//		PRINT( "%i\n", snki);
 			}
 		}
 	}
@@ -403,18 +395,9 @@ void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cudaStream_
 		}
 		compressed.push_back(copy);
 	}
-	array<cudaStream_t, NSTREAMS> streams;
-	for (int i = 0; i < NSTREAMS; i++) {
-		CUDA_CHECK(cudaStreamCreate(&streams[i]));
-	}
 	PRINT("Compressed from %i to %i copies\n", copies.size(), compressed.size());
 	for (int i = 0; i < compressed.size(); i++) {
-		CUDA_CHECK(
-				cudaMemcpyAsync(compressed[i].dest, compressed[i].src, compressed[i].size, direction, streams[i%NSTREAMS]));
-	}
-	for (int i = 0; i < NSTREAMS; i++) {
-		CUDA_CHECK(cudaStreamSynchronize(streams[i]));
-		CUDA_CHECK(cudaStreamDestroy(streams[i]));
+		CUDA_CHECK(cudaMemcpyAsync(compressed[i].dest, compressed[i].src, compressed[i].size, direction, stream));
 	}
 }
 
@@ -537,7 +520,7 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 					cpy.dest = params.rung + count;
 					cpy.src = &particles_rung(begin);
 					copies.push_back(cpy);
-#ifdef TEST_FORCE
+#ifdef FORCE_TEST
 					cpy.size = sizeof(float) * this_size;
 					cpy.dest = params.gx + count;
 					cpy.src = &particles_gforce(XDIM, begin);
@@ -572,6 +555,7 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 				}
 			}
 		}
+		PRINT("sink count = %i\n", count);
 		CUDA_CHECK(
 				cudaMemcpyAsync(params.sink_cells, sink_cells.data(), sizeof(sink_cell) * sink_cells.size(),
 						cudaMemcpyHostToDevice, stream));
@@ -628,8 +612,8 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 					cpy.src = params.rung + count;
 					cpy.dest = &particles_rung(begin);
 					copies.push_back(cpy);
+#ifdef FORCE_TEST
 					cpy.size = sizeof(float) * this_size;
-#ifdef TEST_FORCE
 					cpy.src = params.gx + count;
 					cpy.dest = &particles_gforce(XDIM, begin);
 					copies.push_back(cpy);
@@ -647,8 +631,8 @@ void kick_pme(range<int> box, int min_rung, double scale, double t0, bool first_
 				}
 			}
 		}
-		CUDA_CHECK(cudaStreamSynchronize(stream));
 		process_copies(std::move(copies), cudaMemcpyDeviceToHost, stream);
+		CUDA_CHECK(cudaStreamSynchronize(stream));
 		params.free();
 		CUDA_CHECK(cudaStreamDestroy(stream));
 		tm.stop();

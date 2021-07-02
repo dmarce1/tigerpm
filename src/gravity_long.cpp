@@ -20,7 +20,6 @@ range<int> gravity_long_get_phi_box() {
 	return source_box;
 }
 
-
 vector<float> gravity_long_get_phi(const range<int>& this_box) {
 	vector<float> this_phi(this_box.volume());
 	array<int, NDIM> i;
@@ -214,10 +213,11 @@ void apply_laplacian(gravity_long_type type) {
 					k[dim] = i[dim] < N / 2 ? i[dim] : i[dim] - N;
 					k[dim] *= c0;
 				}
-				const double nk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
+				const double cosnk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
+				const double nk2 = -sqr(k[0], k[1], k[2]);
 				const int index = box.index(i);
 				if (nk2 < 0.0) {
-					const double nk2inv = 1.0 / nk2;
+					const double nk2inv = 1.0 / cosnk2;
 					Y[index] *= float(nk2inv);
 				} else {
 					Y[index] *= 0.0;
