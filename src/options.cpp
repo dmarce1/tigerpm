@@ -49,7 +49,7 @@ bool process_options(int argc, char *argv[]) {
 	("config_file", po::value<std::string>(&(opts.config_file))->default_value(""), "configuration file") //
 	("box_size", po::value<double>(&(opts.box_size))->default_value(1), "size of the computational domain in mpc") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(130), "nparts^(1/3)") //
-	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(10), "fourier dim over chain dim") //
+	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(8), "fourier dim over chain dim") //
 	("parts_o_four", po::value<int>(&(opts.parts_o_four))->default_value(2), "parts dim over four dim") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "test problem") //
 			;

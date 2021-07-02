@@ -23,7 +23,10 @@
 #define FORCE_TEST
 //#define SORT_TEST
 
+#define BUCKET_SIZE 64
 
+
+#define NCHILD 2
 #define PHI_BW 3
 #define NDIM 3
 

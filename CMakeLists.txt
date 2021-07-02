@@ -24,11 +24,14 @@ set(tigerpm_source_files
     src/kick_pm.cpp
     src/kick_pme.cpp
     src/kick_pme.cu
+    src/kick_treepm.cu
+    src/kick_treepm.cu
     src/main.cpp
     src/options.cpp
     src/particles.cpp
     src/util.cpp
     src/test.cpp
+    src/tree.cpp
 )      
                        
                         
@@ -46,12 +49,14 @@ set(tigerpm_header_files
 	tigerpm/fft.hpp
 	tigerpm/kick_pm.hpp
 	tigerpm/kick_pme.hpp
+	tigerpm/kick_treepm.hpp
 	tigerpm/options.hpp
 	tigerpm/particles.hpp
 	tigerpm/range.hpp
 	tigerpm/test.hpp
 	tigerpm/tigerpm.hpp
 	tigerpm/timer.hpp
+	tigerpm/tree.hpp
 	tigerpm/util.hpp
 )
 
