@@ -53,10 +53,10 @@ public:
 	fixed32 get_x(int dim, int i) const {
 		return nodes[i].x[dim];
 	}
-	CUDA_EXPORT inline int get_pbegin(int i) {
+	CUDA_EXPORT inline int get_pbegin(int i) const {
 		return nodes[i].pbegin;
 	}
-	CUDA_EXPORT inline int get_pend(int i) {
+	CUDA_EXPORT inline int get_pend(int i) const {
 		return nodes[i].pend;
 	}
 	CUDA_EXPORT inline

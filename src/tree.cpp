@@ -12,6 +12,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 	}
 	int index = t.allocate();
 //	PRINT( "%i %i\n", begin, end);
+	node.pbegin = begin;
+	node.pend = end;
 	if (end - begin <= BUCKET_SIZE) {
 //		PRINT( "END %i %i\n", begin, end);
 		node.mass = end - begin;

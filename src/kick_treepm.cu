@@ -368,53 +368,48 @@ __global__ void kick_treepm_kernel() {
 							nextb = !far && !leaf;
 							//		PRINT( "%i %i %i \n", multib, partb, nextb);
 						}
-						/*	shmem.index[tid] = multib;
-						 this_index = compute_indices(shmem.index) + source_size;
-						 if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
-						 PRINT("internal interspace exceeded on multipoles\n");
-						 __trap();
-						 assert(false);
-						 }
-						 if (multib) {
-						 sourcelist[this_index].x = source_x;
-						 sourcelist[this_index].y = source_y;
-						 sourcelist[this_index].z = source_z;
-						 sourcelist[this_index].m = tr.get_mass(index);
-						 }
-						 source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
-						 __syncthreads();
-
-						 shmem.index[tid] = (partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0);
-						 this_index = compute_indices(shmem.index) + source_size;
-						 PRINT( "%i %i \n", source_size, shmem.index[TREEPM_BLOCK_SIZE - 1] );
-						 if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
-						 PRINT("internal interspace exceeded on particles\n");
-						 __trap();
-						 assert(false);
-						 }
-						 this_end = shmem.index[tid] + source_size;
-						 if (partb) {
-						 int j = tr.get_pbegin(index);
-						 for (int i = this_index; i < this_end; i++) {
-						 sourcelist[i].x = params.x[j];
-						 sourcelist[i].y = params.y[j];
-						 sourcelist[i].z = params.z[j];
-						 sourcelist[i].m = 1.f;
-						 j++;
-						 }
-						 }
-						 source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];*/
+						shmem.index[tid] = multib;
+						this_index = compute_indices(shmem.index) + source_size;
+						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
+							PRINT("internal interspace exceeded on multipoles\n");
+							__trap();
+							assert(false);
+						}
+						if (multib) {
+							sourcelist[this_index].x = source_x;
+							sourcelist[this_index].y = source_y;
+							sourcelist[this_index].z = source_z;
+							sourcelist[this_index].m = tr.get_mass(index);
+						}
+						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
 						__syncthreads();
 
+						shmem.index[tid] = (partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0);
+						this_index = compute_indices(shmem.index) + source_size;
+						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
+							PRINT("internal interspace exceeded on particles\n");
+							__trap();
+							assert(false);
+						}
+						this_end = shmem.index[tid] + source_size;
+						if (partb) {
+							int j = tr.get_pbegin(index);
+							for (int i = this_index; i < this_end; i++) {
+								sourcelist[i].x = params.x[j];
+								sourcelist[i].y = params.y[j];
+								sourcelist[i].z = params.z[j];
+								sourcelist[i].m = 1.f;
+								j++;
+							}
+						}
+						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						__syncthreads();
 						shmem.index[tid] = nextb;
 						this_index = compute_indices(shmem.index);
 						if (next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= WORKSPACE_SIZE) {
 							PRINT("internal workspace exceeded\n");
 							__trap();
 							assert(false);
-						}
-						if (tid == 0) {
-							//				PRINT("%i %i %i\n", bid, next_size, source_size);
 						}
 						if (nextb) {
 							const auto children = tr.get_children(index);
@@ -431,6 +426,10 @@ __global__ void kick_treepm_kernel() {
 					check_size = next_size;
 					next_size = 0;
 				}
+				if (tid == 0) {
+					PRINT("%i %i\n", tree_index, source_size);
+				}
+
 			}
 		}
 	}
@@ -500,7 +499,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.7;
+		params.theta = 0.25;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.GM = get_options().GM;
