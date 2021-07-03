@@ -76,7 +76,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			r20 += sqr(t.get_x(dim, i0).to_double() - x[dim]);
 			r21 += sqr(t.get_x(dim, i1).to_double() - x[dim]);
 		}
-		node.radius = std::sqrt(std::max(r20, r21));
+		node.radius = std::max(std::sqrt(r20) + t.get_radius(i0), std::sqrt(r21) + t.get_radius(i1));
 	}
 	t.set(node, index);
 	return index;

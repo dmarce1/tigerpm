@@ -30,7 +30,7 @@ struct sink_cell {
 	array<int, NDIM> loc;
 };
 
-#define WORKSPACE_SIZE  2024
+#define WORKSPACE_SIZE  1024
 #define INTERSPACE_SIZE 8192
 
 struct treepm_params {
@@ -426,9 +426,6 @@ __global__ void kick_treepm_kernel() {
 					check_size = next_size;
 					next_size = 0;
 				}
-				if (tid == 0) {
-					PRINT("%i %i\n", tree_index, source_size);
-				}
 
 			}
 		}
@@ -499,7 +496,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.25;
+		params.theta = 0.5;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.GM = get_options().GM;
