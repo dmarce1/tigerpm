@@ -4,6 +4,7 @@
 #include <tigerpm/particles.hpp>
 #include <tigerpm/util.hpp>
 #include <tigerpm/gravity_long.hpp>
+#include <tigerpm/gravity_short.hpp>
 
 #include <thrust/device_vector.h>
 
@@ -11,7 +12,10 @@
 
 #define TREEPM_BLOCK_SIZE 32
 
-#define NCELLS 27
+__constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
+		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
+		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
 struct source_cell {
 	int begin;
@@ -36,9 +40,8 @@ struct treepm_params {
 	source_cell* source_cells;
 	sink_cell* sink_cells;
 	sink_bucket** buckets;
+	int* bucket_cnt;
 	tree* trees;
-	int* active_sinki;
-	int* active_sourcei;
 	int nsink_cells;
 	int min_rung;
 	float rs;
@@ -67,6 +70,7 @@ struct treepm_params {
 		CUDA_CHECK(cudaMalloc(&source_cells, cell_count * NCELLS * sizeof(source_cell)));
 		CUDA_CHECK(cudaMalloc(&sink_cells, cell_count * sizeof(sink_cell)));
 		CUDA_CHECK(cudaMalloc(&buckets, cell_count * sizeof(sink_bucket*)));
+		CUDA_CHECK(cudaMalloc(&bucket_cnt, cell_count * sizeof(int)));
 		CUDA_CHECK(cudaMalloc(&trees, cell_count * sizeof(tree)));
 		CUDA_CHECK(cudaMalloc(&x, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&y, source_size * sizeof(fixed32)));
@@ -76,8 +80,6 @@ struct treepm_params {
 		CUDA_CHECK(cudaMalloc(&velz, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
-		CUDA_CHECK(cudaMalloc(&active_sinki, sink_size * sizeof(int)));
-		CUDA_CHECK(cudaMalloc(&active_sourcei, sink_size * sizeof(int)));
 #ifdef FORCE_TEST
 		CUDA_CHECK(cudaMalloc(&gx, source_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&gy, source_size * sizeof(float)));
@@ -94,9 +96,8 @@ struct treepm_params {
 		CUDA_CHECK(cudaFree(velz));
 		CUDA_CHECK(cudaFree(trees));
 		CUDA_CHECK(cudaFree(buckets));
+		CUDA_CHECK(cudaFree(bucket_cnt));
 		CUDA_CHECK(cudaFree(phi));
-		CUDA_CHECK(cudaFree(active_sinki));
-		CUDA_CHECK(cudaFree(active_sourcei));
 		CUDA_CHECK(cudaFree(rung));
 		CUDA_CHECK(cudaFree(source_cells));
 		CUDA_CHECK(cudaFree(sink_cells));
@@ -118,6 +119,7 @@ static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, in
 	mem += vol * sizeof(sink_cell);
 	mem += 2 * sizeof(int) * vol;
 	mem += sizeof(sink_bucket*) * vol;
+	mem += sizeof(int) * vol;
 	mem += sizeof(tree) * vol;
 	mem += phivol * sizeof(float);
 	mem += sizeof(treepm_params);
@@ -158,7 +160,74 @@ static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cuda
 	}
 }
 
-void kick_treepm(vector<tree>& trees, vector<vector<sink_bucket>>& buckets, range<int> box, int min_rung, double scale, double t0, bool first_call) {
+struct treepm_shmem {
+	array<int, BUCKET_SIZE> active_srci;
+	array<int, BUCKET_SIZE> active_snki;
+	array<int, TREEPM_BLOCK_SIZE> index;
+};
+
+__constant__ treepm_params dev_treepm_params;
+
+__global__ void kick_treepm_kernel() {
+	const treepm_params& params = dev_treepm_params;
+	__shared__ treepm_shmem shmem;
+	const int& tid = threadIdx.x;
+	const int& bid = blockIdx.x;
+	const int& gsz = gridDim.x;
+	const float& inv2rs = params.inv2rs;
+	const float& twooversqrtpi = params.twooversqrtpi;
+	const float& h2 = params.h2;
+	const float& hinv = params.hinv;
+	const float& h3inv = params.h3inv;
+	const int cell_begin = size_t(bid) * (size_t) params.nsink_cells / (size_t) gsz;
+	const int cell_end = size_t(bid + 1) * (size_t) params.nsink_cells / (size_t) gsz;
+	for (int cell_index = cell_begin; cell_index < cell_end; cell_index++) {
+		sink_bucket* buckets = params.buckets[cell_index];
+		const int& bucket_cnt = params.bucket_cnt[cell_index];
+		for (int bi = 0; bi < bucket_cnt; bi++) {
+			const auto& bucket = buckets[bi];
+			const auto& snk_begin = bucket.snk_begin;
+			const auto& snk_end = bucket.snk_end;
+			__syncthreads();
+			const int nsinks = snk_end - snk_begin;
+			const int imax = round_up(nsinks, TREEPM_BLOCK_SIZE);
+			int nactive = 0;
+			for (int i = tid; i < imax; i += TREEPM_BLOCK_SIZE) {
+				const int this_index = snk_begin + i;
+				bool is_active;
+				if (i < nsinks) {
+					is_active = int(params.rung[this_index] >= params.min_rung);
+				} else {
+					is_active = false;
+				}
+				shmem.index[tid] = int(is_active);
+				for (int P = 1; P < TREEPM_BLOCK_SIZE; P *= 2) {
+					int tmp;
+					__syncthreads();
+					if (tid >= P) {
+						tmp = shmem.index[tid - P];
+					}
+					__syncthreads();
+					if (tid >= P) {
+						shmem.index[tid] += tmp;
+					}
+				}
+				__syncthreads();
+				int active_index = (tid > 0 ? shmem.index[tid - 1] : 0) + nactive;
+				if (is_active) {
+					shmem.active_snki[active_index] = this_index;
+					shmem.active_srci[active_index] = bucket.src_begin + i;
+				}
+				nactive += shmem.index[TREEPM_BLOCK_SIZE - 1];
+				__syncthreads();
+			}
+		}
+	}
+
+
+}
+
+void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<int> box, int min_rung, double scale, double t0, bool first_call) {
 	PRINT("Sorting cells\n");
 	timer tm;
 	size_t nsources = 0;
@@ -244,6 +313,15 @@ void kick_treepm(vector<tree>& trees, vector<vector<sink_bucket>>& buckets, rang
 					auto this_cell = chainmesh_get(i);
 					const auto this_size = this_cell.pend - this_cell.pbegin;
 					const auto begin = this_cell.pbegin;
+					const auto dif = count - begin;
+					if (box.contains(i)) {
+						const int q = box.index(i);
+						trees[q].adjust_indexes(dif);
+						for (auto& bucket : buckets[q]) {
+							bucket.src_begin += dif;
+							bucket.src_end += dif;
+						}
+					}
 					cpymem cpy;
 					cpy.size = sizeof(fixed32) * this_size;
 					cpy.dest = params.x + count;
@@ -272,7 +350,10 @@ void kick_treepm(vector<tree>& trees, vector<vector<sink_bucket>>& buckets, rang
 					cpymem cpy;
 					const int l = box.index(i);
 					const auto dif = count - begin;
-					trees[l].adjust_indexes(dif);
+					for (auto& bucket : buckets[l]) {
+						bucket.snk_begin += dif;
+						bucket.snk_end += dif;
+					}
 					cpy.size = sizeof(float) * this_size;
 					cpy.dest = params.velx + count;
 					cpy.src = &particles_vel(XDIM, begin);
@@ -324,37 +405,41 @@ void kick_treepm(vector<tree>& trees, vector<vector<sink_bucket>>& buckets, rang
 		vector<tree> dev_trees(vol);
 		vector<thrust::device_vector<sink_bucket>> dev_buckets;
 		vector<sink_bucket*> dev_bucket_ptrs;
+		vector<int> bucket_count;
 		for (int j = 0; j < vol; j++) {
+			bucket_count.push_back(buckets[j].size());
 			dev_trees[j] = trees[j].to_device(stream);
-			thrust::device_vector < sink_bucket > dev_bucket(std::move(buckets[j]));
+			thrust::device_vector<sink_bucket> dev_bucket(std::move(buckets[j]));
 			dev_buckets.push_back(dev_bucket);
-			sink_bucket* ptr =  thrust::raw_pointer_cast(dev_buckets.back().data());
+		}
+		for (int j = 0; j < vol; j++) {
+			sink_bucket* ptr = thrust::raw_pointer_cast(dev_buckets[j].data());
 			dev_bucket_ptrs.push_back(ptr);
 		}
+		CUDA_CHECK(cudaMemcpyAsync(params.bucket_cnt, bucket_count.data(), sizeof(int) * vol, cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(params.buckets, dev_bucket_ptrs.data(), sizeof(sink_bucket*) * vol, cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(params.trees, dev_trees.data(), sizeof(tree) * vol, cudaMemcpyHostToDevice, stream));
-		PRINT("sink count = %i\n", count);
 		CUDA_CHECK(cudaMemcpyAsync(params.sink_cells, sink_cells.data(), sizeof(sink_cell) * sink_cells.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(params.source_cells, dev_source_cells.data(), sizeof(source_cell) * dev_source_cells.size(), cudaMemcpyHostToDevice, stream));
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 
-		/*cudaFuncAttributes attr;
-		 cudaFuncGetAttributes(&attr, kick_pme_kernel);
-		 if (attr.maxThreadsPerBlock < TREEPM_BLOCK_SIZE) {
-		 PRINT("This CUDA device will not run kick_pme_kernel with the required number of threads (%i)\n", TREEPM_BLOCK_SIZE);
-		 abort();
-		 }
-		 int occupancy;
-		 CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_pme_kernel,TREEPM_BLOCK_SIZE, sizeof(shmem_type)));
-		 int num_blocks = occupancy * cuda_smp_count();
-		 CUDA_CHECK(cudaStreamSynchronize(stream));
-		 tm.stop();
-		 PRINT("%e\n", tm.read());
-		 tm.reset();
-		 tm.start();
-		 PRINT("Launching kernel\n");
-		 CUDA_CHECK(cudaMemcpyToSymbol(dev_params, &params, sizeof(treepm_params)));
-		 kick_pme_kernel<<<num_blocks,TREEPM_BLOCK_SIZE,0,stream>>>();*/
+		cudaFuncAttributes attr;
+		cudaFuncGetAttributes(&attr, kick_treepm_kernel);
+		if (attr.maxThreadsPerBlock < TREEPM_BLOCK_SIZE) {
+			PRINT("This CUDA device will not run kick_pme_kernel with the required number of threads (%i)\n", TREEPM_BLOCK_SIZE);
+			abort();
+		}
+		int occupancy;
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_treepm_kernel,TREEPM_BLOCK_SIZE, sizeof(treepm_shmem)));
+		int num_blocks = occupancy * cuda_smp_count();
+		CUDA_CHECK(cudaStreamSynchronize(stream));
+		tm.stop();
+		PRINT("%e\n", tm.read());
+		tm.reset();
+		tm.start();
+		PRINT("Launching kernel\n");
+		CUDA_CHECK(cudaMemcpyToSymbol(dev_treepm_params, &params, sizeof(treepm_params)));
+		kick_treepm_kernel<<<num_blocks,TREEPM_BLOCK_SIZE,0,stream>>>();
 
 		count = 0;
 		CUDA_CHECK(cudaStreamSynchronize(stream));

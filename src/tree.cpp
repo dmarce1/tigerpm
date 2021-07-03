@@ -41,8 +41,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		}
 		node.radius = std::sqrt(r2max) + get_options().hsoft;
 		sink_bucket bucket;
-		bucket.pbegin = begin;
-		bucket.pend = end;
+		bucket.snk_begin = bucket.src_begin = begin;
+		bucket.snk_end = bucket.src_end = end;
 		bucket.radius = node.radius;
 		sink_buckets.push_back(bucket);
 	} else {

@@ -47,7 +47,7 @@ void gravity_long_compute(gravity_long_type type) {
 	fft3d_destroy();
 }
 
-#define NINTERP 4
+#define THIS_NINTERP 4
 
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos) {
 	double phi0;
@@ -55,8 +55,8 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	array<float, NDIM> gret;
 	array<int, NDIM> I;
 	array<double, NDIM> X;
-	array<array<double, NINTERP>, NDIM> w;
-	array<array<double, NINTERP>, NDIM> dw;
+	array<array<double, THIS_NINTERP>, NDIM> w;
+	array<array<double, THIS_NINTERP>, NDIM> dw;
 	const double N = get_options().four_dim;
 
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -81,9 +81,9 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	array<int, NDIM> J;
 	for (int dim1 = 0; dim1 < NDIM; dim1++) {
 		g[dim1] = 0.0;
-		for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
-			for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
-				for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+		for (J[0] = I[0]; J[0] < I[0] + THIS_NINTERP; J[0]++) {
+			for (J[1] = I[1]; J[1] < I[1] + THIS_NINTERP; J[1]++) {
+				for (J[2] = I[2]; J[2] < I[2] + THIS_NINTERP; J[2]++) {
 					double w0 = 1.0;
 					for (int dim2 = 0; dim2 < NDIM; dim2++) {
 						const int i0 = J[dim2] - I[dim2];
@@ -103,9 +103,9 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 
 	}
 	phi0 = 0.0;
-	for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
-		for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
-			for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+	for (J[0] = I[0]; J[0] < I[0] + THIS_NINTERP; J[0]++) {
+		for (J[1] = I[1]; J[1] < I[1] + THIS_NINTERP; J[1]++) {
+			for (J[2] = I[2]; J[2] < I[2] + THIS_NINTERP; J[2]++) {
 				double w0 = 1.0;
 				for (int dim2 = 0; dim2 < NDIM; dim2++) {
 					const int i0 = J[dim2] - I[dim2];

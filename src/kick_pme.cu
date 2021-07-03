@@ -7,15 +7,9 @@
 #include <tigerpm/timer.hpp>
 #include <algorithm>
 
-#define MAX_RUNG 32
-#define NINTERP 6
-#define NCELLS 27
 #define KICK_PME_BLOCK_SIZE 1024
 
-__constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
-		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
-		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
-		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+extern __constant__ float rung_dt[MAX_RUNG];
 
 struct shmem_type {
 	array<fixed32, KICK_PME_BLOCK_SIZE> x;
@@ -127,22 +121,6 @@ static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, in
 	mem += (NDIM + 1) * sizeof(float) * nsinks;
 #endif
 	return mem;
-}
-
-__device__ inline float erfcexp(float x, float *e) {
-	const float p(0.3275911f);
-	const float a1(0.254829592f);
-	const float a2(-0.284496736f);
-	const float a3(1.421413741f);
-	const float a4(-1.453152027f);
-	const float a5(1.061405429f);
-	const float t1 = 1.f / fmaf(p, x, 1.f);
-	const float t2 = t1 * t1;
-	const float t3 = t2 * t1;
-	const float t4 = t2 * t2;
-	const float t5 = t2 * t3;
-	*e = expf(-x * x);
-	return fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *e;
 }
 
 __constant__ kernel_params dev_params;

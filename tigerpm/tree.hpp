@@ -23,8 +23,10 @@ struct tree_node {
 };
 
 struct sink_bucket {
-	int pbegin;
-	int pend;
+	int src_begin;
+	int src_end;
+	int snk_begin;
+	int snk_end;
 	float radius;
 };
 

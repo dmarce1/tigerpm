@@ -24,6 +24,9 @@
 //#define SORT_TEST
 
 #define BUCKET_SIZE 64
+#define MAX_RUNG 32
+#define NINTERP 6
+#define NCELLS 27
 
 
 #define NCHILD 2
