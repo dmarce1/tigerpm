@@ -30,7 +30,7 @@ struct sink_cell {
 	array<int, NDIM> loc;
 };
 
-#define WORKSPACE_SIZE  512
+#define WORKSPACE_SIZE  1024
 #define INTERSPACE_SIZE 4096
 
 struct treepm_params {
@@ -333,6 +333,7 @@ __global__ void kick_treepm_kernel() {
 			const auto& sink_z = bucket.x[ZDIM];
 			const auto& sink_radius = bucket.radius;
 			for (int tree_index = 0; tree_index < NCELLS; tree_index++) {
+				PRINT("CI = %i\n", tree_index);
 				tree& tr = params.tree_neighbors[cell_index * NCELLS + tree_index];
 				int check_size = 1;
 				int next_size = 0;
@@ -352,6 +353,7 @@ __global__ void kick_treepm_kernel() {
 						int index;
 						if (ci < check_size) {
 							index = checklist[ci];
+							PRINT("%i %i\n", bid, index);
 							source_x = tr.get_x(0, index);
 							source_y = tr.get_x(1, index);
 							source_z = tr.get_x(2, index);
@@ -368,8 +370,8 @@ __global__ void kick_treepm_kernel() {
 						}
 						shmem.index[tid] = multib;
 						this_index = compute_indices(shmem.index) + source_size;
-						if( source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
-							PRINT( "internal interspace exceeded on multipoles\n");
+						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
+							PRINT("internal interspace exceeded on multipoles\n");
 							__trap();
 						}
 						if (multib) {
@@ -383,8 +385,8 @@ __global__ void kick_treepm_kernel() {
 
 						shmem.index[tid] = partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0;
 						this_index = compute_indices(shmem.index) + source_size;
-						if( source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
-							PRINT( "internal interspace exceeded on particles\n");
+						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
+							PRINT("internal interspace exceeded on particles\n");
 							__trap();
 						}
 						this_end = shmem.index[tid] + source_size;
@@ -403,8 +405,8 @@ __global__ void kick_treepm_kernel() {
 
 						shmem.index[tid] = nextb;
 						this_index = compute_indices(shmem.index);
-						if( next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > WORKSPACE_SIZE) {
-							PRINT( "internal workspace exceeded\n");
+						if (next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > WORKSPACE_SIZE) {
+							PRINT("internal workspace exceeded\n");
 							__trap();
 						}
 						if (nextb) {
@@ -414,7 +416,6 @@ __global__ void kick_treepm_kernel() {
 						}
 						next_size += 2 * shmem.index[TREEPM_BLOCK_SIZE - 1];
 						__syncthreads();
-
 
 					}
 					auto tmp1 = nextlist;
@@ -508,7 +509,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		params.h2 = sqr(params.hsoft);
 		params.hinv = 1.f / params.hsoft;
 		params.h3inv = params.hinv * sqr(params.hinv);
-		vector<tree*> dev_tree_neighbors(NCELLS * vol);
+		vector<tree> dev_tree_neighbors(NCELLS * vol);
 		cudaStream_t stream;
 		CUDA_CHECK(cudaStreamCreate(&stream));
 		auto phi = gravity_long_get_phi(phibox);
@@ -546,6 +547,10 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 					count += this_size;
 				}
 			}
+		}
+		vector<tree> dev_trees(bigvol);
+		for (int j = 0; j < bigvol; j++) {
+			dev_trees[j] = trees[j].to_device(stream);
 		}
 		count = 0;
 		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
@@ -597,7 +602,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 						for (j[1] = i[1] - 1; j[1] <= i[1] + 1; j[1]++) {
 							for (j[2] = i[2] - 1; j[2] <= i[2] + 1; j[2]++) {
 								const int k = bigbox.index(j);
-								std::memcpy(dev_tree_neighbors.data() + p + NCELLS * l, trees.data() + k, sizeof(tree));
+								std::memcpy(&dev_tree_neighbors[p + NCELLS * l], &dev_trees[k], sizeof(tree));
 								p++;
 							}
 						}
@@ -605,13 +610,11 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 				}
 			}
 		}
-		vector<tree> dev_trees(vol);
 		vector<thrust::device_vector<sink_bucket>> dev_buckets;
 		vector<sink_bucket*> dev_bucket_ptrs;
 		vector<int> bucket_count;
 		for (int j = 0; j < vol; j++) {
 			bucket_count.push_back(buckets[j].size());
-			dev_trees[j] = trees[j].to_device(stream);
 			thrust::device_vector<sink_bucket> dev_bucket(std::move(buckets[j]));
 			dev_buckets.push_back(dev_bucket);
 		}
