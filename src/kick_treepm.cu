@@ -30,8 +30,8 @@ struct sink_cell {
 	array<int, NDIM> loc;
 };
 
-#define WORKSPACE_SIZE  1024
-#define INTERSPACE_SIZE 4096
+#define WORKSPACE_SIZE  2024
+#define INTERSPACE_SIZE 8192
 
 struct treepm_params {
 	fixed32* x;
@@ -333,7 +333,6 @@ __global__ void kick_treepm_kernel() {
 			const auto& sink_z = bucket.x[ZDIM];
 			const auto& sink_radius = bucket.radius;
 			for (int tree_index = 0; tree_index < NCELLS; tree_index++) {
-				PRINT("CI = %i\n", tree_index);
 				tree& tr = params.tree_neighbors[cell_index * NCELLS + tree_index];
 				int check_size = 1;
 				int next_size = 0;
@@ -341,7 +340,7 @@ __global__ void kick_treepm_kernel() {
 				checklist[0] = 0;
 				while (check_size) {
 					const int maxi = round_up(check_size, TREEPM_BLOCK_SIZE);
-					for (int ci = 0; ci < maxi; ci++) {
+					for (int ci = tid; ci < maxi; ci += TREEPM_BLOCK_SIZE) {
 						int this_index = 0;
 						int this_end;
 						bool nextb = false;
@@ -353,7 +352,6 @@ __global__ void kick_treepm_kernel() {
 						int index;
 						if (ci < check_size) {
 							index = checklist[ci];
-							PRINT("%i %i\n", bid, index);
 							source_x = tr.get_x(0, index);
 							source_y = tr.get_x(1, index);
 							source_z = tr.get_x(2, index);
@@ -363,14 +361,16 @@ __global__ void kick_treepm_kernel() {
 							const float dz = distance(sink_z, source_z);
 							const float R2 = sqr(dx, dy, dz);
 							const bool far = R2 > sqr(source_radius + sink_radius) * theta2inv;
+							//		PRINT( "%e %e %e\n", R2, source_radius, sink_radius);
 							const bool leaf = tr.is_leaf(index);
 							multib = far;
 							partb = !far && leaf;
 							nextb = !far && !leaf;
+							//		PRINT( "%i %i %i \n", multib, partb, nextb);
 						}
 						shmem.index[tid] = multib;
 						this_index = compute_indices(shmem.index) + source_size;
-						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
+						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
 							PRINT("internal interspace exceeded on multipoles\n");
 							__trap();
 						}
@@ -385,7 +385,7 @@ __global__ void kick_treepm_kernel() {
 
 						shmem.index[tid] = partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0;
 						this_index = compute_indices(shmem.index) + source_size;
-						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
+						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
 							PRINT("internal interspace exceeded on particles\n");
 							__trap();
 						}
@@ -405,9 +405,12 @@ __global__ void kick_treepm_kernel() {
 
 						shmem.index[tid] = nextb;
 						this_index = compute_indices(shmem.index);
-						if (next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > WORKSPACE_SIZE) {
+						if (next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= WORKSPACE_SIZE) {
 							PRINT("internal workspace exceeded\n");
 							__trap();
+						}
+						if (tid == 0) {
+							//				PRINT("%i %i %i\n", bid, next_size, source_size);
 						}
 						if (nextb) {
 							const auto children = tr.get_children(index);
@@ -493,7 +496,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.5;
+		params.theta = 0.7;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.GM = get_options().GM;

@@ -14,7 +14,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 //	PRINT( "%i %i\n", begin, end);
 	if (end - begin <= BUCKET_SIZE) {
 //		PRINT( "END %i %i\n", begin, end);
-		node.mass = begin - end;
+		node.mass = end - begin;
 		node.children[0] = -1;
 		node.children[1] = -1;
 		array<double, NDIM> x;
@@ -45,6 +45,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		bucket.snk_begin = bucket.src_begin = begin;
 		bucket.snk_end = bucket.src_end = end;
 		bucket.radius = node.radius;
+		//PRINT( "%e\n", node.radius);
 		bucket.x = node.x;
 		sink_buckets.push_back(bucket);
 	} else {
