@@ -386,7 +386,7 @@ struct cpymem {
 
 #define NSTREAMS 16
 
-void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cudaStream_t stream) {
+static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cudaStream_t stream) {
 	vector<cpymem> compressed;
 	std::sort(copies.begin(), copies.end(), [](cpymem a, cpymem b) {
 		return a.dest < b.dest;

@@ -6,9 +6,11 @@
 #include <tigerpm/gravity_short.hpp>
 #include <tigerpm/kick_pm.hpp>
 #include <tigerpm/kick_pme.hpp>
+#include <tigerpm/kick_treepm.hpp>
 #include <tigerpm/chainmesh.hpp>
 
 static void chainmesh_test();
+static void kick_treepm_test();
 static void kick_pm_test();
 static void kick_pme_test();
 static void fft_test();
@@ -28,6 +30,8 @@ void run_test(std::string test) {
 		particle_test();
 	} else if (test == "kick_pme") {
 		kick_pme_test();
+	} else if (test == "treepm") {
+		kick_treepm_test();
 	} else if (test == "kick_pm") {
 		kick_pm_test();
 	} else if (test == "gravity_long") {
@@ -215,6 +219,61 @@ static void kick_pme_test() {
 	tm.reset();
 #endif
 
+}
+
+
+static void kick_treepm_test() {
+	timer tm;
+	particles_random_init();
+
+	PRINT("DOMAIN SORT\n");
+	tm.start();
+	particles_domain_sort();
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+
+	PRINT("FOURIER\n");
+	tm.start();
+	gravity_long_compute(GRAVITY_LONG_PME);
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+
+	PRINT("SORT\n");
+	tm.start();
+	chainmesh_create();
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+	PRINT("\n");
+
+	PRINT("BOUNDARIES\n");
+	tm.start();
+	chainmesh_exchange_begin();
+	chainmesh_exchange_end();
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+	PRINT("\n");
+
+	PRINT("KICK\n");
+	tm.start();
+	kick_treepm_begin(0, 1.0, 1.0, true);
+	kick_treepm_end();
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+/*
+#ifdef FORCE_TEST
+	PRINT("COMPARE\n");
+	tm.start();
+	gravity_short_ewald_compare(100);
+	tm.stop();
+	PRINT("%e s\n", tm.read());
+	tm.reset();
+#endif
+*/
 }
 
 static void sort_test() {

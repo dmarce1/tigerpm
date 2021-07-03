@@ -25,60 +25,27 @@ struct tree_node {
 struct sink_bucket {
 	int pbegin;
 	int pend;
+	float radius;
 };
 
 class tree {
 	tree_node* nodes;
-	int size;
+	int sz;
 	int cap;
 	bool device;
-	void resize(int new_size) {
-		if (new_size > cap) {
-			cap = 1;
-			while (cap < new_size) {
-				cap *= 2;
-			}
-			tree_node* new_nodes = new tree_node[cap];
-			if (nodes) {
-				std::memcpy(new_nodes, nodes, size * sizeof(tree_node));
-				delete[] nodes;
-			}
-			nodes = new_nodes;
-		}
-		size = new_size;
-	}
+	void resize(int new_size);
 public:
-	tree() {
-		nodes = nullptr;
-		size = cap = 0;
-		device = false;
+	size_t size() const {
+		return sz * sizeof(tree_node) + sizeof(tree);
 	}
-	~tree() {
-		if (nodes) {
-			if (!device) {
-				delete[] nodes;
-			} else {
-				CUDA_CHECK(cudaFree(nodes));
-			}
-		}
-	}
-	tree(const tree&) = delete;
-	tree& operator=(const tree&) = delete;
-	tree(tree&&) = default;
-	tree& operator=(tree&&) = default;
-	tree to_device(cudaStream_t stream) const {
-		tree t;
-		CUDA_CHECK(cudaMallocAsync(&t.nodes, sizeof(tree_node) * size, stream));
-		CUDA_CHECK(cudaMemcpyAsync(t.nodes, nodes, sizeof(tree_node) * size, cudaMemcpyHostToDevice, stream));
-		t.size = t.cap = size;
-		t.device = true;
-		return t;
-	}
-	int allocate() {
-		int index = size;
-		size++;
-		return index;
-	}
+	tree();
+	~tree();
+	tree& operator=(const tree& other);
+	tree & operator=(tree && other);
+	tree(const tree& other);
+	tree(tree && other);
+	tree to_device(cudaStream_t stream) const;
+	int allocate();
 	CUDA_EXPORT inline
 	fixed32 get_x(int dim, int i) const {
 		return nodes[i].x[dim];
@@ -95,10 +62,17 @@ public:
 	array<int, NCHILD> get_children(int i) const {
 		return nodes[i].children;
 	}
-	void set(tree_node node, int i) {
+	inline void set(tree_node node, int i) {
 		nodes[i] = node;
 	}
-};
+	inline void adjust_indexes(int dif) {
+		for( int i = 0; i < sz; i++) {
+			nodes[i].pbegin += dif;
+			nodes[i].pend += dif;
+		}
+	}
+}
+;
 
 std::pair<tree, vector<sink_bucket>> tree_create(const array<int, NDIM>& cell_index, chaincell cell);
 

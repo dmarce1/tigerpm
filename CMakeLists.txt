@@ -24,7 +24,7 @@ set(tigerpm_source_files
     src/kick_pm.cpp
     src/kick_pme.cpp
     src/kick_pme.cu
-    src/kick_treepm.cu
+    src/kick_treepm.cpp
     src/kick_treepm.cu
     src/main.cpp
     src/options.cpp
