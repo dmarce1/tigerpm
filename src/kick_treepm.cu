@@ -368,39 +368,42 @@ __global__ void kick_treepm_kernel() {
 							nextb = !far && !leaf;
 							//		PRINT( "%i %i %i \n", multib, partb, nextb);
 						}
-						shmem.index[tid] = multib;
-						this_index = compute_indices(shmem.index) + source_size;
-						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
-							PRINT("internal interspace exceeded on multipoles\n");
-							__trap();
-						}
-						if (multib) {
-							sourcelist[this_index].x = source_x;
-							sourcelist[this_index].y = source_y;
-							sourcelist[this_index].z = source_z;
-							sourcelist[this_index].m = tr.get_mass(index);
-						}
-						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
-						__syncthreads();
+						/*	shmem.index[tid] = multib;
+						 this_index = compute_indices(shmem.index) + source_size;
+						 if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
+						 PRINT("internal interspace exceeded on multipoles\n");
+						 __trap();
+						 assert(false);
+						 }
+						 if (multib) {
+						 sourcelist[this_index].x = source_x;
+						 sourcelist[this_index].y = source_y;
+						 sourcelist[this_index].z = source_z;
+						 sourcelist[this_index].m = tr.get_mass(index);
+						 }
+						 source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						 __syncthreads();
 
-						shmem.index[tid] = partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0;
-						this_index = compute_indices(shmem.index) + source_size;
-						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
-							PRINT("internal interspace exceeded on particles\n");
-							__trap();
-						}
-						this_end = shmem.index[tid] + source_size;
-						if (partb) {
-							int j = tr.get_pbegin(index);
-							for (int i = this_index; i < this_end; i++) {
-								sourcelist[i].x = params.x[j];
-								sourcelist[i].y = params.y[j];
-								sourcelist[i].z = params.z[j];
-								sourcelist[i].m = 1.f;
-								j++;
-							}
-						}
-						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						 shmem.index[tid] = (partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0);
+						 this_index = compute_indices(shmem.index) + source_size;
+						 PRINT( "%i %i \n", source_size, shmem.index[TREEPM_BLOCK_SIZE - 1] );
+						 if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
+						 PRINT("internal interspace exceeded on particles\n");
+						 __trap();
+						 assert(false);
+						 }
+						 this_end = shmem.index[tid] + source_size;
+						 if (partb) {
+						 int j = tr.get_pbegin(index);
+						 for (int i = this_index; i < this_end; i++) {
+						 sourcelist[i].x = params.x[j];
+						 sourcelist[i].y = params.y[j];
+						 sourcelist[i].z = params.z[j];
+						 sourcelist[i].m = 1.f;
+						 j++;
+						 }
+						 }
+						 source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];*/
 						__syncthreads();
 
 						shmem.index[tid] = nextb;
@@ -408,6 +411,7 @@ __global__ void kick_treepm_kernel() {
 						if (next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= WORKSPACE_SIZE) {
 							PRINT("internal workspace exceeded\n");
 							__trap();
+							assert(false);
 						}
 						if (tid == 0) {
 							//				PRINT("%i %i %i\n", bid, next_size, source_size);
@@ -512,7 +516,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		params.h2 = sqr(params.hsoft);
 		params.hinv = 1.f / params.hsoft;
 		params.h3inv = params.hinv * sqr(params.hinv);
-		vector<tree> dev_tree_neighbors(NCELLS * vol);
+		tree* dev_tree_neighbors = (tree*) malloc(sizeof(tree) * NCELLS * vol);
 		cudaStream_t stream;
 		CUDA_CHECK(cudaStreamCreate(&stream));
 		auto phi = gravity_long_get_phi(phibox);
@@ -627,9 +631,8 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		}
 		CUDA_CHECK(cudaMemcpyAsync(params.bucket_cnt, bucket_count.data(), sizeof(int) * vol, cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(params.buckets, dev_bucket_ptrs.data(), sizeof(sink_bucket*) * vol, cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(params.tree_neighbors, dev_tree_neighbors.data(), sizeof(tree) * dev_tree_neighbors.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(params.tree_neighbors, dev_tree_neighbors, sizeof(tree) * NCELLS * vol, cudaMemcpyHostToDevice, stream));
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
-
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
 		PRINT("%e\n", tm.read());
@@ -691,6 +694,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		process_copies(std::move(copies), cudaMemcpyDeviceToHost, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		params.free();
+		free(dev_tree_neighbors);
 		CUDA_CHECK(cudaStreamDestroy(stream));
 		tm.stop();
 		PRINT("%e\n", tm.read());
