@@ -221,10 +221,96 @@ __global__ void kick_treepm_kernel() {
 				nactive += shmem.index[TREEPM_BLOCK_SIZE - 1];
 				__syncthreads();
 			}
+			const int maxsink = round_up(nactive, TREEPM_BLOCK_SIZE);
+			for (int sink_index = tid; sink_index < maxsink; sink_index += TREEPM_BLOCK_SIZE) {
+				array<float, NDIM> g;
+				g[0] = g[1] = g[2] = 0.f;
+				float phi = 0.f;
+				int srci;
+				int snki;
+				fixed32 sink_x;
+				fixed32 sink_y;
+				fixed32 sink_z;
+				if (sink_index < nactive) {
+					srci = shmem.active_srci[sink_index];
+					snki = shmem.active_snki[sink_index];
+					sink_x = params.x[srci];
+					sink_y = params.y[srci];
+					sink_z = params.z[srci];
+					array<int, NDIM> I;
+					array<int, NDIM> J;
+					array<float, NDIM> X;
+					X[XDIM] = sink_x.to_float();
+					X[YDIM] = sink_y.to_float();
+					X[ZDIM] = sink_z.to_float();
+					array<array<float, NINTERP>, NINTERP> w;
+					array<array<float, NINTERP>, NINTERP> dw;
+					for (int dim = 0; dim < NDIM; dim++) {
+						X[dim] *= params.Nfour;
+						I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
+						X[dim] -= float(I[dim]);
+						I[dim] -= 2;
+					}
+					for (int dim = 0; dim < NDIM; dim++) {
+						float x1 = X[dim];
+						float x2 = X[dim] * x1;
+						float x3 = x1 * x2;
+						float x4 = x2 * x2;
+						float x5 = x3 * x2;
+						w[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+						w[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+						w[dim][2] = 1.0f - (5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+						w[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+						w[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+						w[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+						x5 = 5.0f * x4;
+						x4 = 4.0f * x3;
+						x3 = 3.0f * x2;
+						x2 = 2.0f * x1;
+						x1 = 1.0f;
+						dw[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+						dw[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+						dw[dim][2] = -(5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+						dw[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+						dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+						dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+					}
+					for (int dim1 = 0; dim1 < NDIM; dim1++) {
+						for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+							for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+								for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+									double w0 = 1.0;
+									for (int dim2 = 0; dim2 < NDIM; dim2++) {
+										const int i0 = J[dim2] - I[dim2];
+										if (dim1 == dim2) {
+											w0 *= dw[dim2][i0];
+										} else {
+											w0 *= w[dim2][i0];
+										}
+									}
+									const int l = params.phi_box.index(J);
+									g[dim1] -= w0 * params.phi[l] * params.Nfour;
+								}
+							}
+						}
+					}
+					for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+						for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+							for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+								double w0 = 1.0;
+								for (int dim2 = 0; dim2 < NDIM; dim2++) {
+									const int i0 = J[dim2] - I[dim2];
+									w0 *= w[dim2][i0];
+								}
+								const int l = params.phi_box.index(J);
+								phi += w0 * params.phi[l];
+							}
+						}
+					}
+				}
+			}
 		}
 	}
-
-
 }
 
 void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<int> box, int min_rung, double scale, double t0, bool first_call) {
