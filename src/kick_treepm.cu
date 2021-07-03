@@ -10,6 +10,13 @@
 
 #include <algorithm>
 
+struct fixed4 {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
+	fixed32 m;
+};
+
 #define TREEPM_BLOCK_SIZE 32
 
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
@@ -17,16 +24,14 @@ __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-struct source_cell {
-	int begin;
-	int end;
-};
-
 struct sink_cell {
 	int begin;
 	int end;
 	array<int, NDIM> loc;
 };
+
+#define WORKSPACE_SIZE  512
+#define INTERSPACE_SIZE 4096
 
 struct treepm_params {
 	fixed32* x;
@@ -37,11 +42,12 @@ struct treepm_params {
 	float* velz;
 	float* phi;
 	char* rung;
-	source_cell* source_cells;
-	sink_cell* sink_cells;
+	int* checklist;
+	int* nextlist;
+	fixed4* sourcelist;
+	tree* tree_neighbors;
 	sink_bucket** buckets;
 	int* bucket_cnt;
-	tree* trees;
 	int nsink_cells;
 	int min_rung;
 	float rs;
@@ -65,13 +71,11 @@ struct treepm_params {
 	float* gz;
 	float* pot;
 #endif
-	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count, size_t phi_cell_count) {
+	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count, size_t phi_cell_count, int nblocks) {
 		nsink_cells = cell_count;
-		CUDA_CHECK(cudaMalloc(&source_cells, cell_count * NCELLS * sizeof(source_cell)));
-		CUDA_CHECK(cudaMalloc(&sink_cells, cell_count * sizeof(sink_cell)));
+		CUDA_CHECK(cudaMalloc(&tree_neighbors, cell_count * NCELLS * sizeof(tree)));
 		CUDA_CHECK(cudaMalloc(&buckets, cell_count * sizeof(sink_bucket*)));
 		CUDA_CHECK(cudaMalloc(&bucket_cnt, cell_count * sizeof(int)));
-		CUDA_CHECK(cudaMalloc(&trees, cell_count * sizeof(tree)));
 		CUDA_CHECK(cudaMalloc(&x, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&y, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&z, source_size * sizeof(fixed32)));
@@ -80,6 +84,9 @@ struct treepm_params {
 		CUDA_CHECK(cudaMalloc(&velz, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
+		CUDA_CHECK(cudaMalloc(&checklist, nblocks * sizeof(int) * WORKSPACE_SIZE));
+		CUDA_CHECK(cudaMalloc(&nextlist, nblocks * sizeof(int) * WORKSPACE_SIZE));
+		CUDA_CHECK(cudaMalloc(&sourcelist, nblocks * sizeof(fixed4) * INTERSPACE_SIZE));
 #ifdef FORCE_TEST
 		CUDA_CHECK(cudaMalloc(&gx, source_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&gy, source_size * sizeof(float)));
@@ -94,13 +101,14 @@ struct treepm_params {
 		CUDA_CHECK(cudaFree(velx));
 		CUDA_CHECK(cudaFree(vely));
 		CUDA_CHECK(cudaFree(velz));
-		CUDA_CHECK(cudaFree(trees));
 		CUDA_CHECK(cudaFree(buckets));
 		CUDA_CHECK(cudaFree(bucket_cnt));
 		CUDA_CHECK(cudaFree(phi));
 		CUDA_CHECK(cudaFree(rung));
-		CUDA_CHECK(cudaFree(source_cells));
-		CUDA_CHECK(cudaFree(sink_cells));
+		CUDA_CHECK(cudaFree(tree_neighbors));
+		CUDA_CHECK(cudaFree(checklist));
+		CUDA_CHECK(cudaFree(nextlist));
+		CUDA_CHECK(cudaFree(sourcelist));
 #ifdef FORCE_TEST
 		CUDA_CHECK(cudaFree(gx));
 		CUDA_CHECK(cudaFree(gy));
@@ -115,7 +123,7 @@ static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, in
 	mem += NDIM * sizeof(fixed32) * nsources;
 	mem += NDIM * sizeof(float) * nsinks;
 	mem += sizeof(char) * nsinks;
-	mem += NCELLS * bigvol * sizeof(source_cell);
+	mem += NCELLS * bigvol * sizeof(tree);
 	mem += vol * sizeof(sink_cell);
 	mem += 2 * sizeof(int) * vol;
 	mem += sizeof(sink_bucket*) * vol;
@@ -161,12 +169,32 @@ static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cuda
 }
 
 struct treepm_shmem {
+	array<array<float, NDIM>, BUCKET_SIZE> g;
+	array<float, BUCKET_SIZE> phi;
 	array<int, BUCKET_SIZE> active_srci;
 	array<int, BUCKET_SIZE> active_snki;
 	array<int, TREEPM_BLOCK_SIZE> index;
 };
 
 __constant__ treepm_params dev_treepm_params;
+
+__device__ int compute_indices(array<int, TREEPM_BLOCK_SIZE>& index) {
+	const int& tid = threadIdx.x;
+	for (int P = 1; P < TREEPM_BLOCK_SIZE; P *= 2) {
+		int tmp;
+		__syncthreads();
+		if (tid >= P) {
+			tmp = index[tid - P];
+		}
+		__syncthreads();
+		if (tid >= P) {
+			index[tid] += tmp;
+		}
+	}
+	__syncthreads();
+	return (tid > 0 ? index[tid - 1] : 0);
+
+}
 
 __global__ void kick_treepm_kernel() {
 	const treepm_params& params = dev_treepm_params;
@@ -179,6 +207,7 @@ __global__ void kick_treepm_kernel() {
 	const float& h2 = params.h2;
 	const float& hinv = params.hinv;
 	const float& h3inv = params.h3inv;
+	const float theta2inv = 1.0f / sqr(params.theta);
 	const int cell_begin = size_t(bid) * (size_t) params.nsink_cells / (size_t) gsz;
 	const int cell_end = size_t(bid + 1) * (size_t) params.nsink_cells / (size_t) gsz;
 	for (int cell_index = cell_begin; cell_index < cell_end; cell_index++) {
@@ -201,19 +230,7 @@ __global__ void kick_treepm_kernel() {
 					is_active = false;
 				}
 				shmem.index[tid] = int(is_active);
-				for (int P = 1; P < TREEPM_BLOCK_SIZE; P *= 2) {
-					int tmp;
-					__syncthreads();
-					if (tid >= P) {
-						tmp = shmem.index[tid - P];
-					}
-					__syncthreads();
-					if (tid >= P) {
-						shmem.index[tid] += tmp;
-					}
-				}
-				__syncthreads();
-				int active_index = (tid > 0 ? shmem.index[tid - 1] : 0) + nactive;
+				int active_index = compute_indices(shmem.index) + +nactive;
 				if (is_active) {
 					shmem.active_snki[active_index] = this_index;
 					shmem.active_srci[active_index] = bucket.src_begin + i;
@@ -221,92 +238,190 @@ __global__ void kick_treepm_kernel() {
 				nactive += shmem.index[TREEPM_BLOCK_SIZE - 1];
 				__syncthreads();
 			}
-			const int maxsink = round_up(nactive, TREEPM_BLOCK_SIZE);
-			for (int sink_index = tid; sink_index < maxsink; sink_index += TREEPM_BLOCK_SIZE) {
-				array<float, NDIM> g;
+			for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
+				array<float, NDIM>& g = shmem.g[sink_index];
+				float& phi = shmem.phi[sink_index];
 				g[0] = g[1] = g[2] = 0.f;
-				float phi = 0.f;
+				phi = 0.f;
 				int srci;
 				int snki;
 				fixed32 sink_x;
 				fixed32 sink_y;
 				fixed32 sink_z;
-				if (sink_index < nactive) {
-					srci = shmem.active_srci[sink_index];
-					snki = shmem.active_snki[sink_index];
-					sink_x = params.x[srci];
-					sink_y = params.y[srci];
-					sink_z = params.z[srci];
-					array<int, NDIM> I;
-					array<int, NDIM> J;
-					array<float, NDIM> X;
-					X[XDIM] = sink_x.to_float();
-					X[YDIM] = sink_y.to_float();
-					X[ZDIM] = sink_z.to_float();
-					array<array<float, NINTERP>, NINTERP> w;
-					array<array<float, NINTERP>, NINTERP> dw;
-					for (int dim = 0; dim < NDIM; dim++) {
-						X[dim] *= params.Nfour;
-						I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
-						X[dim] -= float(I[dim]);
-						I[dim] -= 2;
-					}
-					for (int dim = 0; dim < NDIM; dim++) {
-						float x1 = X[dim];
-						float x2 = X[dim] * x1;
-						float x3 = x1 * x2;
-						float x4 = x2 * x2;
-						float x5 = x3 * x2;
-						w[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
-						w[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
-						w[dim][2] = 1.0f - (5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
-						w[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
-						w[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
-						w[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
-						x5 = 5.0f * x4;
-						x4 = 4.0f * x3;
-						x3 = 3.0f * x2;
-						x2 = 2.0f * x1;
-						x1 = 1.0f;
-						dw[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
-						dw[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
-						dw[dim][2] = -(5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
-						dw[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
-						dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
-						dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
-					}
-					for (int dim1 = 0; dim1 < NDIM; dim1++) {
-						for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
-							for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
-								for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
-									double w0 = 1.0;
-									for (int dim2 = 0; dim2 < NDIM; dim2++) {
-										const int i0 = J[dim2] - I[dim2];
-										if (dim1 == dim2) {
-											w0 *= dw[dim2][i0];
-										} else {
-											w0 *= w[dim2][i0];
-										}
-									}
-									const int l = params.phi_box.index(J);
-									g[dim1] -= w0 * params.phi[l] * params.Nfour;
-								}
-							}
-						}
-					}
+				srci = shmem.active_srci[sink_index];
+				snki = shmem.active_snki[sink_index];
+				sink_x = params.x[srci];
+				sink_y = params.y[srci];
+				sink_z = params.z[srci];
+				array<int, NDIM> I;
+				array<int, NDIM> J;
+				array<float, NDIM> X;
+				X[XDIM] = sink_x.to_float();
+				X[YDIM] = sink_y.to_float();
+				X[ZDIM] = sink_z.to_float();
+				array<array<float, NINTERP>, NINTERP> w;
+				array<array<float, NINTERP>, NINTERP> dw;
+				for (int dim = 0; dim < NDIM; dim++) {
+					X[dim] *= params.Nfour;
+					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
+					X[dim] -= float(I[dim]);
+					I[dim] -= 2;
+				}
+				for (int dim = 0; dim < NDIM; dim++) {
+					float x1 = X[dim];
+					float x2 = X[dim] * x1;
+					float x3 = x1 * x2;
+					float x4 = x2 * x2;
+					float x5 = x3 * x2;
+					w[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+					w[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+					w[dim][2] = 1.0f - (5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+					w[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+					w[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+					w[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+					x5 = 5.0f * x4;
+					x4 = 4.0f * x3;
+					x3 = 3.0f * x2;
+					x2 = 2.0f * x1;
+					x1 = 1.0f;
+					dw[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+					dw[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+					dw[dim][2] = -(5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+					dw[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+					dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+					dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+				}
+				for (int dim1 = 0; dim1 < NDIM; dim1++) {
 					for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
 						for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
 							for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
 								double w0 = 1.0;
 								for (int dim2 = 0; dim2 < NDIM; dim2++) {
 									const int i0 = J[dim2] - I[dim2];
-									w0 *= w[dim2][i0];
+									if (dim1 == dim2) {
+										w0 *= dw[dim2][i0];
+									} else {
+										w0 *= w[dim2][i0];
+									}
 								}
 								const int l = params.phi_box.index(J);
-								phi += w0 * params.phi[l];
+								g[dim1] -= w0 * params.phi[l] * params.Nfour;
 							}
 						}
 					}
+				}
+				for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+					for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+						for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+							double w0 = 1.0;
+							for (int dim2 = 0; dim2 < NDIM; dim2++) {
+								const int i0 = J[dim2] - I[dim2];
+								w0 *= w[dim2][i0];
+							}
+							const int l = params.phi_box.index(J);
+							phi += w0 * params.phi[l];
+						}
+					}
+				}
+			}
+			const size_t offset = bid * WORKSPACE_SIZE;
+			int* checklist = params.checklist + offset;
+			int* nextlist = params.nextlist + offset;
+			fixed4* sourcelist = params.sourcelist + bid * INTERSPACE_SIZE;
+			const auto& sink_x = bucket.x[XDIM];
+			const auto& sink_y = bucket.x[YDIM];
+			const auto& sink_z = bucket.x[ZDIM];
+			const auto& sink_radius = bucket.radius;
+			for (int tree_index = 0; tree_index < NCELLS; tree_index++) {
+				tree& tr = params.tree_neighbors[cell_index * NCELLS + tree_index];
+				int check_size = 1;
+				int next_size = 0;
+				int source_size = 0;
+				checklist[0] = 0;
+				while (check_size) {
+					const int maxi = round_up(check_size, TREEPM_BLOCK_SIZE);
+					for (int ci = 0; ci < maxi; ci++) {
+						int this_index = 0;
+						int this_end;
+						bool nextb = false;
+						bool multib = false;
+						bool partb = false;
+						fixed32 source_x;
+						fixed32 source_y;
+						fixed32 source_z;
+						int index;
+						if (ci < check_size) {
+							index = checklist[ci];
+							source_x = tr.get_x(0, index);
+							source_y = tr.get_x(1, index);
+							source_z = tr.get_x(2, index);
+							const float source_radius = tr.get_radius(index);
+							const float dx = distance(sink_x, source_x);
+							const float dy = distance(sink_y, source_y);
+							const float dz = distance(sink_z, source_z);
+							const float R2 = sqr(dx, dy, dz);
+							const bool far = R2 > sqr(source_radius + sink_radius) * theta2inv;
+							const bool leaf = tr.is_leaf(index);
+							multib = far;
+							partb = !far && leaf;
+							nextb = !far && !leaf;
+						}
+						shmem.index[tid] = multib;
+						this_index = compute_indices(shmem.index) + source_size;
+						if( source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
+							PRINT( "internal interspace exceeded on multipoles\n");
+							__trap();
+						}
+						if (multib) {
+							sourcelist[this_index].x = source_x;
+							sourcelist[this_index].y = source_y;
+							sourcelist[this_index].z = source_z;
+							sourcelist[this_index].m = tr.get_mass(index);
+						}
+						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						__syncthreads();
+
+						shmem.index[tid] = partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0;
+						this_index = compute_indices(shmem.index) + source_size;
+						if( source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > INTERSPACE_SIZE) {
+							PRINT( "internal interspace exceeded on particles\n");
+							__trap();
+						}
+						this_end = shmem.index[tid] + source_size;
+						if (partb) {
+							int j = tr.get_pbegin(index);
+							for (int i = this_index; i < this_end; i++) {
+								sourcelist[i].x = params.x[j];
+								sourcelist[i].y = params.y[j];
+								sourcelist[i].z = params.z[j];
+								sourcelist[i].m = 1.f;
+								j++;
+							}
+						}
+						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						__syncthreads();
+
+						shmem.index[tid] = nextb;
+						this_index = compute_indices(shmem.index);
+						if( next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] > WORKSPACE_SIZE) {
+							PRINT( "internal workspace exceeded\n");
+							__trap();
+						}
+						if (nextb) {
+							const auto children = tr.get_children(index);
+							nextlist[next_size + 2 * this_index + 0] = children[0];
+							nextlist[next_size + 2 * this_index + 1] = children[1];
+						}
+						next_size += 2 * shmem.index[TREEPM_BLOCK_SIZE - 1];
+						__syncthreads();
+
+
+					}
+					auto tmp1 = nextlist;
+					nextlist = checklist;
+					checklist = tmp1;
+					check_size = next_size;
+					next_size = 0;
 				}
 			}
 		}
@@ -350,7 +465,17 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		phibox.end[dim] *= get_options().four_o_chain;
 	}
 	phibox = phibox.pad(PHI_BW);
-	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + buckets_size;
+	cudaFuncAttributes attr;
+	cudaFuncGetAttributes(&attr, kick_treepm_kernel);
+	if (attr.maxThreadsPerBlock < TREEPM_BLOCK_SIZE) {
+		PRINT("This CUDA device will not run kick_pme_kernel with the required number of threads (%i)\n", TREEPM_BLOCK_SIZE);
+		abort();
+	}
+	int occupancy;
+	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_treepm_kernel,TREEPM_BLOCK_SIZE, sizeof(treepm_shmem)));
+	int num_blocks = occupancy * cuda_smp_count();
+	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + buckets_size
+			+ num_blocks * sizeof(int) * 2 * (WORKSPACE_SIZE + INTERSPACE_SIZE);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
 	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
 	if (mem_required > free_mem) {
@@ -363,7 +488,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		PRINT("Data transfer\n");
 		tm.start();
 		treepm_params params;
-		params.allocate(nsources, nsinks, vol, bigvol, phibox.volume());
+		params.allocate(nsources, nsinks, vol, bigvol, phibox.volume(), num_blocks);
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
@@ -383,9 +508,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		params.h2 = sqr(params.hsoft);
 		params.hinv = 1.f / params.hsoft;
 		params.h3inv = params.hinv * sqr(params.hinv);
-		vector<source_cell> source_cells(bigvol);
-		vector<source_cell> dev_source_cells(NCELLS * vol);
-		vector<sink_cell> sink_cells(vol);
+		vector<tree*> dev_tree_neighbors(NCELLS * vol);
 		cudaStream_t stream;
 		CUDA_CHECK(cudaStreamCreate(&stream));
 		auto phi = gravity_long_get_phi(phibox);
@@ -400,9 +523,10 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 					const auto this_size = this_cell.pend - this_cell.pbegin;
 					const auto begin = this_cell.pbegin;
 					const auto dif = count - begin;
+					const int l = bigbox.index(i);
+					trees[l].adjust_indexes(dif);
 					if (box.contains(i)) {
 						const int q = box.index(i);
-						trees[q].adjust_indexes(dif);
 						for (auto& bucket : buckets[q]) {
 							bucket.src_begin += dif;
 							bucket.src_end += dif;
@@ -419,10 +543,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 					cpy.dest = params.z + count;
 					cpy.src = &particles_pos(ZDIM, begin);
 					copies.push_back(cpy);
-					const int l = bigbox.index(i);
-					source_cells[l].begin = count;
 					count += this_size;
-					source_cells[l].end = count;
 				}
 			}
 		}
@@ -469,22 +590,18 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 					cpy.src = &particles_pot(begin);
 					copies.push_back(cpy);
 #endif
-					sink_cells[l].begin = count;
 					count += this_size;
-					sink_cells[l].end = count;
-					sink_cells[l].loc = i;
 					array<int, NDIM> j;
 					int p = 0;
 					for (j[0] = i[0] - 1; j[0] <= i[0] + 1; j[0]++) {
 						for (j[1] = i[1] - 1; j[1] <= i[1] + 1; j[1]++) {
 							for (j[2] = i[2] - 1; j[2] <= i[2] + 1; j[2]++) {
 								const int k = bigbox.index(j);
-								dev_source_cells[p + NCELLS * l] = source_cells[k];
+								std::memcpy(dev_tree_neighbors.data() + p + NCELLS * l, trees.data() + k, sizeof(tree));
 								p++;
 							}
 						}
 					}
-
 				}
 			}
 		}
@@ -504,20 +621,9 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		}
 		CUDA_CHECK(cudaMemcpyAsync(params.bucket_cnt, bucket_count.data(), sizeof(int) * vol, cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(params.buckets, dev_bucket_ptrs.data(), sizeof(sink_bucket*) * vol, cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(params.trees, dev_trees.data(), sizeof(tree) * vol, cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(params.sink_cells, sink_cells.data(), sizeof(sink_cell) * sink_cells.size(), cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(params.source_cells, dev_source_cells.data(), sizeof(source_cell) * dev_source_cells.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(params.tree_neighbors, dev_tree_neighbors.data(), sizeof(tree) * dev_tree_neighbors.size(), cudaMemcpyHostToDevice, stream));
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 
-		cudaFuncAttributes attr;
-		cudaFuncGetAttributes(&attr, kick_treepm_kernel);
-		if (attr.maxThreadsPerBlock < TREEPM_BLOCK_SIZE) {
-			PRINT("This CUDA device will not run kick_pme_kernel with the required number of threads (%i)\n", TREEPM_BLOCK_SIZE);
-			abort();
-		}
-		int occupancy;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_treepm_kernel,TREEPM_BLOCK_SIZE, sizeof(treepm_shmem)));
-		int num_blocks = occupancy * cuda_smp_count();
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
 		PRINT("%e\n", tm.read());

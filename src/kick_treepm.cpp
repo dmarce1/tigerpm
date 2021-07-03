@@ -16,22 +16,27 @@ void kick_treepm_begin(int min_rung, double scale, double t0, bool first_call) {
 	vector<tree> trees;
 	vector<vector<sink_bucket>> buckets;
 	const auto box = chainmesh_interior_box();
+	const auto bigbox = box.pad(1);
 	const auto vol = box.volume();
-	timer tm;
+	const auto bigvol = bigbox.volume();
+		timer tm;
 	tm.start();
 	array<int, NDIM> i;
 	std::vector<hpx::future<void>> futs1;
-	trees.resize(vol);
+	trees.resize(bigvol);
 	buckets.resize(vol);
-	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
-		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
-			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
-				const auto func = [i,box,&trees,&buckets]() {
+	for (i[0] = bigbox.begin[0]; i[0] < bigbox.end[0]; i[0]++) {
+		for (i[1] = bigbox.begin[1]; i[1] < bigbox.end[1]; i[1]++) {
+			for (i[2] = bigbox.begin[2]; i[2] < bigbox.end[2]; i[2]++) {
+				const auto func = [i,bigbox,box,&trees,&buckets]() {
 					const auto cell = chainmesh_get(i);
 					const auto rc = tree_create(i,cell);
-					const auto index = box.index(i);
+					const auto index = bigbox.index(i);
 					trees[index] = std::move(rc.first);
-					buckets[index] = std::move(rc.second);
+					if( box.contains(i)) {
+						const int inner_index = box.index(i);
+						buckets[inner_index] = std::move(rc.second);
+					}
 				};
 				futs1.push_back(hpx::async(func));
 			}

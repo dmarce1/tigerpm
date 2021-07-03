@@ -28,6 +28,7 @@ struct sink_bucket {
 	int snk_begin;
 	int snk_end;
 	float radius;
+	array<fixed32,NDIM> x;
 };
 
 class tree {
@@ -52,9 +53,19 @@ public:
 	fixed32 get_x(int dim, int i) const {
 		return nodes[i].x[dim];
 	}
+	CUDA_EXPORT inline int get_pbegin(int i) {
+		return nodes[i].pbegin;
+	}
+	CUDA_EXPORT inline int get_pend(int i) {
+		return nodes[i].pend;
+	}
 	CUDA_EXPORT inline
 	float get_mass(int i) const {
 		return nodes[i].mass;
+	}
+	CUDA_EXPORT inline
+	float is_leaf(int i) const {
+		return nodes[i].children[0] == -1;
 	}
 	CUDA_EXPORT inline
 	float get_radius(int i) const {

@@ -10,6 +10,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		PRINT("Tree depth exceeded - two identical particles ? \n");
 		abort();
 	}
+	int index = t.allocate();
 //	PRINT( "%i %i\n", begin, end);
 	if (end - begin <= BUCKET_SIZE) {
 //		PRINT( "END %i %i\n", begin, end);
@@ -44,6 +45,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		bucket.snk_begin = bucket.src_begin = begin;
 		bucket.snk_end = bucket.src_end = end;
 		bucket.radius = node.radius;
+		bucket.x = node.x;
 		sink_buckets.push_back(bucket);
 	} else {
 		const int long_dim = box.longest_dim();
@@ -73,7 +75,6 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		}
 		node.radius = std::sqrt(std::max(r20, r21));
 	}
-	int index = t.allocate();
 	t.set(node, index);
 	return index;
 }
