@@ -14,10 +14,10 @@ struct fixed4 {
 	fixed32 x;
 	fixed32 y;
 	fixed32 z;
-	fixed32 m;
+	float m;
 };
 
-#define TREEPM_BLOCK_SIZE 32
+#define TREEPM_BLOCK_SIZE 64
 
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
@@ -243,16 +243,10 @@ __global__ void kick_treepm_kernel() {
 				float& phi = shmem.phi[sink_index];
 				g[0] = g[1] = g[2] = 0.f;
 				phi = 0.f;
-				int srci;
-				int snki;
-				fixed32 sink_x;
-				fixed32 sink_y;
-				fixed32 sink_z;
-				srci = shmem.active_srci[sink_index];
-				snki = shmem.active_snki[sink_index];
-				sink_x = params.x[srci];
-				sink_y = params.y[srci];
-				sink_z = params.z[srci];
+				const int srci = shmem.active_srci[sink_index];
+				const fixed32 sink_x = params.x[srci];
+				const fixed32 sink_y = params.y[srci];
+				const fixed32 sink_z = params.z[srci];
 				array<int, NDIM> I;
 				array<int, NDIM> J;
 				array<float, NDIM> X;
@@ -426,7 +420,88 @@ __global__ void kick_treepm_kernel() {
 					check_size = next_size;
 					next_size = 0;
 				}
+				for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
+					array<float, NDIM>& g = shmem.g[sink_index];
+					float& phi = shmem.phi[sink_index];
+					const int srci = shmem.active_srci[sink_index];
+					const int snki = shmem.active_snki[sink_index];
+					const fixed32 sink_x = params.x[srci];
+					const fixed32 sink_y = params.y[srci];
+					const fixed32 sink_z = params.z[srci];
+					for (int i = 0; i < source_size; i ++) {
+						const fixed32& src_x = sourcelist[i].x;
+						const fixed32& src_y = sourcelist[i].y;
+						const fixed32& src_z = sourcelist[i].z;
+						const float& m = sourcelist[i].m;
+						const float dx = distance(sink_x, src_x);
+						const float dy = distance(sink_y, src_y);
+						const float dz = distance(sink_z, src_z);
+						const float r2 = sqr(dx, dy, dz);
+						float rinv, rinv3;
+						if (r2 > h2) {
+							const float r = sqrtf(r2);
+							rinv = rsqrtf(r2);
+							const float r0 = r * inv2rs;
+							float exp0;
+							const float erfc0 = erfcexp(r0, &exp0);
+							rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
+							rinv *= erfc0;
+						} else {
+							const float q = sqrtf(r2) * hinv;
+							const float q2 = q * q;
+							rinv3 = +15.0f / 8.0f;
+							rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
+							rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
+							rinv3 *= h3inv;
+							rinv = -5.0f / 16.0f;
+							rinv = fmaf(rinv, q2, 21.0f / 16.0f);
+							rinv = fmaf(rinv, q2, -35.0f / 16.0f);
+							rinv = fmaf(rinv, q2, 35.0f / 16.0f);
+							rinv *= hinv;
+						}
+						rinv3 *= m;
+						rinv *= m;
+						g[XDIM] -= dx * rinv3;
+						g[YDIM] -= dy * rinv3;
+						g[ZDIM] -= dz * rinv3;
+						phi -= rinv;
 
+					}
+					g[XDIM] *= params.GM;
+					g[YDIM] *= params.GM;
+					g[ZDIM] *= params.GM;
+					phi *= params.GM;
+	#ifdef FORCE_TEST
+					params.gx[snki] = g[XDIM];
+					params.gy[snki] = g[YDIM];
+					params.gz[snki] = g[ZDIM];
+					params.pot[snki] = phi;
+	#endif
+					auto& vx = params.velx[snki];
+					auto& vy = params.vely[snki];
+					auto& vz = params.velz[snki];
+					auto& rung = params.rung[snki];
+					auto dt = 0.5f * rung_dt[rung] * params.t0;
+					if (!params.first_call) {
+						vx = fmaf(g[XDIM], dt, vx);
+						vy = fmaf(g[YDIM], dt, vy);
+						vz = fmaf(g[ZDIM], dt, vz);
+					}
+					const auto g2 = sqr(g[0], g[1], g[2]);
+					const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
+					dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
+					rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
+					if (rung < 0 || rung >= MAX_RUNG) {
+						PRINT("Rung out of range %i\n", rung);
+					}
+					assert(rung >= 0);
+					assert(rung < MAX_RUNG);
+					dt = 0.5f * rung_dt[rung] * params.t0;
+					vx = fmaf(g[XDIM], dt, vx);
+					vy = fmaf(g[YDIM], dt, vy);
+					vz = fmaf(g[ZDIM], dt, vz);
+					//		PRINT( "%i\n", snki);
+				}
 			}
 		}
 	}

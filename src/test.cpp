@@ -264,7 +264,7 @@ static void kick_treepm_test() {
 	tm.stop();
 	PRINT("%e s\n", tm.read());
 	tm.reset();
-/*
+
 #ifdef FORCE_TEST
 	PRINT("COMPARE\n");
 	tm.start();
@@ -273,7 +273,7 @@ static void kick_treepm_test() {
 	PRINT("%e s\n", tm.read());
 	tm.reset();
 #endif
-*/
+
 }
 
 static void sort_test() {
