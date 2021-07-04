@@ -259,6 +259,7 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 			g[YDIM] -= 0.5f * qddx * dy * d3;
 			g[ZDIM] -= 0.5f * qddx * dz * d3;
 			phi -= m * d0;
+			phi += 0.5f * (qtr * d1 + qddx * d2);
 		}
 	}
 

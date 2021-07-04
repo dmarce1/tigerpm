@@ -76,7 +76,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			x[dim] /= node.mass;
 		}
 		const auto q0 = t.get_quadrupole(i0);
-		const auto q1 = t.get_quadrupole(i0);
+		const auto q1 = t.get_quadrupole(i1);
 		const auto m0 = t.get_mass(i0);
 		const auto m1 = t.get_mass(i1);
 		const auto dx0 = t.get_x(XDIM, i0).to_double() - x[XDIM];
