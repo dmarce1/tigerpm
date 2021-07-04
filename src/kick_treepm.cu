@@ -428,7 +428,7 @@ __global__ void kick_treepm_kernel() {
 					const fixed32 sink_x = params.x[srci];
 					const fixed32 sink_y = params.y[srci];
 					const fixed32 sink_z = params.z[srci];
-					for (int i = 0; i < source_size; i ++) {
+					for (int i = 0; i < source_size; i++) {
 						const fixed32& src_x = sourcelist[i].x;
 						const fixed32& src_y = sourcelist[i].y;
 						const fixed32& src_z = sourcelist[i].z;
@@ -471,12 +471,12 @@ __global__ void kick_treepm_kernel() {
 					g[YDIM] *= params.GM;
 					g[ZDIM] *= params.GM;
 					phi *= params.GM;
-	#ifdef FORCE_TEST
+#ifdef FORCE_TEST
 					params.gx[snki] = g[XDIM];
 					params.gy[snki] = g[YDIM];
 					params.gz[snki] = g[ZDIM];
 					params.pot[snki] = phi;
-	#endif
+#endif
 					auto& vx = params.velx[snki];
 					auto& vy = params.vely[snki];
 					auto& vz = params.velz[snki];
@@ -593,38 +593,59 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		auto phi = gravity_long_get_phi(phibox);
 		CUDA_CHECK(cudaMemcpyAsync(params.phi, phi.data(), sizeof(float) * phi.size(), cudaMemcpyHostToDevice, stream));
 
-		size_t count = 0;
-		vector<cpymem> copies;
+		struct cell_data {
+			int box_index;
+			int bigbox_index;
+			chaincell cell;
+		};
+		vector<cell_data> chaincells;
 		for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
 			for (i[1] = bigbox.begin[1]; i[1] != bigbox.end[1]; i[1]++) {
 				for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
-					auto this_cell = chainmesh_get(i);
-					const auto this_size = this_cell.pend - this_cell.pbegin;
-					const auto begin = this_cell.pbegin;
-					const auto dif = count - begin;
-					const int l = bigbox.index(i);
-					trees[l].adjust_indexes(dif);
+					cell_data entry;
+					entry.bigbox_index = bigbox.index(i);
+					entry.cell = chainmesh_get(i);
 					if (box.contains(i)) {
 						const int q = box.index(i);
-						for (auto& bucket : buckets[q]) {
-							bucket.src_begin += dif;
-							bucket.src_end += dif;
-						}
+						entry.box_index = q;
+					} else {
+						entry.box_index = -1;
 					}
-					cpymem cpy;
-					cpy.size = sizeof(fixed32) * this_size;
-					cpy.dest = params.x + count;
-					cpy.src = &particles_pos(XDIM, begin);
-					copies.push_back(cpy);
-					cpy.dest = params.y + count;
-					cpy.src = &particles_pos(YDIM, begin);
-					copies.push_back(cpy);
-					cpy.dest = params.z + count;
-					cpy.src = &particles_pos(ZDIM, begin);
-					copies.push_back(cpy);
-					count += this_size;
+					chaincells.push_back(entry);
 				}
 			}
+		}
+		std::sort(chaincells.begin(), chaincells.end(), [](cell_data a, cell_data b) {
+			return a.cell.pbegin < b.cell.pbegin;
+		});
+		size_t count = 0;
+		vector<cpymem> copies;
+		for (int j = 0; j < chaincells.size(); j++) {
+			auto this_cell = chaincells[j].cell;
+			const auto this_size = this_cell.pend - this_cell.pbegin;
+			const auto begin = this_cell.pbegin;
+			const auto dif = count - begin;
+			const int l = chaincells[j].bigbox_index;
+			trees[l].adjust_indexes(dif);
+			if (chaincells[j].box_index >= 0) {
+				const int q = chaincells[j].box_index;
+				for (auto& bucket : buckets[q]) {
+					bucket.src_begin += dif;
+					bucket.src_end += dif;
+				}
+			}
+			cpymem cpy;
+			cpy.size = sizeof(fixed32) * this_size;
+			cpy.dest = params.x + count;
+			cpy.src = &particles_pos(XDIM, begin);
+			copies.push_back(cpy);
+			cpy.dest = params.y + count;
+			cpy.src = &particles_pos(YDIM, begin);
+			copies.push_back(cpy);
+			cpy.dest = params.z + count;
+			cpy.src = &particles_pos(ZDIM, begin);
+			copies.push_back(cpy);
+			count += this_size;
 		}
 		vector<tree> dev_trees(bigvol);
 		for (int j = 0; j < bigvol; j++) {
@@ -688,20 +709,21 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 				}
 			}
 		}
-		vector<thrust::device_vector<sink_bucket>> dev_buckets;
-		vector<sink_bucket*> dev_bucket_ptrs;
+		vector<sink_bucket*> dev_buckets;
 		vector<int> bucket_count;
+		timer tm1;
+		tm1.start();
 		for (int j = 0; j < vol; j++) {
 			bucket_count.push_back(buckets[j].size());
-			thrust::device_vector<sink_bucket> dev_bucket(std::move(buckets[j]));
-			dev_buckets.push_back(dev_bucket);
+			sink_bucket* bucket;
+			CUDA_CHECK(cudaMalloc(&bucket, sizeof(sink_bucket) * buckets[j].size()));
+			CUDA_CHECK(cudaMemcpyAsync(bucket, buckets[j].data(), sizeof(sink_bucket) * buckets[j].size(), cudaMemcpyHostToDevice, stream));
+			dev_buckets.push_back(bucket);
 		}
-		for (int j = 0; j < vol; j++) {
-			sink_bucket* ptr = thrust::raw_pointer_cast(dev_buckets[j].data());
-			dev_bucket_ptrs.push_back(ptr);
-		}
+		tm1.stop();
+		PRINT("bucket time = %e\n", tm1.read());
 		CUDA_CHECK(cudaMemcpyAsync(params.bucket_cnt, bucket_count.data(), sizeof(int) * vol, cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(params.buckets, dev_bucket_ptrs.data(), sizeof(sink_bucket*) * vol, cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(params.buckets, dev_buckets.data(), sizeof(sink_bucket*) * vol, cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(params.tree_neighbors, dev_tree_neighbors, sizeof(tree) * NCELLS * vol, cudaMemcpyHostToDevice, stream));
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -768,6 +790,10 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		free(dev_tree_neighbors);
 		CUDA_CHECK(cudaStreamDestroy(stream));
 		tm.stop();
+		for (int j = 0; j < vol; j++) {
+			CUDA_CHECK(cudaFree(dev_buckets[j]));
+		}
+
 		PRINT("%e\n", tm.read());
 	}
 }
