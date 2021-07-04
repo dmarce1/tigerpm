@@ -17,8 +17,6 @@ struct fixed4 {
 	float m;
 };
 
-#define TREEPM_BLOCK_SIZE 64
-
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
@@ -31,7 +29,7 @@ struct sink_cell {
 };
 
 #define WORKSPACE_SIZE  1024
-#define INTERSPACE_SIZE 8192
+#define INTERSPACE_SIZE (2 * TREEPM_BLOCK_SIZE * BUCKET_SIZE)
 
 struct treepm_params {
 	fixed32* x;
@@ -143,8 +141,6 @@ struct cpymem {
 	size_t size;
 };
 
-#define NSTREAMS 16
-
 static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cudaStream_t stream) {
 	vector<cpymem> compressed;
 	std::sort(copies.begin(), copies.end(), [](cpymem a, cpymem b) {
@@ -173,7 +169,9 @@ struct treepm_shmem {
 	array<float, BUCKET_SIZE> phi;
 	array<int, BUCKET_SIZE> active_srci;
 	array<int, BUCKET_SIZE> active_snki;
+	array<float, TREEPM_BLOCK_SIZE> reduce;
 	array<int, TREEPM_BLOCK_SIZE> index;
+	array<int, TREEPM_BLOCK_SIZE> partlist;
 };
 
 __constant__ treepm_params dev_treepm_params;
@@ -207,6 +205,7 @@ __global__ void kick_treepm_kernel() {
 	const float& h2 = params.h2;
 	const float& hinv = params.hinv;
 	const float& h3inv = params.h3inv;
+	const float rcut = 5.f * params.rs;
 	const float theta2inv = 1.0f / sqr(params.theta);
 	const int cell_begin = size_t(bid) * (size_t) params.nsink_cells / (size_t) gsz;
 	const int cell_end = size_t(bid + 1) * (size_t) params.nsink_cells / (size_t) gsz;
@@ -332,11 +331,58 @@ __global__ void kick_treepm_kernel() {
 				int next_size = 0;
 				int source_size = 0;
 				checklist[0] = 0;
+				const auto process_sources = [&]() {
+					for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
+						float& phi = shmem.phi[sink_index];
+						auto& g = shmem.g[sink_index];
+						const int srci = shmem.active_srci[sink_index];
+						const fixed32 sink_x = params.x[srci];
+						const fixed32 sink_y = params.y[srci];
+						const fixed32 sink_z = params.z[srci];
+						for (int i = 0; i < source_size; i++) {
+							const fixed32& src_x = sourcelist[i].x;
+							const fixed32& src_y = sourcelist[i].y;
+							const fixed32& src_z = sourcelist[i].z;
+							const float& m = sourcelist[i].m;
+							const float dx = distance(sink_x, src_x);
+							const float dy = distance(sink_y, src_y);
+							const float dz = distance(sink_z, src_z);
+							const float r2 = sqr(dx, dy, dz);
+							float rinv, rinv3;
+							if (r2 > h2) {
+								const float r = sqrtf(r2);
+								rinv = rsqrtf(r2);
+								const float r0 = r * inv2rs;
+								float exp0;
+								const float erfc0 = erfcexp(r0, &exp0);
+								rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
+								rinv *= erfc0;
+							} else {
+								const float q = sqrtf(r2) * hinv;
+								const float q2 = q * q;
+								rinv3 = +15.0f / 8.0f;
+								rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
+								rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
+								rinv3 *= h3inv;
+								rinv = -5.0f / 16.0f;
+								rinv = fmaf(rinv, q2, 21.0f / 16.0f);
+								rinv = fmaf(rinv, q2, -35.0f / 16.0f);
+								rinv = fmaf(rinv, q2, 35.0f / 16.0f);
+								rinv *= hinv;
+							}
+							rinv3 *= m;
+							rinv *= m;
+							g[XDIM] -= dx * rinv3;
+							g[YDIM] -= dy * rinv3;
+							g[ZDIM] -= dz * rinv3;
+							phi -= rinv;
+						}
+					}
+				};
 				while (check_size) {
 					const int maxi = round_up(check_size, TREEPM_BLOCK_SIZE);
 					for (int ci = tid; ci < maxi; ci += TREEPM_BLOCK_SIZE) {
 						int this_index = 0;
-						int this_end;
 						bool nextb = false;
 						bool multib = false;
 						bool partb = false;
@@ -354,12 +400,14 @@ __global__ void kick_treepm_kernel() {
 							const float dy = distance(sink_y, source_y);
 							const float dz = distance(sink_z, source_z);
 							const float R2 = sqr(dx, dy, dz);
+							const float R = sqrtf(R2);
+							const bool cutoff = R - source_radius - sink_radius > rcut;
 							const bool far = R2 > sqr(source_radius + sink_radius) * theta2inv;
 							//		PRINT( "%e %e %e\n", R2, source_radius, sink_radius);
 							const bool leaf = tr.is_leaf(index);
-							multib = far;
-							partb = !far && leaf;
-							nextb = !far && !leaf;
+							multib = !cutoff && far;
+							partb = !cutoff && !far && leaf;
+							nextb = !cutoff && !far && !leaf;
 							//		PRINT( "%i %i %i \n", multib, partb, nextb);
 						}
 						shmem.index[tid] = multib;
@@ -378,26 +426,27 @@ __global__ void kick_treepm_kernel() {
 						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
 						__syncthreads();
 
-						shmem.index[tid] = (partb ? (tr.get_pend(index) - tr.get_pbegin(index)) : 0);
-						this_index = compute_indices(shmem.index) + source_size;
-						if (source_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
-							PRINT("internal interspace exceeded on particles\n");
-							__trap();
-							assert(false);
-						}
-						this_end = shmem.index[tid] + source_size;
+						shmem.index[tid] = partb;
+						this_index = compute_indices(shmem.index);
 						if (partb) {
-							int j = tr.get_pbegin(index);
-							for (int i = this_index; i < this_end; i++) {
-								sourcelist[i].x = params.x[j];
-								sourcelist[i].y = params.y[j];
-								sourcelist[i].z = params.z[j];
-								sourcelist[i].m = 1.f;
-								j++;
-							}
+							shmem.partlist[this_index] = index;
 						}
-						source_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						const int part_size = shmem.index[TREEPM_BLOCK_SIZE - 1];
 						__syncthreads();
+
+						for (int j = 0; j < part_size; j++) {
+							const int begin = tr.get_pbegin(shmem.partlist[j]);
+							const int end = tr.get_pend(shmem.partlist[j]);
+							for (int k = begin + tid; k < end; k += TREEPM_BLOCK_SIZE) {
+								const int l = source_size + k - begin;
+								sourcelist[l].x = params.x[k];
+								sourcelist[l].y = params.y[k];
+								sourcelist[l].z = params.z[k];
+								sourcelist[l].m = 1.f;
+							}
+							source_size += end - begin;
+						}
+
 						shmem.index[tid] = nextb;
 						this_index = compute_indices(shmem.index);
 						if (next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= WORKSPACE_SIZE) {
@@ -419,54 +468,16 @@ __global__ void kick_treepm_kernel() {
 					checklist = tmp1;
 					check_size = next_size;
 					next_size = 0;
+					if (source_size > INTERSPACE_SIZE / 2) {
+						process_sources();
+						source_size = 0;
+					}
 				}
+				process_sources();
 				for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
 					array<float, NDIM>& g = shmem.g[sink_index];
 					float& phi = shmem.phi[sink_index];
-					const int srci = shmem.active_srci[sink_index];
 					const int snki = shmem.active_snki[sink_index];
-					const fixed32 sink_x = params.x[srci];
-					const fixed32 sink_y = params.y[srci];
-					const fixed32 sink_z = params.z[srci];
-					for (int i = 0; i < source_size; i++) {
-						const fixed32& src_x = sourcelist[i].x;
-						const fixed32& src_y = sourcelist[i].y;
-						const fixed32& src_z = sourcelist[i].z;
-						const float& m = sourcelist[i].m;
-						const float dx = distance(sink_x, src_x);
-						const float dy = distance(sink_y, src_y);
-						const float dz = distance(sink_z, src_z);
-						const float r2 = sqr(dx, dy, dz);
-						float rinv, rinv3;
-						if (r2 > h2) {
-							const float r = sqrtf(r2);
-							rinv = rsqrtf(r2);
-							const float r0 = r * inv2rs;
-							float exp0;
-							const float erfc0 = erfcexp(r0, &exp0);
-							rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
-							rinv *= erfc0;
-						} else {
-							const float q = sqrtf(r2) * hinv;
-							const float q2 = q * q;
-							rinv3 = +15.0f / 8.0f;
-							rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
-							rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
-							rinv3 *= h3inv;
-							rinv = -5.0f / 16.0f;
-							rinv = fmaf(rinv, q2, 21.0f / 16.0f);
-							rinv = fmaf(rinv, q2, -35.0f / 16.0f);
-							rinv = fmaf(rinv, q2, 35.0f / 16.0f);
-							rinv *= hinv;
-						}
-						rinv3 *= m;
-						rinv *= m;
-						g[XDIM] -= dx * rinv3;
-						g[YDIM] -= dy * rinv3;
-						g[ZDIM] -= dz * rinv3;
-						phi -= rinv;
-
-					}
 					g[XDIM] *= params.GM;
 					g[YDIM] *= params.GM;
 					g[ZDIM] *= params.GM;
@@ -552,7 +563,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 	}
 	int occupancy;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_treepm_kernel,TREEPM_BLOCK_SIZE, sizeof(treepm_shmem)));
-	int num_blocks = occupancy * cuda_smp_count();
+	int num_blocks = TREEPM_OVERSUBSCRIPTION * occupancy * cuda_smp_count();
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + buckets_size
 			+ num_blocks * sizeof(int) * 2 * (WORKSPACE_SIZE + INTERSPACE_SIZE);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);

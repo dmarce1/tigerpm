@@ -23,7 +23,10 @@
 #define FORCE_TEST
 //#define SORT_TEST
 
+#define TREEPM_BLOCK_SIZE 64
+#define TREEPM_OVERSUBSCRIPTION 4
 #define BUCKET_SIZE 64
+#define SOURCE_BUCKET_SIZE 512
 #define MAX_RUNG 32
 #define NINTERP 6
 #define NCELLS 27
