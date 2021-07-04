@@ -33,7 +33,7 @@ static return_type do_ewald(const vector<fixed32>& sinkx, const vector<fixed32>&
 }
 
 void gravity_short_ewald_compare(int Nsamples) {
-
+#ifdef FORCE_TEST
 	auto samples = particles_sample(Nsamples);
 	vector<fixed32> sinkx(Nsamples);
 	vector<fixed32> sinky(Nsamples);
@@ -99,4 +99,5 @@ void gravity_short_ewald_compare(int Nsamples) {
 	fclose(fp);
 	printf("L1 = %e \n", l1sum / l1norm);
 	printf("L2 = %e \n", std::sqrt(l2sum / l2norm));*/
+#endif
 }
