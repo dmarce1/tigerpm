@@ -13,11 +13,21 @@
 #include <tigerpm/fixed.hpp>
 #include <tigerpm/chainmesh.hpp>
 
+struct quadrupole {
+	float xx;
+	float xy;
+	float xz;
+	float yy;
+	float yz;
+	float zz;
+};
+
 struct tree_node {
 	array<fixed32, NDIM> x;
 	float mass;
 	float radius;
 	array<int, NCHILD> children;
+	quadrupole q;
 	int pbegin;
 	int pend;
 };
@@ -58,6 +68,9 @@ public:
 	}
 	CUDA_EXPORT inline int get_pend(int i) const {
 		return nodes[i].pend;
+	}
+	CUDA_EXPORT inline quadrupole get_quadrupole(int i) const {
+		return nodes[i].q;
 	}
 	CUDA_EXPORT inline
 	float get_mass(int i) const {
