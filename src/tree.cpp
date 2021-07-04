@@ -14,7 +14,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 //	PRINT( "%i %i\n", begin, end);
 	node.pbegin = begin;
 	node.pend = end;
-	if (end - begin <= std::min(SOURCE_BUCKET_SIZE, SINK_BUCKET_SIZE) ){
+	if (end - begin <= std::min(SOURCE_BUCKET_SIZE, SINK_BUCKET_SIZE)) {
 //		PRINT( "END %i %i\n", begin, end);
 		node.mass = end - begin;
 		node.children[0] = -1;
@@ -70,9 +70,18 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			r20 += sqr(t.get_x(dim, i0).to_double() - x[dim]);
 			r21 += sqr(t.get_x(dim, i1).to_double() - x[dim]);
 		}
-		node.radius = std::max(std::sqrt(r20) + t.get_radius(i0), std::sqrt(r21) + t.get_radius(i1));
+		const auto r2_bbb = sqr(box.begin[0] - x[0], box.begin[1] - x[1], box.begin[2] - x[2]);
+		const auto r2_bbe = sqr(box.begin[0] - x[0], box.begin[1] - x[1], box.end[2] - x[2]);
+		const auto r2_beb = sqr(box.begin[0] - x[0], box.end[1] - x[1], box.begin[2] - x[2]);
+		const auto r2_bee = sqr(box.begin[0] - x[0], box.end[1] - x[1], box.end[2] - x[2]);
+		const auto r2_ebb = sqr(box.end[0] - x[0], box.begin[1] - x[1], box.begin[2] - x[2]);
+		const auto r2_ebe = sqr(box.end[0] - x[0], box.begin[1] - x[1], box.end[2] - x[2]);
+		const auto r2_eeb = sqr(box.end[0] - x[0], box.end[1] - x[1], box.begin[2] - x[2]);
+		const auto r2_eee = sqr(box.end[0] - x[0], box.end[1] - x[1], box.end[2] - x[2]);
+		const auto r2_max = std::max(std::max(std::max(r2_bbb, r2_bbe), std::max(r2_beb, r2_bee)), std::max(std::max(r2_ebb, r2_ebe), std::max(r2_eeb, r2_eee)));
+		node.radius = std::min(std::max(std::sqrt(r20) + t.get_radius(i0), std::sqrt(r21) + t.get_radius(i1)), std::sqrt(r2_max) + get_options().hsoft);
 	}
-	if( end - begin <= SINK_BUCKET_SIZE && !sunk) {
+	if (end - begin <= SINK_BUCKET_SIZE && !sunk) {
 		sink_bucket bucket;
 		bucket.snk_begin = bucket.src_begin = node.pbegin;
 		bucket.snk_end = bucket.src_end = node.pend;
