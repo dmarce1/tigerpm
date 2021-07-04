@@ -29,7 +29,7 @@ struct sink_cell {
 };
 
 #define WORKSPACE_SIZE  1024
-#define INTERSPACE_SIZE (2 * TREEPM_BLOCK_SIZE * BUCKET_SIZE)
+#define INTERSPACE_SIZE (2 * TREEPM_BLOCK_SIZE * SOURCE_BUCKET_SIZE)
 
 struct treepm_params {
 	fixed32* x;
@@ -165,10 +165,10 @@ static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cuda
 }
 
 struct treepm_shmem {
-	array<array<float, NDIM>, BUCKET_SIZE> g;
-	array<float, BUCKET_SIZE> phi;
-	array<int, BUCKET_SIZE> active_srci;
-	array<int, BUCKET_SIZE> active_snki;
+	array<array<float, NDIM>, SINK_BUCKET_SIZE> g;
+	array<float, SINK_BUCKET_SIZE> phi;
+	array<int, SINK_BUCKET_SIZE> active_srci;
+	array<int, SINK_BUCKET_SIZE> active_snki;
 	array<float, TREEPM_BLOCK_SIZE> reduce;
 	array<int, TREEPM_BLOCK_SIZE> index;
 	array<int, TREEPM_BLOCK_SIZE> partlist;
@@ -395,6 +395,7 @@ __global__ void kick_treepm_kernel() {
 							source_x = tr.get_x(0, index);
 							source_y = tr.get_x(1, index);
 							source_z = tr.get_x(2, index);
+							const int nparts = tr.get_pend(index) - tr.get_pbegin(index);
 							const float source_radius = tr.get_radius(index);
 							const float dx = distance(sink_x, source_x);
 							const float dy = distance(sink_y, source_y);
@@ -404,7 +405,7 @@ __global__ void kick_treepm_kernel() {
 							const bool cutoff = R - source_radius - sink_radius > rcut;
 							const bool far = R2 > sqr(source_radius + sink_radius) * theta2inv;
 							//		PRINT( "%e %e %e\n", R2, source_radius, sink_radius);
-							const bool leaf = tr.is_leaf(index);
+							const bool leaf = nparts <= SOURCE_BUCKET_SIZE;
 							multib = !cutoff && far;
 							partb = !cutoff && !far && leaf;
 							nextb = !cutoff && !far && !leaf;

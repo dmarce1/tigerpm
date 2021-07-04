@@ -4,7 +4,7 @@
 
 #define MAX_DEPTH 50
 
-static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>& box, int begin, int end, int depth) {
+static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>& box, int begin, int end, int depth, bool sunk = false) {
 	tree_node node;
 	if (depth > MAX_DEPTH) {
 		PRINT("Tree depth exceeded - two identical particles ? \n");
@@ -14,7 +14,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 //	PRINT( "%i %i\n", begin, end);
 	node.pbegin = begin;
 	node.pend = end;
-	if (end - begin <= BUCKET_SIZE) {
+	if (end - begin <= std::min(SOURCE_BUCKET_SIZE, SINK_BUCKET_SIZE) ){
 //		PRINT( "END %i %i\n", begin, end);
 		node.mass = end - begin;
 		node.children[0] = -1;
@@ -43,20 +43,14 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			r2max = std::max(r2max, r2);
 		}
 		node.radius = std::sqrt(r2max) + get_options().hsoft;
-		sink_bucket bucket;
-		bucket.snk_begin = bucket.src_begin = begin;
-		bucket.snk_end = bucket.src_end = end;
-		bucket.radius = node.radius;
-		//PRINT( "%e\n", node.radius);
-		bucket.x = node.x;
-		sink_buckets.push_back(bucket);
 	} else {
 		const int long_dim = box.longest_dim();
 		const auto child_boxes = box.split();
 		const int mid = particles_sort(begin, end, child_boxes.first.end[long_dim], long_dim);
 		//	PRINT( "%i %i %i\n", begin, mid, end);
-		node.children[0] = sort(t, sink_buckets, child_boxes.first, begin, mid, depth + 1);
-		node.children[1] = sort(t, sink_buckets, child_boxes.second, mid, end, depth + 1);
+		bool this_sunk = end - begin <= SINK_BUCKET_SIZE;
+		node.children[0] = sort(t, sink_buckets, child_boxes.first, begin, mid, depth + 1, this_sunk);
+		node.children[1] = sort(t, sink_buckets, child_boxes.second, mid, end, depth + 1, this_sunk);
 		const int i0 = node.children[0];
 		const int i1 = node.children[1];
 		node.mass = t.get_mass(i0) + t.get_mass(i1);
@@ -77,6 +71,14 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			r21 += sqr(t.get_x(dim, i1).to_double() - x[dim]);
 		}
 		node.radius = std::max(std::sqrt(r20) + t.get_radius(i0), std::sqrt(r21) + t.get_radius(i1));
+	}
+	if( end - begin <= SINK_BUCKET_SIZE && !sunk) {
+		sink_bucket bucket;
+		bucket.snk_begin = bucket.src_begin = node.pbegin;
+		bucket.snk_end = bucket.src_end = node.pend;
+		bucket.radius = node.radius;
+		bucket.x = node.x;
+		sink_buckets.push_back(bucket);
 	}
 	t.set(node, index);
 	return index;
