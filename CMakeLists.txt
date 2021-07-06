@@ -60,6 +60,7 @@ set(tigerpm_header_files
 	tigerpm/util.hpp
 )
 
+add_executable( code_gen src/code_gen.cpp )
 
 
 add_hpx_executable(
