@@ -228,7 +228,48 @@ __device__ inline void shared_reduce(float& number) {
 	}
 }
 
-inline __device__ void compute_interaction(float dx, float dy, float dz, float m, float& gx, float& gy, float& gz, float& phi) {
+inline __device__ void compute_pc_interaction(float dx, float dy, float dz, float m, const quadrupole& q, float& gx, float& gy, float& gz, float& phi) {
+	const treepm_params& params = dev_treepm_params;
+	const float& twooversqrtpi = params.twooversqrtpi;
+	const float oneoversqrtpi = params.twooversqrtpi * 0.5f;
+	const float& inv2rs = params.inv2rs;
+	const float rcut2 = sqr(params.rcut);
+	const float r2 = sqr(dx, dy, dz);
+	if (r2 < rcut2) {
+		const float rinv = rsqrtf(r2);
+		const float r = r2 * rinv;
+		const float r0 = r * inv2rs;
+		float exp0;
+		const float erfc0 = erfcexp(r0, &exp0);
+		const float rinv2 = rinv * rinv;
+		const float rinv3 = rinv2 * rinv;
+		const float rinv5 = rinv2 * rinv3;
+		const float rinv7 = rinv2 * rinv5;
+		const float r02 = r0 * r0;
+		const float r04 = r02 * r02;
+		const auto d0 = -erfc0 * rinv;
+		const auto d1 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv3;
+		const auto d2 = -(3.f * erfc0 + oneoversqrtpi * exp0 * r0 * (4.f * r02 + 3.0)) * rinv5;
+		const auto d3 = (15.f * erfc0 + oneoversqrtpi * exp0 * r0 * (8.f * r04 + 20.0f * r02 + 15.0f)) * rinv7;
+		float qtr = q.xx + q.yy + q.zz;
+		float qddx = q.xx * dx * dx + q.yy * dy * dy + q.zz * dz * dz + 2.f * q.xy * dx * dy + 2.f * q.xz * dx * dz + 2.f * q.yz * dy * dz;
+		gx -= m * dx * d1;
+		gy -= m * dy * d1;
+		gz -= m * dz * d1;
+		gx -= (0.5f * qtr * dx + q.xx * dx + q.xy * dy + q.xz * dz) * d2;
+		gy -= (0.5f * qtr * dy + q.xy * dx + q.yy * dy + q.yz * dz) * d2;
+		gz -= (0.5f * qtr * dz + q.xz * dx + q.yz * dy + q.zz * dz) * d2;
+		gx -= 0.5f * qddx * dx * d3;
+		gy -= 0.5f * qddx * dy * d3;
+		gz -= 0.5f * qddx * dz * d3;
+		phi -= m * d0;
+		if (params.do_phi) {
+			phi -= m * rinv;
+		}
+	}
+}
+
+inline __device__ void compute_pp_interaction(float dx, float dy, float dz, float& gx, float& gy, float& gz, float& phi) {
 	const treepm_params& params = dev_treepm_params;
 	const float& twooversqrtpi = params.twooversqrtpi;
 	const float& h2 = params.h2;
@@ -262,12 +303,10 @@ inline __device__ void compute_interaction(float dx, float dy, float dz, float m
 				rinv *= hinv;
 			}
 		}
-		gx -= m * dx * rinv3;
-		gy -= m * dy * rinv3;
-		gz -= m * dz * rinv3;
-		if( params.do_phi ) {
-			phi -= m * rinv;
-		}
+		gx -= dx * rinv3;
+		gy -= dy * rinv3;
+		gz -= dz * rinv3;
+		phi -= rinv;
 	}
 }
 
@@ -296,10 +335,11 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 			const fixed32& src_y = tr.get_x(YDIM, srci);
 			const fixed32& src_z = tr.get_x(ZDIM, srci);
 			const float& m = tr.get_mass(srci);
+			const auto& q = tr.get_quadrupole(srci);
 			const float dx = distance(sink_x, src_x);
 			const float dy = distance(sink_y, src_y);
 			const float dz = distance(sink_z, src_z);
-			compute_interaction(dx, dy, dz, m, g[XDIM], g[YDIM], g[ZDIM], phi);
+			compute_pc_interaction(dx, dy, dz, m, q, g[XDIM], g[YDIM], g[ZDIM], phi);
 		}
 	}
 	__syncthreads();
@@ -320,10 +360,11 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 				const fixed32& src_y = tr.get_x(YDIM, srci);
 				const fixed32& src_z = tr.get_x(ZDIM, srci);
 				const float& m = tr.get_mass(srci);
+				const auto& q = tr.get_quadrupole(srci);
 				const float dx = distance(sink_x, src_x);
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
-				compute_interaction(dx, dy, dz, m, gx, gy, gz, phi);
+				compute_pc_interaction(dx, dy, dz, m, q, gx, gy, gz, phi);
 			}
 		}
 		shared_reduce(gx);
@@ -408,7 +449,7 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 				const float dx = distance(sink_x, src_x);
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
-				compute_interaction(dx, dy, dz, 1.f, g[XDIM], g[YDIM], g[ZDIM], phi);
+				compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
 			}
 		}
 		__syncthreads();
@@ -427,7 +468,7 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 				const float dx = distance(sink_x, src_x);
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
-				compute_interaction(dx, dy, dz, 1.f, g[XDIM], g[YDIM], g[ZDIM], phi);
+				compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				shared_reduce(g[dim]);
@@ -797,7 +838,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.5;
+		params.theta = 0.6;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = false;
