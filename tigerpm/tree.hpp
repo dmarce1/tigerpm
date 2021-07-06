@@ -27,9 +27,11 @@ struct tree_node {
 	float mass;
 	float radius;
 	array<int, NCHILD> children;
-	quadrupole q;
 	int pbegin;
 	int pend;
+#ifdef USE_QUADRUPOLE
+	quadrupole q;
+#endif
 };
 
 struct sink_bucket {
@@ -69,9 +71,11 @@ public:
 	CUDA_EXPORT inline int get_pend(int i) const {
 		return nodes[i].pend;
 	}
+#ifdef USE_QUADRUPOLE
 	CUDA_EXPORT inline quadrupole get_quadrupole(int i) const {
 		return nodes[i].q;
 	}
+#endif
 	CUDA_EXPORT inline
 	float get_mass(int i) const {
 		return nodes[i].mass;

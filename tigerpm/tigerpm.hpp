@@ -19,10 +19,13 @@
 
 #include <stdio.h>
 
+#define INTERP_FUNC_SIZE 64
+
 //#define CHECK_BOUNDS
 #define FORCE_TEST
 //#define SORT_TEST
 
+//#define USE_QUADRUPOLE
 #define TREEPM_BLOCK_SIZE 32
 #define TREEPM_OVERSUBSCRIPTION 4
 #define SINK_BUCKET_SIZE 64

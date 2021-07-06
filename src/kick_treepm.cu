@@ -16,6 +16,13 @@ __managed__ double tm2 = 0.0;
 __managed__ double tm3 = 0.0;
 __managed__ double tm4 = 0.0;
 
+struct cubic_coeff {
+	float a;
+	float b;
+	float c;
+	float d;
+};
+
 struct fixed4 {
 	fixed32 x;
 	fixed32 y;
@@ -206,14 +213,50 @@ __device__ int compute_indices(array<int, TREEPM_BLOCK_SIZE>& index) {
 
 }
 
+inline __device__ void compute_interaction(float dx, float dy, float dz, float m, float& gx, float& gy, float& gz, float& phi) {
+	const treepm_params& params = dev_treepm_params;
+	const float& twooversqrtpi = params.twooversqrtpi;
+	const float& h2 = params.h2;
+	const float& hinv = params.hinv;
+	const float& h3inv = params.h3inv;
+	const float& inv2rs = params.inv2rs;
+	const float rcut2 = sqr(params.rcut);
+	const float r2 = sqr(dx, dy, dz);
+	float rinv, rinv3;
+	if (r2 < rcut2) {
+		if (r2 > h2) {
+			const float r = sqrtf(r2);
+			rinv = rsqrtf(r2);
+			const float r0 = r * inv2rs;
+			float exp0;
+			const float erfc0 = erfcexp(r0, &exp0);
+			rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
+			rinv *= erfc0;
+		} else {
+			const float q = sqrtf(r2) * hinv;
+			const float q2 = q * q;
+			rinv3 = +15.0f / 8.0f;
+			rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
+			rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
+			rinv3 *= h3inv;
+			rinv = -5.0f / 16.0f;
+			rinv = fmaf(rinv, q2, 21.0f / 16.0f);
+			rinv = fmaf(rinv, q2, -35.0f / 16.0f);
+			rinv = fmaf(rinv, q2, 35.0f / 16.0f);
+			rinv *= hinv;
+		}
+		gx -= m * dx * rinv3;
+		gy -= m * dy * rinv3;
+		gz -= m * dz * rinv3;
+		phi -= m * rinv;
+	}
+}
+
 __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive) {
 	const int& tid = threadIdx.x;
 	__shared__ extern int shmem_ptr[];
 	treepm_shmem& shmem = (treepm_shmem&) (*shmem_ptr);
 	const treepm_params& params = dev_treepm_params;
-	const float& twooversqrtpi = params.twooversqrtpi;
-	const float oneoversqrtpi = params.twooversqrtpi * 0.5f;
-	const float& inv2rs = params.inv2rs;
 	for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
 		float& phi = shmem.phi[sink_index];
 		auto& g = shmem.g[sink_index];
@@ -227,39 +270,10 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 			const fixed32& src_y = tr.get_x(YDIM, srci);
 			const fixed32& src_z = tr.get_x(ZDIM, srci);
 			const float& m = tr.get_mass(srci);
-			const quadrupole& q = tr.get_quadrupole(srci);
 			const float dx = distance(sink_x, src_x);
 			const float dy = distance(sink_y, src_y);
 			const float dz = distance(sink_z, src_z);
-			const float r2 = sqr(dx, dy, dz);
-			const float r = sqrtf(r2);
-			const float rinv = rsqrtf(r2);
-			const float r0 = r * inv2rs;
-			float exp0;
-			const float erfc0 = erfcexp(r0, &exp0);
-			const float rinv2 = rinv * rinv;
-			const float rinv3 = rinv2 * rinv;
-			const float rinv5 = rinv2 * rinv3;
-			const float rinv7 = rinv2 * rinv5;
-			const float r02 = r0 * r0;
-			const float r04 = r02 * r02;
-			const auto d0 = -erfc0 * rinv;
-			const auto d1 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv3;
-			const auto d2 = -(3.f * erfc0 + oneoversqrtpi * exp0 * r0 * (4.f * r02 + 3.0)) * rinv5;
-			const auto d3 = (15.f * erfc0 + oneoversqrtpi * exp0 * r0 * (8.f * r04 + 20.0f * r02 + 15.0f)) * rinv7;
-			float qtr = q.xx + q.yy + q.zz;
-			float qddx = q.xx * dx * dx + q.yy * dy * dy + q.zz * dz * dz + 2.f * q.xy * dx * dy + 2.f * q.xz * dx * dz + 2.f * q.yz * dy * dz;
-			g[XDIM] -= m * dx * d1;
-			g[YDIM] -= m * dy * d1;
-			g[ZDIM] -= m * dz * d1;
-			g[XDIM] -= (0.5f * qtr * dx + q.xx * dx + q.xy * dy + q.xz * dz) * d2;
-			g[YDIM] -= (0.5f * qtr * dy + q.xy * dx + q.yy * dy + q.yz * dz) * d2;
-			g[ZDIM] -= (0.5f * qtr * dz + q.xz * dx + q.yz * dy + q.zz * dz) * d2;
-			g[XDIM] -= 0.5f * qddx * dx * d3;
-			g[YDIM] -= 0.5f * qddx * dy * d3;
-			g[ZDIM] -= 0.5f * qddx * dz * d3;
-			phi -= m * d0;
-			phi += 0.5f * (qtr * d1 + qddx * d2);
+			compute_interaction(dx, dy, dz, m, g[XDIM], g[YDIM], g[ZDIM], phi);
 		}
 	}
 
@@ -270,12 +284,6 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 	__shared__ extern int shmem_ptr[];
 	treepm_shmem& shmem = (treepm_shmem&) (*shmem_ptr);
 	const treepm_params& params = dev_treepm_params;
-	const float& twooversqrtpi = params.twooversqrtpi;
-	const float& h2 = params.h2;
-	const float& hinv = params.hinv;
-	const float& h3inv = params.h3inv;
-	const float& inv2rs = params.inv2rs;
-	const float rcut2 = sqr(params.rcut);
 	int i = 0;
 	int part_index;
 	auto these_parts_begin = tr.get_pbegin(list[i]);
@@ -327,42 +335,14 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 				const fixed32& src_x = shmem.srcx[j];
 				const fixed32& src_y = shmem.srcy[j];
 				const fixed32& src_z = shmem.srcz[j];
-				const float& m = tr.get_mass(srci);
 				const float dx = distance(sink_x, src_x);
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
-				const float r2 = sqr(dx, dy, dz);
-				float rinv, rinv3;
-				if (r2 < rcut2 ) {
-					if (r2 > h2) {
-						const float r = sqrtf(r2);
-						rinv = rsqrtf(r2);
-						const float r0 = r * inv2rs;
-						float exp0;
-						const float erfc0 = erfcexp(r0, &exp0);
-						rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
-						rinv *= erfc0;
-					} else {
-						const float q = sqrtf(r2) * hinv;
-						const float q2 = q * q;
-						rinv3 = +15.0f / 8.0f;
-						rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
-						rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
-						rinv3 *= h3inv;
-						rinv = -5.0f / 16.0f;
-						rinv = fmaf(rinv, q2, 21.0f / 16.0f);
-						rinv = fmaf(rinv, q2, -35.0f / 16.0f);
-						rinv = fmaf(rinv, q2, 35.0f / 16.0f);
-						rinv *= hinv;
-					}
-					g[XDIM] -= dx * rinv3;
-					g[YDIM] -= dy * rinv3;
-					g[ZDIM] -= dz * rinv3;
-					phi -= rinv;
-				}
+				compute_interaction(dx, dy, dz, 1.f, g[XDIM], g[YDIM], g[ZDIM], phi);
 			}
 		}
 	}
+
 }
 
 __global__ void kick_treepm_kernel() {
@@ -642,7 +622,7 @@ __global__ void kick_treepm_kernel() {
 
 void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<int> box, int min_rung, double scale, double t0, bool first_call) {
 	PRINT("shmem size = %i\n", sizeof(treepm_shmem));
-	//cudaFuncCache pCacheConfig;
+//cudaFuncCache pCacheConfig;
 	cudaDeviceSetCacheConfig (cudaFuncCachePreferShared);
 //	cudaDeviceGetCacheConfig(&pCacheConfig);
 	timer tm;
@@ -674,6 +654,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 			}
 		}
 	}
+	PRINT("tree size = %e GB\n", tree_size / 1024 / 1024 / 1024.0);
 	auto phibox = box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		phibox.begin[dim] *= get_options().four_o_chain;
@@ -697,7 +678,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		const auto child_boxes = box.split();
 		PRINT("Splitting\n");
 		kick_treepm(trees, buckets, child_boxes.first, min_rung, scale, t0, first_call);
-		kick_treepm(trees, buckets, child_boxes.second, min_rung, scale, t0, first_call);
+		kick_treepm(std::move(trees), std::move(buckets), child_boxes.second, min_rung, scale, t0, first_call);
 	} else {
 		cuda_set_device();
 		PRINT("Data transfer\n");
@@ -711,7 +692,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.rcut = 1.0 / get_options().chain_dim;
-		PRINT( "RCUT = %e RS\n", params.rcut / params.rs);
+		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
 		params.GM = get_options().GM;
 		params.Nfour = get_options().four_dim;
 		params.phi_box = phibox;
