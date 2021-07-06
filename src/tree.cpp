@@ -33,22 +33,6 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 				x[dim] /= node.mass;
 			}
 		}
-#ifdef USE_QUADRUPOLE
-		quadrupole q;
-		q.xx = q.xy = q.xz = q.yy = q.yz = q.zz = 0.0;
-		for (int i = begin; i < end; i++) {
-			const auto dx = particles_pos(XDIM, i).to_double() - x[XDIM];
-			const auto dy = particles_pos(YDIM, i).to_double() - x[YDIM];
-			const auto dz = particles_pos(ZDIM, i).to_double() - x[ZDIM];
-			q.xx += dx * dx;
-			q.xy += dx * dy;
-			q.xz += dx * dz;
-			q.yy += dy * dy;
-			q.yz += dy * dz;
-			q.zz += dz * dz;
-		}
-		node.q = q;
-#endif
 		double r2max = 0.0;
 		for (int i = begin; i < end; i++) {
 			double r2 = 0.0;
@@ -79,24 +63,6 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		}
 		const auto m0 = t.get_mass(i0);
 		const auto m1 = t.get_mass(i1);
-		const auto dx0 = t.get_x(XDIM, i0).to_double() - x[XDIM];
-		const auto dy0 = t.get_x(YDIM, i0).to_double() - x[YDIM];
-		const auto dz0 = t.get_x(ZDIM, i0).to_double() - x[ZDIM];
-		const auto dx1 = t.get_x(XDIM, i1).to_double() - x[XDIM];
-		const auto dy1 = t.get_x(YDIM, i1).to_double() - x[YDIM];
-		const auto dz1 = t.get_x(ZDIM, i1).to_double() - x[ZDIM];
-#ifdef USE_QUADRUPOLE
-		const auto q0 = t.get_quadrupole(i0);
-		const auto q1 = t.get_quadrupole(i1);
-		quadrupole q;
-		q.xx = q0.xx + q1.xx + m0 * dx0 * dx0 + m1 * dx1 * dx1;
-		q.xy = q0.xy + q1.xy + m0 * dx0 * dy0 + m1 * dx1 * dy1;
-		q.xz = q0.xz + q1.xz + m0 * dx0 * dz0 + m1 * dx1 * dz1;
-		q.yy = q0.yy + q1.yy + m0 * dy0 * dy0 + m1 * dy1 * dy1;
-		q.yz = q0.yz + q1.yz + m0 * dy0 * dz0 + m1 * dy1 * dz1;
-		q.zz = q0.zz + q1.zz + m0 * dz0 * dz0 + m1 * dz1 * dz1;
-		node.q = q;
-#endif
 		for (int dim = 0; dim < NDIM; dim++) {
 			node.x[dim] = x[dim];
 		}
