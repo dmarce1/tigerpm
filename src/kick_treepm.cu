@@ -195,36 +195,6 @@ struct treepm_shmem {
 
 __constant__ treepm_params dev_treepm_params;
 
-__device__ float force_func(float x) {
-	const float x2 = x * x;
-	float f = float(9.815866e-22);
-	f = fmaf(f, x2, float(-2.157208e-20));
-	f = fmaf(f, x2, float(4.524875e-19));
-	f = fmaf(f, x2, float(-9.038148e-18));
-	f = fmaf(f, x2, float(1.714805e-16));
-	f = fmaf(f, x2, float(-3.081750e-15));
-	f = fmaf(f, x2, float(5.229637e-14));
-	f = fmaf(f, x2, float(-8.350549e-13));
-	f = fmaf(f, x2, float(1.249703e-11));
-	f = fmaf(f, x2, float(-1.744955e-10));
-	f = fmaf(f, x2, float(2.261462e-09));
-	f = fmaf(f, x2, float(-2.703922e-08));
-	f = fmaf(f, x2, float(2.961439e-07));
-	f = fmaf(f, x2, float(-2.945852e-06));
-	f = fmaf(f, x2, float(2.633938e-05));
-	f = fmaf(f, x2, float(-2.089591e-04));
-	f = fmaf(f, x2, float(1.446640e-03));
-	f = fmaf(f, x2, float(-8.548327e-03));
-	f = fmaf(f, x2, float(4.179182e-02));
-	f = fmaf(f, x2, float(-1.611970e-01));
-	f = fmaf(f, x2, float(4.513517e-01));
-	f = fmaf(f, x2, float(-7.522528e-01));
-	f *= x * x2;
-	return 1.0f + f;
-}
-
-
-
 __device__ int compute_indices(array<int, TREEPM_BLOCK_SIZE>& index) {
 	const int& tid = threadIdx.x;
 	for (int P = 1; P < TREEPM_BLOCK_SIZE; P *= 2) {
@@ -259,10 +229,9 @@ inline __device__ void compute_interaction(float dx, float dy, float dz, float m
 			rinv = rsqrtf(r2);
 			const float r0 = r * inv2rs;
 			float exp0;
-			//const float erfc0 = erfcexp(r0, &exp0);
-//			PRINT( "%e\n", force_func(r0));
-			rinv3 = force_func(r0) * rinv * rinv * rinv;
-//			rinv *= erfc0;
+			const float erfc0 = erfcexp(r0, &exp0);
+			rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
+			rinv *= erfc0;
 		} else {
 			const float q = sqrtf(r2) * hinv;
 			const float q2 = q * q;
