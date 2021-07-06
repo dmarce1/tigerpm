@@ -67,6 +67,7 @@ struct treepm_params {
 	int* bucket_cnt;
 	int nsink_cells;
 	int min_rung;
+	bool do_phi;
 	float rs;
 	float rcut;
 	float GM;
@@ -253,16 +254,20 @@ inline __device__ void compute_interaction(float dx, float dy, float dz, float m
 			rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
 			rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
 			rinv3 *= h3inv;
-			rinv = -5.0f / 16.0f;
-			rinv = fmaf(rinv, q2, 21.0f / 16.0f);
-			rinv = fmaf(rinv, q2, -35.0f / 16.0f);
-			rinv = fmaf(rinv, q2, 35.0f / 16.0f);
-			rinv *= hinv;
+			if (params.do_phi) {
+				rinv = -5.0f / 16.0f;
+				rinv = fmaf(rinv, q2, 21.0f / 16.0f);
+				rinv = fmaf(rinv, q2, -35.0f / 16.0f);
+				rinv = fmaf(rinv, q2, 35.0f / 16.0f);
+				rinv *= hinv;
+			}
 		}
 		gx -= m * dx * rinv3;
 		gy -= m * dy * rinv3;
 		gz -= m * dz * rinv3;
-		phi -= m * rinv;
+		if( params.do_phi ) {
+			phi -= m * rinv;
+		}
 	}
 }
 
@@ -270,6 +275,7 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 	const int& tid = threadIdx.x;
 	__shared__ extern int shmem_ptr[];
 	treepm_shmem& shmem = (treepm_shmem&) (*shmem_ptr);
+	const treepm_params& params = dev_treepm_params;
 	int N = 0;
 	int mid_index;
 	if ((nactive % TREEPM_BLOCK_SIZE) < TREEPM_MIN_THREADS) {
@@ -328,7 +334,9 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 			shmem.g[sink_index][XDIM] += gx;
 			shmem.g[sink_index][YDIM] += gy;
 			shmem.g[sink_index][ZDIM] += gz;
-			shmem.phi[sink_index] += phi;
+			if (params.do_phi) {
+				shmem.phi[sink_index] += phi;
+			}
 		}
 		__syncthreads();
 	}
@@ -404,15 +412,15 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 			}
 		}
 		__syncthreads();
-		for (int sink_index = mid_index; sink_index < nactive; sink_index ++) {
+		for (int sink_index = mid_index; sink_index < nactive; sink_index++) {
 			float phi = 0.0f;
-			array<float,NDIM> g;
+			array<float, NDIM> g;
 			g[XDIM] = g[YDIM] = g[ZDIM] = 0.f;
 			const fixed32& sink_x = shmem.x[sink_index];
 			const fixed32& sink_y = shmem.y[sink_index];
 			const fixed32& sink_z = shmem.z[sink_index];
 			N += part_index;
-			for (int j = tid; j < part_index; j+=TREEPM_BLOCK_SIZE) {
+			for (int j = tid; j < part_index; j += TREEPM_BLOCK_SIZE) {
 				const fixed32& src_x = shmem.srcx[j];
 				const fixed32& src_y = shmem.srcy[j];
 				const fixed32& src_z = shmem.srcz[j];
@@ -421,15 +429,17 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 				const float dz = distance(sink_z, src_z);
 				compute_interaction(dx, dy, dz, 1.f, g[XDIM], g[YDIM], g[ZDIM], phi);
 			}
-			for( int dim = 0; dim < NDIM; dim++) {
+			for (int dim = 0; dim < NDIM; dim++) {
 				shared_reduce(g[dim]);
 			}
 			shared_reduce(phi);
-			if( tid == 0 ) {
-				for( int dim = 0; dim < NDIM; dim++) {
+			if (tid == 0) {
+				for (int dim = 0; dim < NDIM; dim++) {
 					shmem.g[sink_index][dim] += g[dim];
 				}
-				shmem.phi[sink_index] += phi;
+				if (params.do_phi) {
+					shmem.phi[sink_index] += phi;
+				}
 			}
 		}
 	}
@@ -546,16 +556,18 @@ __global__ void kick_treepm_kernel() {
 						}
 					}
 				}
-				for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
-					for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
-						for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
-							double w0 = 1.0;
-							for (int dim2 = 0; dim2 < NDIM; dim2++) {
-								const int i0 = J[dim2] - I[dim2];
-								w0 *= w[dim2][i0];
+				if (params.do_phi) {
+					for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+						for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+							for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+								double w0 = 1.0;
+								for (int dim2 = 0; dim2 < NDIM; dim2++) {
+									const int i0 = J[dim2] - I[dim2];
+									w0 *= w[dim2][i0];
+								}
+								const int l = params.phi_box.index(J);
+								phi += w0 * params.phi[l];
 							}
-							const int l = params.phi_box.index(J);
-							phi += w0 * params.phi[l];
 						}
 					}
 				}
@@ -578,7 +590,7 @@ __global__ void kick_treepm_kernel() {
 				int multi_size = 0;
 				int part_size = 0;
 				checklist[0] = 0;
-			   tm = clock64();
+				tm = clock64();
 				while (check_size) {
 					const int maxi = round_up(check_size, TREEPM_BLOCK_SIZE);
 					for (int ci = tid; ci < maxi; ci += TREEPM_BLOCK_SIZE) {
@@ -788,6 +800,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		params.theta = 0.5;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
+		params.do_phi = false;
 		params.rcut = 1.0 / get_options().chain_dim;
 		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
 		params.GM = get_options().GM;
