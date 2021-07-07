@@ -28,8 +28,9 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_short_ewald_call_
 	CUDA_CHECK(cudaMalloc(&dev_gx, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gy, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gz, Nsinks * sizeof(double)));
+	vector<double> self_phi(Nsinks, -SELF_PHI / get_options().hsoft);
 	vector<double> zero(Nsinks, 0.0);
-	CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_phi, self_phi.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_gx, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_gy, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_gz, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));

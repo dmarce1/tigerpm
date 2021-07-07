@@ -242,19 +242,17 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	e0 *= c0;
 	const float d3 = fmaf(float(-5) * d2, rinv, e0);
 	e0 *= c0;
-	const float rinv0 = 1.f;
 	const float rinv1 = rinv;
-	const float Drinvpow_0_0 = d0 * rinv0;
-	const float Drinvpow_1_0 = d1 * rinv0;
+	const float Drinvpow_0_0 = d0;
+	const float Drinvpow_1_0 = d1;
 	const float Drinvpow_1_1 = d1 * rinv1;
-	const float Drinvpow_2_0 = d2 * rinv0;
+	const float Drinvpow_2_0 = d2;
 	const float Drinvpow_2_1 = d2 * rinv1;
-	const float Drinvpow_3_0 = d3 * rinv0;
+	const float Drinvpow_3_0 = d3;
 	array<float, NDIM> dxrinv;
 	dxrinv[0] = dx * rinv;
 	dxrinv[1] = dy * rinv;
 	dxrinv[2] = dz * rinv;
-	const float x000 = float(1);
 	const float& x100 = dxrinv[0];
 	const float& x010 = dxrinv[1];
 	const float& x001 = dxrinv[2];
@@ -290,14 +288,14 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	x_3_1_001 *= Drinvpow_2_1;
 	x_3_1_010 *= Drinvpow_2_1;
 	x_3_1_100 *= Drinvpow_2_1;
-	D[0] = x000 * Drinvpow_0_0;
+	D[0] = Drinvpow_0_0;
 	D[1] = x100* Drinvpow_1_0;
 	D[2] = x010* Drinvpow_1_0;
 	D[3] = x001* Drinvpow_1_0;
 	D[4] = x_2_1_000;
 	D[5] = x110 * Drinvpow_2_0;
 	D[6] = x101 * Drinvpow_2_0;
-	D[7] = x020 * Drinvpow_2_0;
+	D[7] = x_2_1_000;
 	D[8] = x011 * Drinvpow_2_0;
 	D[9] = x_2_1_000;
 	D[10] = float(3.00000000e+00)* x_3_1_100;
@@ -310,8 +308,8 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	D[17] = x_3_1_001;
 	D[18] = x_3_1_010;
 	D[19] = float(3.00000000e+00)* x_3_1_001;
+	D[7] = fmaf(x020,  Drinvpow_2_0, D[7]);
 	D[4] = fmaf(x200, Drinvpow_2_0, D[4]);
-	D[7] += x_2_1_000;
 	D[9] = fmaf(x002, Drinvpow_2_0, D[9]);
 	D[10] = fmaf(x300, Drinvpow_3_0, D[10]);
 	D[11] = fmaf(x210, Drinvpow_3_0, D[11]);
@@ -322,7 +320,6 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	D[17] = fmaf(x021, Drinvpow_3_0, D[17]);
 	D[18] = fmaf(x012, Drinvpow_3_0, D[18]);
 	D[19] = fmaf(x003, Drinvpow_3_0, D[19]);
-
 }
 
 
@@ -605,7 +602,7 @@ __global__ void kick_treepm_kernel() {
 				array<float, NDIM>& g = shmem.g[sink_index];
 				float& phi = shmem.phi[sink_index];
 				g[0] = g[1] = g[2] = 0.f;
-				phi = 0.f;
+				phi = -SELF_PHI * params.hinv;
 				const fixed32 sink_x = shmem.x[sink_index];
 				const fixed32 sink_y = shmem.y[sink_index];
 				const fixed32 sink_z = shmem.z[sink_index];
@@ -894,10 +891,10 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.7;
+		params.theta = 0.4;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
-		params.do_phi = false;
+		params.do_phi = true;
 		params.rcut = 1.0 / get_options().chain_dim;
 		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
 		params.GM = get_options().GM;

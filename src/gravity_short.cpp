@@ -49,14 +49,15 @@ void gravity_short_ewald_compare(int Nsamples) {
 	for (int i = 0; i < Nsamples; i++) {
 		double f1 = 0.0, f2 = 0.0;
 		double r2 = 0.0;
-		for (int dim = 0; dim < NDIM; dim++) {
+		/*for (int dim = 0; dim < NDIM; dim++) {
 			f1 += sqr(samples[i].g[dim]);
-			r2 += sqr(samples[i].x[dim].to_double() - 0.5);
 			f2 += sqr(results.second[dim][i]);
 		}
-		const double r = sqrt(r2);
 		f1 = sqrt(f1);
 		f2 = sqrt(f2);
+		*/
+		f1 = samples[i].p;
+		f2 = results.first[i];
 		l2sum += sqr(f1-f2);
 		l2norm += sqr(f2);
 		printf("%e %e %e \n", f1, f2, f2 / f1);

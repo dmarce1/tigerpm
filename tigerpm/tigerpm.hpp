@@ -21,8 +21,10 @@
 
 #define INTERP_FUNC_SIZE 64
 
+#define SELF_PHI float(-35.0/16.0)
+
 //#define CHECK_BOUNDS
-//#define FORCE_TEST
+#define FORCE_TEST
 //#define SORT_TEST
 
 #define USE_QUADRUPOLE
