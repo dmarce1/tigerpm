@@ -233,7 +233,7 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	float exp0;
 	const float erfc0 = erfcexp(r0, &exp0);
 	const float r02 = r0 * r0;
-	const float c0 = -2.f * r * inv2rs* inv2rs;
+	const float c0 = -2.f * r * inv2rs * inv2rs;
 	const float d0 = -erfc0 * rinv;
 	float e0 = twooversqrtpi * exp0 * rinv * inv2rs;
 	const float d1 = fmaf(float(-1) * d0, rinv, e0);
@@ -290,38 +290,39 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	x_3_1_001 *= Drinvpow_2_1;
 	x_3_1_010 *= Drinvpow_2_1;
 	x_3_1_100 *= Drinvpow_2_1;
-	D[1] = fmaf(x100, Drinvpow_1_0, D[1]);
-	D[0] = fmaf(x000, Drinvpow_0_0, D[0]);
-	D[10] = fmaf(float(3.00000000e+00), x_3_1_100, D[10]);
-	D[16] = fmaf(float(3.00000000e+00), x_3_1_010, D[16]);
-	D[10] = fmaf(x300, Drinvpow_3_0, D[10]);
-	D[16] = fmaf(x030, Drinvpow_3_0, D[16]);
-	D[11] += x_3_1_010;
-	D[17] += x_3_1_001;
-	D[11] = fmaf(x210, Drinvpow_3_0, D[11]);
-	D[17] = fmaf(x021, Drinvpow_3_0, D[17]);
-	D[12] += x_3_1_001;
-	D[7] += x_2_1_000;
-	D[12] = fmaf(x201, Drinvpow_3_0, D[12]);
-	D[7] = fmaf(x020, Drinvpow_2_0, D[7]);
-	D[4] += x_2_1_000;
-	D[18] += x_3_1_010;
+	D[0] = x000 * Drinvpow_0_0;
+	D[1] = x100* Drinvpow_1_0;
+	D[2] = x010* Drinvpow_1_0;
+	D[3] = x001* Drinvpow_1_0;
+	D[4] = x_2_1_000;
+	D[5] = x110 * Drinvpow_2_0;
+	D[6] = x101 * Drinvpow_2_0;
+	D[7] = x020 * Drinvpow_2_0;
+	D[8] = x011 * Drinvpow_2_0;
+	D[9] = x_2_1_000;
+	D[10] = float(3.00000000e+00)* x_3_1_100;
+	D[11] = x_3_1_010;
+	D[12] = x_3_1_001;
+	D[13] = x_3_1_100;
+	D[14] = x111* Drinvpow_3_0;
+	D[15] = x_3_1_100;
+	D[16] = float(3.00000000e+00)* x_3_1_010;
+	D[17] = x_3_1_001;
+	D[18] = x_3_1_010;
+	D[19] = float(3.00000000e+00)* x_3_1_001;
 	D[4] = fmaf(x200, Drinvpow_2_0, D[4]);
-	D[18] = fmaf(x012, Drinvpow_3_0, D[18]);
-	D[13] += x_3_1_100;
-	D[8] = fmaf(x011, Drinvpow_2_0, D[8]);
-	D[13] = fmaf(x120, Drinvpow_3_0, D[13]);
-	D[2] = fmaf(x010, Drinvpow_1_0, D[2]);
-	D[14] = fmaf(x111, Drinvpow_3_0, D[14]);
-	D[19] = fmaf(float(3.00000000e+00), x_3_1_001, D[19]);
-	D[5] = fmaf(x110, Drinvpow_2_0, D[5]);
-	D[19] = fmaf(x003, Drinvpow_3_0, D[19]);
-	D[15] += x_3_1_100;
-	D[9] += x_2_1_000;
-	D[15] = fmaf(x102, Drinvpow_3_0, D[15]);
+	D[7] += x_2_1_000;
 	D[9] = fmaf(x002, Drinvpow_2_0, D[9]);
-	D[6] = fmaf(x101, Drinvpow_2_0, D[6]);
-	D[3] = fmaf(x001, Drinvpow_1_0, D[3]);
+	D[10] = fmaf(x300, Drinvpow_3_0, D[10]);
+	D[11] = fmaf(x210, Drinvpow_3_0, D[11]);
+	D[12] = fmaf(x201, Drinvpow_3_0, D[12]);
+	D[13] = fmaf(x120, Drinvpow_3_0, D[13]);
+	D[15] = fmaf(x102, Drinvpow_3_0, D[15]);
+	D[16] = fmaf(x030, Drinvpow_3_0, D[16]);
+	D[17] = fmaf(x021, Drinvpow_3_0, D[17]);
+	D[18] = fmaf(x012, Drinvpow_3_0, D[18]);
+	D[19] = fmaf(x003, Drinvpow_3_0, D[19]);
+
 }
 
 
@@ -329,12 +330,6 @@ inline __device__ void compute_pc_interaction(float dx, float dy, float dz, cons
 	const treepm_params& params = dev_treepm_params;
 	array<float, GREENS_SIZE> D;
 	array<float, NDIM + 1> L;
-	for (int i = 0; i < GREENS_SIZE; i++) {
-		D[i] = 0.f;
-	}
-	for( int i = 0; i < NDIM + 1; i++) {
-		L[i] = 0.f;
-	}
 	greens_function(D, dx, dy, dz);
 	pc_interaction(L, M, D, params.do_phi);
 	gx -= L[1];

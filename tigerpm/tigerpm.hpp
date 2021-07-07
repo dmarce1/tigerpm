@@ -22,7 +22,7 @@
 #define INTERP_FUNC_SIZE 64
 
 //#define CHECK_BOUNDS
-#define FORCE_TEST
+//#define FORCE_TEST
 //#define SORT_TEST
 
 #define USE_QUADRUPOLE

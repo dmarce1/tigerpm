@@ -20,17 +20,27 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		node.children[0] = -1;
 		node.children[1] = -1;
 		array<double, NDIM> x;
+		array<double, NDIM> xmin;
+		array<double, NDIM> xmax;
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = 0.0;
+			xmin[dim] = 1.0;
+			xmax[dim] = 0.0;
 		}
 		for (int i = begin; i < end; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				x[dim] += particles_pos(dim, i).to_double();
+				const auto x = particles_pos(dim, i).to_double();
+				xmax[dim] = std::max(xmax[dim], x);
+				xmin[dim] = std::min(xmin[dim], x);
 			}
 		}
 		if (mass > 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				x[dim] /= mass;
+				x[dim] = (xmax[dim] + xmin[dim]) * 0.5;
+			}
+		} else {
+			for (int dim = 0; dim < NDIM; dim++) {
+				x[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
 			}
 		}
 		multipole m;
@@ -69,12 +79,17 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		const int i0 = node.children[0];
 		const int i1 = node.children[1];
 		float mass = t.get_mass(i0) + t.get_mass(i1);
+		array<double, NDIM> n;
 		array<double, NDIM> x;
 		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = t.get_mass(i0) * t.get_x(dim, i0).to_double() + t.get_mass(i1) * t.get_x(dim, i1).to_double();
+			n[dim] = t.get_x(dim, i1).to_double() - t.get_x(dim, i0).to_double();
+		}
+		const auto norminv = 1.0 / std::sqrt(sqr(n[0], n[1], n[2]));
+		for (int dim = 0; dim < NDIM; dim++) {
+			n[dim] *= norminv;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] /= mass;
+			x[dim] = (t.get_x(dim, i0).to_double() + t.get_x(dim, i1).to_double() + n[dim] * t.get_radius(i1) - n[dim] * t.get_radius(i0)) * 0.5;
 		}
 		multipole m, m1;
 		array<float, NDIM> dx0, dx1;
