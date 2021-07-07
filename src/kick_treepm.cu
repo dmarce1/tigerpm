@@ -584,18 +584,21 @@ __global__ void kick_treepm_kernel() {
 				for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
 					for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
 						for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
-							for (int dim1 = 0; dim1 < NDIM; dim1++) {
-								double w0 = 1.0;
-								for (int dim2 = 0; dim2 < NDIM; dim2++) {
-									const int i0 = J[dim2] - I[dim2];
-									if (dim1 == dim2) {
-										w0 *= dw[dim2][i0];
-									} else {
-										w0 *= w[dim2][i0];
-									}
-								}
-								const int l = params.phi_box.index(J);
-								g[dim1] -= w0 * params.phi[l] * params.Nfour;
+							const int l = params.phi_box.index(J);
+							const int i0 = J[0] - I[0];
+							const int i1 = J[1] - I[1];
+							const int i2 = J[2] - I[2];
+							double w0 = dw[0][i0] * w[1][i1] * w[2][i2];
+							const float phi0 = params.phi[l];
+							const float phi1 = phi0 * params.Nfour;
+							g[0] -= w0 * phi1;
+							w0 = w[0][i0] * dw[1][i1] * w[2][i2];
+							g[1] -= w0 * phi1;
+							w0 = w[0][i0] * w[1][i1] * dw[2][i2];
+							g[2] -= w0 * phi1;
+							if (params.do_phi) {
+								w0 = w[0][i0] * w[1][i1] * w[2][i2];
+								phi -= w0 * phi0;
 							}
 						}
 					}
