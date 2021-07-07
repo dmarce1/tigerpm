@@ -195,8 +195,6 @@ struct treepm_shmem {
 	array<fixed32, SINK_BUCKET_SIZE> z;
 	array<float, SINK_BUCKET_SIZE> phi;
 	array<int, SINK_BUCKET_SIZE> active_snki;
-	array<float, TREEPM_BLOCK_SIZE> reduce;
-	array<int, TREEPM_BLOCK_SIZE> index;
 	array<fixed32, KICK_PP_MAX> srcx;
 	array<fixed32, KICK_PP_MAX> srcy;
 	array<fixed32, KICK_PP_MAX> srcz;
@@ -204,22 +202,22 @@ struct treepm_shmem {
 
 __constant__ treepm_params dev_treepm_params;
 
-__device__ int compute_indices(array<int, TREEPM_BLOCK_SIZE>& index) {
+__device__ int compute_indices(int index, int& total) {
 	const int& tid = threadIdx.x;
 	for (int P = 1; P < TREEPM_BLOCK_SIZE; P *= 2) {
-		int tmp;
-		__syncwarp();
+		auto tmp = __shfl_up_sync(0xFFFFFFFF, index, P);
 		if (tid >= P) {
-			tmp = index[tid - P];
-		}
-		__syncwarp();
-		if (tid >= P) {
-			index[tid] += tmp;
+			index += tmp;
 		}
 	}
-	__syncwarp();
-	return (tid > 0 ? index[tid - 1] : 0);
-
+	total = __shfl_sync(0xFFFFFFFF, index, TREEPM_BLOCK_SIZE - 1);
+	auto tmp = __shfl_up_sync(0xFFFFFFFF, index, 1);
+	if (tid >= 1) {
+		index = tmp;
+	} else {
+		index = 0;
+	}
+	return index;
 }
 
 __device__ inline void shared_reduce(float& number) {
@@ -516,17 +514,17 @@ __global__ void kick_treepm_kernel() {
 				const int this_index = snk_begin + i;
 				bool is_active;
 				if (i < nsinks) {
-					is_active = int(params.rung[this_index] >= params.min_rung);
+					is_active = (params.rung[this_index] >= params.min_rung);
 				} else {
 					is_active = false;
 				}
-				shmem.index[tid] = int(is_active);
-				int active_index = compute_indices(shmem.index) + nactive;
+				int total;
+				int active_index = compute_indices(int(is_active), total) + nactive;
 				int that_index = bucket.src_begin + i;
 				if (is_active) {
 					shmem.active_snki[active_index] = this_index;
 				}
-				nactive += shmem.index[TREEPM_BLOCK_SIZE - 1];
+				nactive += total;
 				shmem.x[active_index] = params.x[that_index];
 				shmem.y[active_index] = params.y[that_index];
 				shmem.z[active_index] = params.z[that_index];
@@ -579,10 +577,10 @@ __global__ void kick_treepm_kernel() {
 					dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
 					dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
 				}
-					for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
-						for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
-							for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
-								for (int dim1 = 0; dim1 < NDIM; dim1++) {
+				for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+					for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+						for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+							for (int dim1 = 0; dim1 < NDIM; dim1++) {
 								double w0 = 1.0;
 								for (int dim2 = 0; dim2 < NDIM; dim2++) {
 									const int i0 = J[dim2] - I[dim2];
@@ -665,9 +663,9 @@ __global__ void kick_treepm_kernel() {
 							nextb = !cutoff && !far && !leaf;
 							//		PRINT( "%i %i %i \n", multib, partb, nextb);
 						}
-						shmem.index[tid] = multib;
-						this_index = compute_indices(shmem.index) + multi_size;
-						if (multi_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
+						int total;
+						this_index = compute_indices(multib, total) + multi_size;
+						if (multi_size + total >= INTERSPACE_SIZE) {
 							PRINT("internal interspace exceeded on multipoles\n");
 							__trap();
 							assert(false);
@@ -675,12 +673,11 @@ __global__ void kick_treepm_kernel() {
 						if (multib) {
 							multilist[this_index] = index;
 						}
-						multi_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						multi_size += total;
 						__syncwarp();
 
-						shmem.index[tid] = partb;
-						this_index = compute_indices(shmem.index) + part_size;
-						if (part_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= INTERSPACE_SIZE) {
+						this_index = compute_indices(partb, total) + part_size;
+						if (part_size + total >= INTERSPACE_SIZE) {
 							PRINT("internal interspace exceeded on parts\n");
 							__trap();
 							assert(false);
@@ -688,12 +685,11 @@ __global__ void kick_treepm_kernel() {
 						if (partb) {
 							partlist[this_index] = index;
 						}
-						part_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
+						part_size += total;
 						__syncwarp();
 
-						shmem.index[tid] = nextb;
-						this_index = compute_indices(shmem.index);
-						if (next_size + shmem.index[TREEPM_BLOCK_SIZE - 1] >= WORKSPACE_SIZE) {
+						this_index = compute_indices(nextb, total);
+						if (next_size + total >= WORKSPACE_SIZE) {
 							PRINT("internal workspace exceeded\n");
 							__trap();
 							assert(false);
@@ -703,7 +699,7 @@ __global__ void kick_treepm_kernel() {
 							nextlist[next_size + 2 * this_index + 0] = children[0];
 							nextlist[next_size + 2 * this_index + 1] = children[1];
 						}
-						next_size += 2 * shmem.index[TREEPM_BLOCK_SIZE - 1];
+						next_size += 2 * total;
 						__syncwarp();
 
 					}
