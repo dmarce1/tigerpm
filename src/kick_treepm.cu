@@ -65,6 +65,7 @@ struct treepm_params {
 	tree* tree_neighbors;
 	sink_bucket** buckets;
 	int* bucket_cnt;
+	int* active;
 	int nsink_cells;
 	int min_rung;
 	bool do_phi;
@@ -104,6 +105,7 @@ struct treepm_params {
 		CUDA_CHECK(cudaMalloc(&velz, sink_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
+		CUDA_CHECK(cudaMalloc(&active, nblocks * sizeof(int) * SINK_BUCKET_SIZE));
 		CUDA_CHECK(cudaMalloc(&checklist, nblocks * sizeof(int) * WORKSPACE_SIZE));
 		CUDA_CHECK(cudaMalloc(&nextlist, nblocks * sizeof(int) * WORKSPACE_SIZE));
 		CUDA_CHECK(cudaMalloc(&multilist, nblocks * sizeof(int) * INTERSPACE_SIZE));
@@ -125,6 +127,7 @@ struct treepm_params {
 		CUDA_CHECK(cudaFree(buckets));
 		CUDA_CHECK(cudaFree(bucket_cnt));
 		CUDA_CHECK(cudaFree(phi));
+		CUDA_CHECK(cudaFree(active));
 		CUDA_CHECK(cudaFree(rung));
 		CUDA_CHECK(cudaFree(tree_neighbors));
 		CUDA_CHECK(cudaFree(checklist));
@@ -190,11 +193,10 @@ static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cuda
 
 struct treepm_shmem {
 	array<array<float, NDIM>, SINK_BUCKET_SIZE> g;
+	array<float, SINK_BUCKET_SIZE> phi;
 	array<fixed32, SINK_BUCKET_SIZE> x;
 	array<fixed32, SINK_BUCKET_SIZE> y;
 	array<fixed32, SINK_BUCKET_SIZE> z;
-	array<float, SINK_BUCKET_SIZE> phi;
-	array<int, SINK_BUCKET_SIZE> active_snki;
 	array<fixed32, KICK_PP_MAX> srcx;
 	array<fixed32, KICK_PP_MAX> srcy;
 	array<fixed32, KICK_PP_MAX> srcz;
@@ -251,7 +253,7 @@ inline __device__ void compute_pc_interaction(float dx, float dy, float dz, floa
 		e0 *= ntwor02rinv2;
 		const float d3 = fmaf(-5.0f * d2, rinv2, e0);
 		float qtr = 0.5f * (q.xx + q.yy + q.zz);
-		float qddx = 0.5f * (fmaf(q.xx, dx * dx, fmaf(q.yy, dy * dy, fmaf(q.zz, dz * dz, 2.f * fmaf(q.xy, dx * dy,  fmaf(q.xz, dx * dz, q.yz * dy * dz))))));
+		float qddx = 0.5f * (fmaf(q.xx, dx * dx, fmaf(q.yy, dy * dy, fmaf(q.zz, dz * dz, 2.f * fmaf(q.xy, dx * dy, fmaf(q.xz, dx * dz, q.yz * dy * dz))))));
 		gx -= m * dx * d1;
 		gy -= m * dy * d1;
 		gz -= m * dz * d1;
@@ -280,26 +282,28 @@ inline __device__ void compute_pp_interaction(float dx, float dy, float dz, floa
 	const float r2 = sqr(dx, dy, dz);
 	float rinv, rinv3;
 	if (r2 < rcut2) {
+		float exp0;
+		rinv = r2 > 0.0f ? rsqrtf(r2) : 0.0f;
+		const float r = r2 * rinv;
+		const float r0 = r * inv2rs;
+		const float erfc0 = erfcexp(r0, &exp0);
 		if (r2 > h2) {
-			rinv = rsqrtf(r2);
-			const float r = r2 * rinv;
-			const float r0 = r * inv2rs;
-			float exp0;
-			const float erfc0 = erfcexp(r0, &exp0);
 			rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
 			rinv *= erfc0;
 		} else {
 			const float q2 = r2 * h2inv;
-			rinv3 = +15.0f / 8.0f;
-			rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
-			rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
-			rinv3 *= h3inv;
+			float d1 = +15.0f / 8.0f;
+			d1 = fmaf(d1, q2, -21.0f / 4.0f);
+			d1 = fmaf(d1, q2, +35.0f / 8.0f);
+			d1 *= h3inv;
+			rinv3 = ((erfc0 - 1.0f) + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv + d1;
 			if (params.do_phi) {
-				rinv = -5.0f / 16.0f;
-				rinv = fmaf(rinv, q2, 21.0f / 16.0f);
-				rinv = fmaf(rinv, q2, -35.0f / 16.0f);
-				rinv = fmaf(rinv, q2, 35.0f / 16.0f);
-				rinv *= hinv;
+				float d0 = -5.0f / 16.0f;
+				d0 = fmaf(d0, q2, 21.0f / 16.0f);
+				d0 = fmaf(d0, q2, -35.0f / 16.0f);
+				d0 = fmaf(d0, q2, 35.0f / 16.0f);
+				d0 *= hinv;
+				rinv = (erfc0 - 1.0f) * erfc0 + d0;
 			}
 		}
 		gx -= dx * rinv3;
@@ -522,7 +526,7 @@ __global__ void kick_treepm_kernel() {
 				int active_index = compute_indices(int(is_active), total) + nactive;
 				int that_index = bucket.src_begin + i;
 				if (is_active) {
-					shmem.active_snki[active_index] = this_index;
+					params.active[bid * SINK_BUCKET_SIZE + active_index] = this_index;
 				}
 				nactive += total;
 				shmem.x[active_index] = params.x[that_index];
@@ -722,7 +726,7 @@ __global__ void kick_treepm_kernel() {
 			for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
 				array<float, NDIM>& g = shmem.g[sink_index];
 				float& phi = shmem.phi[sink_index];
-				const int snki = shmem.active_snki[sink_index];
+				const int snki = params.active[SINK_BUCKET_SIZE * bid + sink_index];
 				g[XDIM] *= params.GM;
 				g[YDIM] *= params.GM;
 				g[ZDIM] *= params.GM;

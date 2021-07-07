@@ -1,11 +1,13 @@
 #pragma once
 
 #include <tigerpm/cuda.hpp>
+#include <tigerpm/fixed.hpp>
 #include <tigerpm/range.hpp>
 #include <tigerpm/tigerpm.hpp>
 
 range<int> find_my_box(int N);
 void find_all_boxes(vector<range<int>>& boxes, int N);
+
 
 template<class T>
 CUDA_EXPORT inline T round_up(T num, T mod) {
@@ -46,3 +48,34 @@ __device__ inline float erfcexp(float x, float *e) {
 	 *e = expf(-x * x);
 	 return fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *e;/*/
 }
+
+CUDA_EXPORT inline float load(float* number) {
+#ifdef __CUDA_ARCH__
+	return __ldg(number);
+#else
+	return *number;
+#endif
+}
+
+CUDA_EXPORT inline int load(int* number) {
+#ifdef __CUDA_ARCH__
+	return __ldg(number);
+#else
+	return *number;
+#endif
+}
+
+CUDA_EXPORT inline fixed32 load(fixed32* number) {
+#ifdef __CUDA_ARCH__
+	union u {
+		fixed32 a;
+		float b;
+	};
+	u c;
+	c.b = __ldg((float*) number);
+	return c.a;
+#else
+	return *number;
+#endif
+}
+
