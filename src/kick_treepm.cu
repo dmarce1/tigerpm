@@ -18,13 +18,6 @@ __managed__ double tm2 = 0.0;
 __managed__ double tm3 = 0.0;
 __managed__ double tm4 = 0.0;
 
-struct cubic_coeff {
-	float a;
-	float b;
-	float c;
-	float d;
-};
-
 struct fixed4 {
 	fixed32 x;
 	fixed32 y;
@@ -228,46 +221,126 @@ __device__ inline void shared_reduce(float& number) {
 	}
 }
 
-inline __device__ void compute_pc_interaction(float dx, float dy, float dz, float m, const quadrupole& q, float& gx, float& gy, float& gz, float& phi) {
+
+__device__ void greens_function(array<float, 20> &D, float dx, float dy, float dz) {
 	const treepm_params& params = dev_treepm_params;
 	const float& twooversqrtpi = params.twooversqrtpi;
-	const float oneoversqrtpi = params.twooversqrtpi * 0.5f;
 	const float& inv2rs = params.inv2rs;
-	const float rcut2 = sqr(params.rcut);
 	const float r2 = sqr(dx, dy, dz);
-	if (r2 < rcut2) {
-		const float rinv = rsqrtf(r2);
-		const float r = r2 * rinv;
-		const float r0 = r * inv2rs;
-		float exp0;
-		const float erfc0 = erfcexp(r0, &exp0);
-		const float rinv2 = rinv * rinv;
-		const float rinv3 = rinv2 * rinv;
-		const float r02 = r0 * r0;
-		const float ntwor02rinv2 = -2.f * r02 * rinv2;
-		const float d0 = -erfc0 * rinv;
-		float e0 = (twooversqrtpi * r0 * exp0) * rinv3;
-		const float d1 = fmaf(-d0, rinv2, e0);
-		e0 *= ntwor02rinv2;
-		const float d2 = fmaf(-3.0f * d1, rinv2, e0);
-		e0 *= ntwor02rinv2;
-		const float d3 = fmaf(-5.0f * d2, rinv2, e0);
-		float qtr = 0.5f * (q.xx + q.yy + q.zz);
-		float qddx = 0.5f * (fmaf(q.xx, dx * dx, fmaf(q.yy, dy * dy, fmaf(q.zz, dz * dz, 2.f * fmaf(q.xy, dx * dy, fmaf(q.xz, dx * dz, q.yz * dy * dz))))));
-		gx -= m * dx * d1;
-		gy -= m * dy * d1;
-		gz -= m * dz * d1;
-		gx -= fmaf(qtr, dx, 0.5f * fmaf(q.xx, dx, fmaf(q.xy, dy, q.xz * dz))) * d2;
-		gy -= fmaf(qtr, dy, 0.5f * fmaf(q.xy, dx, fmaf(q.yy, dy, q.yz * dz))) * d2;
-		gz -= fmaf(qtr, dz, 0.5f * fmaf(q.xz, dx, fmaf(q.yz, dy, q.zz * dz))) * d2;
-		gx -= qddx * dx * d3;
-		gy -= qddx * dy * d3;
-		gz -= qddx * dz * d3;
-		phi -= m * d0;
-		if (params.do_phi) {
-			phi -= m * rinv;
-		}
+	const float rinv = rsqrtf(r2);
+	const float r = r2 * rinv;
+	const float r0 = r * inv2rs;
+	float exp0;
+	const float erfc0 = erfcexp(r0, &exp0);
+	const float r02 = r0 * r0;
+	const float c0 = -2.f * r * inv2rs* inv2rs;
+	const float d0 = -erfc0 * rinv;
+	float e0 = twooversqrtpi * exp0 * rinv * inv2rs;
+	const float d1 = fmaf(float(-1) * d0, rinv, e0);
+	e0 *= c0;
+	const float d2 = fmaf(float(-3) * d1, rinv, e0);
+	e0 *= c0;
+	const float d3 = fmaf(float(-5) * d2, rinv, e0);
+	e0 *= c0;
+	const float rinv0 = 1.f;
+	const float rinv1 = rinv;
+	const float Drinvpow_0_0 = d0 * rinv0;
+	const float Drinvpow_1_0 = d1 * rinv0;
+	const float Drinvpow_1_1 = d1 * rinv1;
+	const float Drinvpow_2_0 = d2 * rinv0;
+	const float Drinvpow_2_1 = d2 * rinv1;
+	const float Drinvpow_3_0 = d3 * rinv0;
+	array<float, NDIM> dxrinv;
+	dxrinv[0] = dx * rinv;
+	dxrinv[1] = dy * rinv;
+	dxrinv[2] = dz * rinv;
+	const float x000 = float(1);
+	const float& x100 = dxrinv[0];
+	const float& x010 = dxrinv[1];
+	const float& x001 = dxrinv[2];
+	const float x002 = x001 * x001;
+	const float x011 = x010 * x001;
+	const float x020 = x010 * x010;
+	const float x101 = x100 * x001;
+	const float x110 = x100 * x010;
+	const float x200 = x100 * x100;
+	const float x003 = x002 * x001;
+	const float x012 = x011 * x001;
+	const float x021 = x011 * x010;
+	const float x030 = x020 * x010;
+	const float x102 = x101 * x001;
+	const float x111 = x110 * x001;
+	const float x120 = x110 * x010;
+	const float x201 = x101 * x100;
+	const float x210 = x110 * x100;
+	const float x300 = x200 * x100;
+	float x_2_1_000 = x002;
+	float x_3_1_001 = x003;
+	float x_3_1_010 = x012;
+	float x_3_1_100 = x102;
+	x_2_1_000 += x020;
+	x_3_1_010 += x030;
+	x_2_1_000 += x200;
+	x_3_1_010 += x210;
+	x_3_1_001 += x021;
+	x_3_1_100 += x120;
+	x_3_1_001 += x201;
+	x_3_1_100 += x300;
+	x_2_1_000 *= Drinvpow_1_1;
+	x_3_1_001 *= Drinvpow_2_1;
+	x_3_1_010 *= Drinvpow_2_1;
+	x_3_1_100 *= Drinvpow_2_1;
+	D[1] = fmaf(x100, Drinvpow_1_0, D[1]);
+	D[0] = fmaf(x000, Drinvpow_0_0, D[0]);
+	D[10] = fmaf(float(3.00000000e+00), x_3_1_100, D[10]);
+	D[16] = fmaf(float(3.00000000e+00), x_3_1_010, D[16]);
+	D[10] = fmaf(x300, Drinvpow_3_0, D[10]);
+	D[16] = fmaf(x030, Drinvpow_3_0, D[16]);
+	D[11] += x_3_1_010;
+	D[17] += x_3_1_001;
+	D[11] = fmaf(x210, Drinvpow_3_0, D[11]);
+	D[17] = fmaf(x021, Drinvpow_3_0, D[17]);
+	D[12] += x_3_1_001;
+	D[7] += x_2_1_000;
+	D[12] = fmaf(x201, Drinvpow_3_0, D[12]);
+	D[7] = fmaf(x020, Drinvpow_2_0, D[7]);
+	D[4] += x_2_1_000;
+	D[18] += x_3_1_010;
+	D[4] = fmaf(x200, Drinvpow_2_0, D[4]);
+	D[18] = fmaf(x012, Drinvpow_3_0, D[18]);
+	D[13] += x_3_1_100;
+	D[8] = fmaf(x011, Drinvpow_2_0, D[8]);
+	D[13] = fmaf(x120, Drinvpow_3_0, D[13]);
+	D[2] = fmaf(x010, Drinvpow_1_0, D[2]);
+	D[14] = fmaf(x111, Drinvpow_3_0, D[14]);
+	D[19] = fmaf(float(3.00000000e+00), x_3_1_001, D[19]);
+	D[5] = fmaf(x110, Drinvpow_2_0, D[5]);
+	D[19] = fmaf(x003, Drinvpow_3_0, D[19]);
+	D[15] += x_3_1_100;
+	D[9] += x_2_1_000;
+	D[15] = fmaf(x102, Drinvpow_3_0, D[15]);
+	D[9] = fmaf(x002, Drinvpow_2_0, D[9]);
+	D[6] = fmaf(x101, Drinvpow_2_0, D[6]);
+	D[3] = fmaf(x001, Drinvpow_1_0, D[3]);
+}
+
+
+inline __device__ void compute_pc_interaction(float dx, float dy, float dz, const multipole& M, float& gx, float& gy, float& gz, float& phi) {
+	const treepm_params& params = dev_treepm_params;
+	array<float, GREENS_SIZE> D;
+	array<float, NDIM + 1> L;
+	for (int i = 0; i < GREENS_SIZE; i++) {
+		D[i] = 0.f;
 	}
+	for( int i = 0; i < NDIM + 1; i++) {
+		L[i] = 0.f;
+	}
+	greens_function(D, dx, dy, dz);
+	pc_interaction(L, M, D, params.do_phi);
+	gx -= L[1];
+	gy -= L[2];
+	gz -= L[3];
+	phi += L[0];
 }
 
 inline __device__ void compute_pp_interaction(float dx, float dy, float dz, float& gx, float& gy, float& gz, float& phi) {
@@ -337,12 +410,11 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 			const fixed32& src_x = tr.get_x(XDIM, srci);
 			const fixed32& src_y = tr.get_x(YDIM, srci);
 			const fixed32& src_z = tr.get_x(ZDIM, srci);
-			const float& m = tr.get_mass(srci);
-			const auto& q = tr.get_quadrupole(srci);
+			const auto& m = tr.get_multipole(srci);
 			const float dx = distance(sink_x, src_x);
 			const float dy = distance(sink_y, src_y);
 			const float dz = distance(sink_z, src_z);
-			compute_pc_interaction(dx, dy, dz, m, q, g[XDIM], g[YDIM], g[ZDIM], phi);
+			compute_pc_interaction(dx, dy, dz, m, g[XDIM], g[YDIM], g[ZDIM], phi);
 		}
 	}
 	__syncwarp();
@@ -362,12 +434,11 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 				const fixed32& src_x = tr.get_x(XDIM, srci);
 				const fixed32& src_y = tr.get_x(YDIM, srci);
 				const fixed32& src_z = tr.get_x(ZDIM, srci);
-				const float& m = tr.get_mass(srci);
-				const auto& q = tr.get_quadrupole(srci);
+				const auto& m = tr.get_multipole(srci);
 				const float dx = distance(sink_x, src_x);
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
-				compute_pc_interaction(dx, dy, dz, m, q, gx, gy, gz, phi);
+				compute_pc_interaction(dx, dy, dz, m, gx, gy, gz, phi);
 			}
 		}
 		shared_reduce(gx);

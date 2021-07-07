@@ -12,26 +12,16 @@
 #include <tigerpm/cuda.hpp>
 #include <tigerpm/fixed.hpp>
 #include <tigerpm/chainmesh.hpp>
+#include <tigerpm/pckernels.hpp>
 
-struct quadrupole {
-	float xx;
-	float xy;
-	float xz;
-	float yy;
-	float yz;
-	float zz;
-};
 
 struct tree_node {
 	array<fixed32, NDIM> x;
-	float mass;
 	float radius;
 	array<int, NCHILD> children;
 	int pbegin;
 	int pend;
-#ifdef USE_QUADRUPOLE
-	quadrupole q;
-#endif
+	multipole multi;
 };
 
 struct sink_bucket {
@@ -71,14 +61,11 @@ public:
 	CUDA_EXPORT inline int get_pend(int i) const {
 		return nodes[i].pend;
 	}
-#ifdef USE_QUADRUPOLE
-	CUDA_EXPORT inline quadrupole get_quadrupole(int i) const {
-		return nodes[i].q;
+	CUDA_EXPORT inline multipole get_multipole(int i) const {
+		return nodes[i].multi;
 	}
-#endif
-	CUDA_EXPORT inline
-	float get_mass(int i) const {
-		return nodes[i].mass;
+	CUDA_EXPORT inline float get_mass(int i) const {
+		return nodes[i].multi[0];
 	}
 	CUDA_EXPORT inline
 	float is_leaf(int i) const {
