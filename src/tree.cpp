@@ -207,7 +207,7 @@ tree::tree(tree && other) {
 
 tree tree::to_device(cudaStream_t stream) const {
 	tree t;
-	CUDA_CHECK(cudaMalloc(&t.nodes, sizeof(tree_node) * sz));
+	CUDA_CHECK(cudaMallocAsync(&t.nodes, sizeof(tree_node) * sz, stream));
 	CUDA_CHECK(cudaMemcpyAsync(t.nodes, nodes, sizeof(tree_node) * sz, cudaMemcpyHostToDevice, stream));
 	t.sz = t.cap = sz;
 	t.device = true;

@@ -976,7 +976,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		for (int j = 0; j < vol; j++) {
 			bucket_count.push_back(buckets[j].size());
 			sink_bucket* bucket;
-			CUDA_CHECK(cudaMalloc(&bucket, sizeof(sink_bucket) * buckets[j].size()));
+			CUDA_CHECK(cudaMallocAsync(&bucket, sizeof(sink_bucket) * buckets[j].size(),stream));
 			CUDA_CHECK(cudaMemcpyAsync(bucket, buckets[j].data(), sizeof(sink_bucket) * buckets[j].size(), cudaMemcpyHostToDevice, stream));
 			dev_buckets.push_back(bucket);
 		}
@@ -988,7 +988,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-		PRINT("%e\n", tm.read());
+		PRINT("Transfer time %e\n", tm.read());
 		tm.reset();
 		tm.start();
 		PRINT("Launching kernel\n");
