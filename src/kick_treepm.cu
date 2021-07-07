@@ -208,16 +208,16 @@ __device__ int compute_indices(array<int, TREEPM_BLOCK_SIZE>& index) {
 	const int& tid = threadIdx.x;
 	for (int P = 1; P < TREEPM_BLOCK_SIZE; P *= 2) {
 		int tmp;
-		__syncthreads();
+		__syncwarp();
 		if (tid >= P) {
 			tmp = index[tid - P];
 		}
-		__syncthreads();
+		__syncwarp();
 		if (tid >= P) {
 			index[tid] += tmp;
 		}
 	}
-	__syncthreads();
+	__syncwarp();
 	return (tid > 0 ? index[tid - 1] : 0);
 
 }
@@ -343,7 +343,7 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 			compute_pc_interaction(dx, dy, dz, m, q, g[XDIM], g[YDIM], g[ZDIM], phi);
 		}
 	}
-	__syncthreads();
+	__syncwarp();
 	for (int sink_index = mid_index; sink_index < nactive; sink_index++) {
 		float phi = 0.f;
 		float gx = 0.f;
@@ -380,7 +380,7 @@ __device__ void gravity_short_pc(tree& tr, int* list, int list_size, int nactive
 				shmem.phi[sink_index] += phi;
 			}
 		}
-		__syncthreads();
+		__syncwarp();
 	}
 	atomicAdd(&Npc, (double) N);
 
@@ -397,7 +397,7 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 	auto these_parts_begin = tr.get_pbegin(list[i]);
 	auto these_parts_end = tr.get_pend(list[i]);
 	while (i < list_size) {
-		__syncthreads();
+		__syncwarp();
 		part_index = 0;
 		while (part_index < KICK_PP_MAX && i < list_size) {
 			while (i + 1 < list_size) {
@@ -453,7 +453,7 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 				compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
 			}
 		}
-		__syncthreads();
+		__syncwarp();
 		for (int sink_index = mid_index; sink_index < nactive; sink_index++) {
 			float phi = 0.0f;
 			array<float, NDIM> g;
@@ -507,7 +507,7 @@ __global__ void kick_treepm_kernel() {
 			const auto& bucket = buckets[bi];
 			const auto& snk_begin = bucket.snk_begin;
 			const auto& snk_end = bucket.snk_end;
-			__syncthreads();
+			__syncwarp();
 			const int nsinks = snk_end - snk_begin;
 			const int imax = round_up(nsinks, TREEPM_BLOCK_SIZE);
 			int nactive = 0;
@@ -530,7 +530,7 @@ __global__ void kick_treepm_kernel() {
 				shmem.x[active_index] = params.x[that_index];
 				shmem.y[active_index] = params.y[that_index];
 				shmem.z[active_index] = params.z[that_index];
-				__syncthreads();
+				__syncwarp();
 			}
 
 			for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
@@ -579,10 +579,10 @@ __global__ void kick_treepm_kernel() {
 					dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
 					dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
 				}
-				for (int dim1 = 0; dim1 < NDIM; dim1++) {
 					for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
 						for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
 							for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+								for (int dim1 = 0; dim1 < NDIM; dim1++) {
 								double w0 = 1.0;
 								for (int dim2 = 0; dim2 < NDIM; dim2++) {
 									const int i0 = J[dim2] - I[dim2];
@@ -676,7 +676,7 @@ __global__ void kick_treepm_kernel() {
 							multilist[this_index] = index;
 						}
 						multi_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
-						__syncthreads();
+						__syncwarp();
 
 						shmem.index[tid] = partb;
 						this_index = compute_indices(shmem.index) + part_size;
@@ -689,7 +689,7 @@ __global__ void kick_treepm_kernel() {
 							partlist[this_index] = index;
 						}
 						part_size += shmem.index[TREEPM_BLOCK_SIZE - 1];
-						__syncthreads();
+						__syncwarp();
 
 						shmem.index[tid] = nextb;
 						this_index = compute_indices(shmem.index);
@@ -704,7 +704,7 @@ __global__ void kick_treepm_kernel() {
 							nextlist[next_size + 2 * this_index + 1] = children[1];
 						}
 						next_size += 2 * shmem.index[TREEPM_BLOCK_SIZE - 1];
-						__syncthreads();
+						__syncwarp();
 
 					}
 					auto tmp1 = nextlist;
