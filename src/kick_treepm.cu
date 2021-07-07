@@ -303,7 +303,7 @@ inline __device__ void compute_pp_interaction(float dx, float dy, float dz, floa
 				d0 = fmaf(d0, q2, -35.0f / 16.0f);
 				d0 = fmaf(d0, q2, 35.0f / 16.0f);
 				d0 *= hinv;
-				rinv = (erfc0 - 1.0f) * erfc0 + d0;
+				rinv = (erfc0 - 1.0f) * rinv + d0;
 			}
 		}
 		gx -= dx * rinv3;
