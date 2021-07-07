@@ -33,7 +33,7 @@
 #define MAX_RUNG 32
 #define NINTERP 6
 #define NCELLS 27
-#define KICK_PP_MAX (8*32)
+#define KICK_PP_MAX (2*32)
 
 
 #define NCHILD 2
