@@ -257,9 +257,9 @@ inline __device__ void compute_pc_interaction(float dx, float dy, float dz, floa
 		gx -= m * dx * d1;
 		gy -= m * dy * d1;
 		gz -= m * dz * d1;
-		gx -= fmaf(qtr, dx, fmaf(q.xx, dx, fmaf(q.xy, dy, q.xz * dz))) * d2;
-		gy -= fmaf(qtr, dy, fmaf(q.xy, dx, fmaf(q.yy, dy, q.yz * dz))) * d2;
-		gz -= fmaf(qtr, dz, fmaf(q.xz, dx, fmaf(q.yz, dy, q.zz * dz))) * d2;
+		gx -= fmaf(qtr, dx, 0.5f * fmaf(q.xx, dx, fmaf(q.xy, dy, q.xz * dz))) * d2;
+		gy -= fmaf(qtr, dy, 0.5f * fmaf(q.xy, dx, fmaf(q.yy, dy, q.yz * dz))) * d2;
+		gz -= fmaf(qtr, dz, 0.5f * fmaf(q.xz, dx, fmaf(q.yz, dy, q.zz * dz))) * d2;
 		gx -= qddx * dx * d3;
 		gy -= qddx * dy * d3;
 		gz -= qddx * dz * d3;
