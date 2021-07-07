@@ -153,8 +153,6 @@ tree::~tree() {
 	if (nodes) {
 		if (!device) {
 			delete[] nodes;
-		} else {
-			CUDA_CHECK(cudaFree(nodes));
 		}
 	}
 }
@@ -185,7 +183,7 @@ tree & tree::operator=(tree && other) {
 		if (!device) {
 			delete[] nodes;
 		} else {
-			CUDA_CHECK(cudaFree(nodes));
+			assert(false);
 		}
 	}
 	nodes = other.nodes;
@@ -205,10 +203,8 @@ tree::tree(tree && other) {
 	*this = std::move(other);
 }
 
-tree tree::to_device(cudaStream_t stream) const {
+tree tree::to_device() const {
 	tree t;
-	CUDA_CHECK(cudaMallocAsync(&t.nodes, sizeof(tree_node) * sz, stream));
-	CUDA_CHECK(cudaMemcpyAsync(t.nodes, nodes, sizeof(tree_node) * sz, cudaMemcpyHostToDevice, stream));
 	t.sz = t.cap = sz;
 	t.device = true;
 	return t;

@@ -44,14 +44,14 @@ struct sink_bucket {
 };
 
 class tree {
+public:
 	tree_node* nodes;
 	int sz;
 	int cap;
 	bool device;
 	void resize(int new_size);
-public:
 	size_t size() const {
-		return sz * sizeof(tree_node) + sizeof(tree);
+		return sz;
 	}
 	tree();
 	~tree();
@@ -59,7 +59,7 @@ public:
 	tree & operator=(tree && other);
 	tree(const tree& other);
 	tree(tree && other);
-	tree to_device(cudaStream_t stream) const;
+	tree to_device() const;
 	int allocate();
 	CUDA_EXPORT inline
 	fixed32 get_x(int dim, int i) const {

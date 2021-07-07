@@ -777,6 +777,8 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 			for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
 				auto this_cell = chainmesh_get(i);
 				nsources += this_cell.pend - this_cell.pbegin;
+				const int index = bigbox.index(i);
+				tree_size += trees[index].size() * sizeof(tree_node) + sizeof(tree);
 			}
 		}
 	}
@@ -786,7 +788,6 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 				auto this_cell = chainmesh_get(i);
 				nsinks += this_cell.pend - this_cell.pbegin;
 				const int index = box.index(i);
-				tree_size += trees[index].size();
 				bucket_count += buckets[index].size();
 				buckets_size += sizeof(sink_bucket) * buckets[index].size();
 			}
@@ -907,10 +908,25 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 			copies.push_back(cpy);
 			count += this_size;
 		}
+
+		vector<tree_node> all_trees;
+		tree_node* dev_all_trees;
+		count = 0;
+		size_t trees_size = 0;
+		for (int j = 0; j < bigvol; j++) {
+			trees_size += trees[j].size();
+		}
+		all_trees.resize(trees_size);
+		CUDA_CHECK(cudaMallocAsync(&dev_all_trees, sizeof(tree_node) * trees_size, stream));
+		count = 0;
 		vector<tree> dev_trees(bigvol);
 		for (int j = 0; j < bigvol; j++) {
-			dev_trees[j] = trees[j].to_device(stream);
+			dev_trees[j] = trees[j].to_device();
+			dev_trees[j].nodes = dev_all_trees + count;
+			std::memcpy(all_trees.data() + count, trees[j].nodes, sizeof(tree_node) * trees[j].size());
+			count += dev_trees[j].size();
 		}
+		CUDA_CHECK(cudaMemcpyAsync(dev_all_trees, all_trees.data(), trees_size * sizeof(tree_node), cudaMemcpyHostToDevice));
 		count = 0;
 		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
 			for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
@@ -973,13 +989,23 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		vector<int> bucket_count;
 		timer tmer;
 		tmer.start();
+		size_t buckets_size = 0;
+		for (int j = 0; j < vol; j++) {
+			buckets_size += buckets[j].size();
+		}
+		vector<sink_bucket> all_buckets(buckets_size);
+		sink_bucket* dev_all_buckets;
+		count = 0;
+		CUDA_CHECK(cudaMallocAsync(&dev_all_buckets, sizeof(sink_bucket) * buckets_size, stream));
 		for (int j = 0; j < vol; j++) {
 			bucket_count.push_back(buckets[j].size());
-			sink_bucket* bucket;
-			CUDA_CHECK(cudaMallocAsync(&bucket, sizeof(sink_bucket) * buckets[j].size(),stream));
-			CUDA_CHECK(cudaMemcpyAsync(bucket, buckets[j].data(), sizeof(sink_bucket) * buckets[j].size(), cudaMemcpyHostToDevice, stream));
-			dev_buckets.push_back(bucket);
+			sink_bucket* bucket = all_buckets.data() + count;
+			std::memcpy(bucket, buckets[j].data(), sizeof(sink_bucket) * buckets[j].size());
+			dev_buckets.push_back(dev_all_buckets + count);
+			count += buckets[j].size();
 		}
+
+		CUDA_CHECK(cudaMemcpyAsync(dev_all_buckets, all_buckets.data(), sizeof(sink_bucket) * buckets_size, cudaMemcpyHostToDevice, stream));
 		tmer.stop();
 		PRINT("bucket time = %e\n", tmer.read());
 		CUDA_CHECK(cudaMemcpyAsync(params.bucket_cnt, bucket_count.data(), sizeof(int) * vol, cudaMemcpyHostToDevice, stream));
@@ -1049,10 +1075,9 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		params.free();
 		free(dev_tree_neighbors);
 		CUDA_CHECK(cudaStreamDestroy(stream));
+		CUDA_CHECK(cudaFree(dev_all_buckets));
+		CUDA_CHECK(cudaFree(dev_all_trees));
 		tm.stop();
-		for (int j = 0; j < vol; j++) {
-			CUDA_CHECK(cudaFree(dev_buckets[j]));
-		}
 		PRINT("PP per particle = %e\n", Npp / (double ) particles_size());
 		PRINT("PC per particle = %e\n", Npc / (double ) particles_size());
 		PRINT("%e\n", tm.read());
