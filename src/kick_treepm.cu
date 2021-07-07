@@ -250,17 +250,17 @@ inline __device__ void compute_pc_interaction(float dx, float dy, float dz, floa
 		const float d2 = fmaf(-3.0f * d1, rinv2, e0);
 		e0 *= ntwor02rinv2;
 		const float d3 = fmaf(-5.0f * d2, rinv2, e0);
-		float qtr = q.xx + q.yy + q.zz;
-		float qddx = q.xx * dx * dx + q.yy * dy * dy + q.zz * dz * dz + 2.f * q.xy * dx * dy + 2.f * q.xz * dx * dz + 2.f * q.yz * dy * dz;
+		float qtr = 0.5f * (q.xx + q.yy + q.zz);
+		float qddx = 0.5f * (fmaf(q.xx, dx * dx, fmaf(q.yy, dy * dy, fmaf(q.zz, dz * dz, 2.f * fmaf(q.xy, dx * dy,  fmaf(q.xz, dx * dz, q.yz * dy * dz))))));
 		gx -= m * dx * d1;
 		gy -= m * dy * d1;
 		gz -= m * dz * d1;
-		gx -= (0.5f * qtr * dx + q.xx * dx + q.xy * dy + q.xz * dz) * d2;
-		gy -= (0.5f * qtr * dy + q.xy * dx + q.yy * dy + q.yz * dz) * d2;
-		gz -= (0.5f * qtr * dz + q.xz * dx + q.yz * dy + q.zz * dz) * d2;
-		gx -= 0.5f * qddx * dx * d3;
-		gy -= 0.5f * qddx * dy * d3;
-		gz -= 0.5f * qddx * dz * d3;
+		gx -= fmaf(qtr, dx, fmaf(q.xx, dx, fmaf(q.xy, dy, q.xz * dz))) * d2;
+		gy -= fmaf(qtr, dy, fmaf(q.xy, dx, fmaf(q.yy, dy, q.yz * dz))) * d2;
+		gz -= fmaf(qtr, dz, fmaf(q.xz, dx, fmaf(q.yz, dy, q.zz * dz))) * d2;
+		gx -= qddx * dx * d3;
+		gy -= qddx * dy * d3;
+		gz -= qddx * dz * d3;
 		phi -= m * d0;
 		if (params.do_phi) {
 			phi -= m * rinv;
