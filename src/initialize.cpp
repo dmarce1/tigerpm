@@ -1,6 +1,11 @@
 #include <tigerpm/initialize.hpp>
 #include <tigerpm/options.hpp>
+#include <tigerpm/fft.hpp>
+#include <tigerpm/hpx.hpp>
 #include <tigerpm/util.hpp>
+#include <tigerpm/particles.hpp>
+
+#include <gsl/gsl_rng.h>
 
 struct power_spectrum_function {
 	vector<float> P;
@@ -51,13 +56,119 @@ struct power_spectrum_function {
 			sum += (2.0 / 3.0) * sigma8_integrand(logk) * dlogk;
 		}
 		sum = sqr(get_options().sigma8) / sum;
-		PRINT( "%e\n", sum);
-		for( int i = 0; i < P.size(); i++) {
+		for (int i = 0; i < P.size(); i++) {
 			P[i] *= sum;
 		}
 	}
 
 };
+
+static void zeldovich_begin(int dim);
+static float zeldovich_end(int dim);
+static power_spectrum_function read_power_spectrum();
+
+HPX_PLAIN_ACTION(zeldovich_begin);
+HPX_PLAIN_ACTION(zeldovich_end);
+
+double growth_factor(double omega_m, float a) {
+	const double omega_l = 1.f - omega_m;
+	const double a3 = a * sqr(a);
+	const double deninv = 1.f / (omega_m + a3 * omega_l);
+	const double Om = omega_m * deninv;
+	const double Ol = a3 * omega_l * deninv;
+	return a * 2.5 * Om / (pow(Om, 4.f / 7.f) - Ol + (1.f + 0.5f * Om) * (1.f + 0.014285714f * Ol));
+}
+
+inline cmplx expc(cmplx z) {
+	float x, y;
+	float t = std::exp(z.real());
+	sincosf(z.imag(), &y, &x);
+	x *= t;
+	y *= t;
+	return cmplx(x, y);
+}
+
+static void zeldovich_begin(int dim) {
+	const int N = get_options().parts_dim;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	vector<cmplx> Y;
+	vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async<zeldovich_begin_action>(c, dim));
+	}
+	auto power = read_power_spectrum();
+	const auto box = fft3d_complex_range();
+	Y.resize(box.volume());
+	array<int, NDIM> I;
+	const int seed = 4321 * hpx_size() + hpx_rank() + 42;
+	gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
+	gsl_rng_set(rndgen, seed);
+	const float factor = std::pow(box_size, -1.5) * N * N * N;
+	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+		const int i = I[0] < N / 2 ? I[0] : I[0] - N;
+		const float kx = 2.f * (float) M_PI / box_size * float(i);
+		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+			const int j = I[1] < N / 2 ? I[1] : I[1] - N;
+			const float ky = 2.f * (float) M_PI / box_size * float(j);
+			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+				const int k = I[2] < N / 2 ? I[2] : I[2] - N;
+				const int i2 = sqr(i, j, k);
+				const int index = box.index(I);
+				if (i2 > 0 && i2 < N * N / 4) {
+					const float kz = 2.f * (float) M_PI / box_size * float(k);
+					const float k2 = kx * kx + ky * ky + kz * kz;
+					const float k = sqrtf(kx * kx + ky * ky + kz * kz);
+					const float x = gsl_rng_uniform(rndgen);
+					const float y = gsl_rng_uniform(rndgen);
+					const float K[NDIM] = { kx, ky, kz };
+					const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * std::sqrt(-std::log(std::abs(x)));
+					Y[index] = rand_normal * std::sqrt(power(k)) * factor * K[dim] / k2;
+				} else {
+					Y[index] = cmplx(0.f, 0.f);
+				}
+			}
+		}
+	}
+	gsl_rng_free(rndgen);
+	fft3d_accumulate_complex(box, std::move(Y));
+	hpx::wait_all(futs.begin(), futs.end());
+
+}
+
+static float zeldovich_end(int dim) {
+	float dxmax = 0.0;
+	const int N = get_options().parts_dim;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const float omega_m = get_options().omega_m;
+	const float a0 = 1.0 / (get_options().z0 + 1.0);
+	const auto box = fft3d_real_range();
+	vector<hpx::future<float>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async<zeldovich_end_action>(c, dim));
+	}
+	const auto Y = fft3d_read_real(box);
+	const float D1 = growth_factor(omega_m, a0) / growth_factor(omega_m, 1.0);
+	if (dim == 0) {
+		particles_resize(box.volume());
+	}
+	array<int, NDIM> I;
+	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+				const float x = (I[dim] + 0.5) / N;
+				const int index = box.index(I);
+				const float dx = -D1 * Y[index] / box_size;
+				dxmax = std::max(dxmax, std::abs(dx * N));
+				particles_pos(dim, index) = x + dx;
+			}
+		}
+	}
+	for (auto& f : futs) {
+		dxmax = std::max(dxmax, f.get());
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	return dxmax;
+}
 
 static power_spectrum_function read_power_spectrum() {
 	power_spectrum_function func;
@@ -86,12 +197,19 @@ static power_spectrum_function read_power_spectrum() {
 	func.dlogk = (func.logkmax - func.logkmin) / (func.P.size() - 1);
 	fclose(fp);
 	func.normalize();
-	func.normalize();
-	func.normalize();
 	return func;
 }
 
 void initialize() {
-	auto power = read_power_spectrum();
+	const int N = get_options().parts_dim;
+	for (int dim = 0; dim < NDIM; dim++) {
+		fft3d_init(N);
+		zeldovich_begin(dim);
+		fft3d_force_real();
+		fft3d_inv_execute();
+		float dxmax = zeldovich_end(dim);
+		fft3d_destroy();
+		PRINT( "%e\n", dxmax);
 
+	}
 }

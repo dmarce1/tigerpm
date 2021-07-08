@@ -94,6 +94,7 @@ void fft3d_force_real() {
 	range<int> mirror_box = box;
 	range<int> slim_box = box;
 	slim_box.end[ZDIM] = 1;
+	ym.resize(slim_box.volume());
 	mirror_box.end[ZDIM] = 1;
 	for (int dim = 0; dim < NDIM - 1; dim++) {
 		mirror_box.begin[dim] = N - box.end[dim];
@@ -123,6 +124,10 @@ void fft3d_force_real() {
 
 range<int> fft3d_complex_range() {
 	return cmplx_mybox[ZDIM];
+}
+
+range<int> fft3d_real_range() {
+	return real_mybox;
 }
 
 vector<cmplx>& fft3d_complex_vector() {
@@ -388,6 +393,7 @@ void fft3d_init(int N_) {
 		find_boxes(box, cmplx_boxes[dim], 0, hpx_size());
 		cmplx_mybox[dim] = cmplx_boxes[dim][hpx_rank()];
 	}
+	Y.resize(cmplx_mybox[ZDIM].volume(), cmplx(0.0,0.0));
 	mutexes.resize(N * N);
 	for (int i = 0; i < N * N; i++) {
 		mutexes[i] = std::make_shared<spinlock_type>();

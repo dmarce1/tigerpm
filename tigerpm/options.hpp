@@ -20,6 +20,8 @@ struct options {
 	double hsoft;
 	double box_size;
 	double rs;
+	double omega_m;
+	double z0;
 
 	std::string config_file;
 	std::string test;
@@ -41,6 +43,8 @@ struct options {
 		arc & box_size;
 		arc & config_file;
 		arc & test;
+		arc & omega_m;
+		arc & z0;
 	}
 };
 

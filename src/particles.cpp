@@ -125,7 +125,7 @@ void particles_random_init() {
 				}
 			}
 			gsl_rng_free(rndgen);
-		}));
+			}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 

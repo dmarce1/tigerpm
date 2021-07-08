@@ -92,6 +92,8 @@ bool process_options(int argc, char *argv[]) {
 	opts.hubble = 0.7;
 	opts.sigma8 = 0.84;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
+	opts.omega_m = 0.3;
+	opts.z0 = 50.0;
 
 
 

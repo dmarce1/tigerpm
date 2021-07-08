@@ -22,6 +22,7 @@ void fft3d_accumulate_complex(const range<int>&, const vector<cmplx>&);
 void fft3d_destroy();
 void fft3d_force_real();
 range<int> fft3d_complex_range();
+range<int> fft3d_real_range();
 vector<cmplx>& fft3d_complex_vector();
 
 #endif /* FFT_HPP_ */
