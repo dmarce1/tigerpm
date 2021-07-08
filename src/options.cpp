@@ -87,7 +87,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
 	opts.rs = 1.0 / opts.four_dim;
 	opts.GM = 1.0;
-	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
+	opts.hsoft = 2.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);
 	opts.hubble = 0.7;
 	opts.sigma8 = 0.84;
