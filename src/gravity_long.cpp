@@ -124,6 +124,16 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	return std::make_pair((float) phi0, gret);
 }
 
+static double tsc(double x) {
+	if (std::abs(x) < 0.5) {
+		return 0.75 - sqr(x);
+	} else if (std::abs(x) < 1.5) {
+		return 0.5 * sqr(1.5 - std::abs(x));
+	} else {
+		return 0.0;
+	}
+}
+
 void compute_source() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -155,36 +165,64 @@ void compute_source() {
 				const double x = particles_pos(0, i).to_double();
 				const double y = particles_pos(1, i).to_double();
 				const double z = particles_pos(2, i).to_double();
-				const int i0 = x * N;
-				const int j0 = y * N;
-				const int k0 = z * N;
-				const int i1 = i0 + 1;
-				const int j1 = j0 + 1;
-				const int k1 = k0 + 1;
-				const double w1x = x * N - i0;
-				const double w1y = y * N - j0;
-				const double w1z = z * N - k0;
-				const double w0x = 1.0 - w1x;
-				const double w0y = 1.0 - w1y;
-				const double w0z = 1.0 - w1z;
-				const double w1yw1z = w1y * w1z;
-				const double w0yw1z = w0y * w1z;
-				const double w1yw0z = w1y * w0z;
-				const double w0yw0z = w0y * w0z;
+				const int i1 = x * N + 0.5;
+				const int j1 = y * N + 0.5;
+				const int k1 = z * N + 0.5;
+				const int i2 = i1 + 1;
+				const int j2 = j1 + 1;
+				const int k2 = k1 + 1;
+				const int i0 = i1 - 1;
+				const int j0 = j1 - 1;
+				const int k0 = k1 - 1;
+				const double xN = x * N;
+				const double yN = y * N;
+				const double zN = z * N;
+				const double w0x = tsc(xN - i0);
+				const double w0y = tsc(yN - j0);
+				const double w0z = tsc(zN - k0);
+				const double w1x = tsc(xN - i1);
+				const double w1y = tsc(yN - j1);
+				const double w1z = tsc(zN - k1);
+				const double w2x = tsc(xN - i2);
+				const double w2y = tsc(yN - j2);
+				const double w2z = tsc(zN - k2);
 				const double c0 = 4.0 * M_PI * N;
+
 				{
 					std::lock_guard<spinlock_type> lock(*mutexes[i0 - source_box.begin[XDIM]]);
-					source[source_box.index(i0, j0, k0)] += c0 * w0x * w0yw0z;
-					source[source_box.index(i0, j0, k1)] += c0 * w0x * w0yw1z;
-					source[source_box.index(i0, j1, k0)] += c0 * w0x * w1yw0z;
-					source[source_box.index(i0, j1, k1)] += c0 * w0x * w1yw1z;
+					source[source_box.index(i0, j0, k0)] += c0 * w0x * w0y * w0z;
+					source[source_box.index(i0, j0, k1)] += c0 * w0x * w0y * w1z;
+					source[source_box.index(i0, j0, k2)] += c0 * w0x * w0y * w2z;
+					source[source_box.index(i0, j1, k0)] += c0 * w0x * w1y * w0z;
+					source[source_box.index(i0, j1, k1)] += c0 * w0x * w1y * w1z;
+					source[source_box.index(i0, j1, k2)] += c0 * w0x * w1y * w2z;
+					source[source_box.index(i0, j2, k0)] += c0 * w0x * w2y * w0z;
+					source[source_box.index(i0, j2, k1)] += c0 * w0x * w2y * w1z;
+					source[source_box.index(i0, j2, k2)] += c0 * w0x * w2y * w2z;
 				}
 				{
 					std::lock_guard<spinlock_type> lock(*mutexes[i1 - source_box.begin[XDIM]]);
-					source[source_box.index(i1, j0, k0)] += c0 * w1x * w0yw0z;
-					source[source_box.index(i1, j0, k1)] += c0 * w1x * w0yw1z;
-					source[source_box.index(i1, j1, k0)] += c0 * w1x * w1yw0z;
-					source[source_box.index(i1, j1, k1)] += c0 * w1x * w1yw1z;
+					source[source_box.index(i1, j0, k0)] += c0 * w1x * w0y * w0z;
+					source[source_box.index(i1, j0, k1)] += c0 * w1x * w0y * w1z;
+					source[source_box.index(i1, j0, k2)] += c0 * w1x * w0y * w2z;
+					source[source_box.index(i1, j1, k0)] += c0 * w1x * w1y * w0z;
+					source[source_box.index(i1, j1, k1)] += c0 * w1x * w1y * w1z;
+					source[source_box.index(i1, j1, k2)] += c0 * w1x * w1y * w2z;
+					source[source_box.index(i1, j2, k0)] += c0 * w1x * w2y * w0z;
+					source[source_box.index(i1, j2, k1)] += c0 * w1x * w2y * w1z;
+					source[source_box.index(i1, j2, k2)] += c0 * w1x * w2y * w2z;
+				}
+				{
+					std::lock_guard<spinlock_type> lock(*mutexes[i2 - source_box.begin[XDIM]]);
+					source[source_box.index(i2, j0, k0)] += c0 * w2x * w0y * w0z;
+					source[source_box.index(i2, j0, k1)] += c0 * w2x * w0y * w1z;
+					source[source_box.index(i2, j0, k2)] += c0 * w2x * w0y * w2z;
+					source[source_box.index(i2, j1, k0)] += c0 * w2x * w1y * w0z;
+					source[source_box.index(i2, j1, k1)] += c0 * w2x * w1y * w1z;
+					source[source_box.index(i2, j1, k2)] += c0 * w2x * w1y * w2z;
+					source[source_box.index(i2, j2, k0)] += c0 * w2x * w2y * w0z;
+					source[source_box.index(i2, j2, k1)] += c0 * w2x * w2y * w1z;
+					source[source_box.index(i2, j2, k2)] += c0 * w2x * w2y * w2z;
 				}
 			}
 		}));
@@ -206,6 +244,7 @@ void apply_laplacian(gravity_long_type type) {
 	array<double, NDIM> k;
 	auto& Y = fft3d_complex_vector();
 	const double c0 = 2.0 * M_PI / N;
+	const double dx = 1.0;
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
 		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
 			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
@@ -213,11 +252,11 @@ void apply_laplacian(gravity_long_type type) {
 					k[dim] = i[dim] < N / 2 ? i[dim] : i[dim] - N;
 					k[dim] *= c0;
 				}
-				const double cosnk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
+	//			const double cosnk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
 				const double nk2 = -sqr(k[0], k[1], k[2]);
 				const int index = box.index(i);
 				if (nk2 < 0.0) {
-					const double nk2inv = 1.0 / cosnk2;
+					const double nk2inv = 1.0 / nk2;
 					Y[index] *= float(nk2inv);
 				} else {
 					Y[index] *= 0.0;
@@ -225,6 +264,12 @@ void apply_laplacian(gravity_long_type type) {
 				if (type == GRAVITY_LONG_PME) {
 					Y[index] *= exp(nk2 * rs2);
 				}
+				const double cic_x = std::pow(sinc(0.5 * k[0] * dx), 3);
+				const double cic_y = std::pow(sinc(0.5 * k[1] * dx), 3);
+				const double cic_z = std::pow(sinc(0.5 * k[2] * dx), 3);
+				const double cic = cic_x * cic_y * cic_z;
+				//	PRINT( "%e\n", cic);
+				Y[index] *= 1.0 / cic;
 			}
 		}
 	}

@@ -155,11 +155,17 @@ static float zeldovich_end(int dim) {
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-				const float x = (I[dim] + 0.5) / N;
+				float x = (I[dim] + 0.5) / N;
 				const int index = box.index(I);
 				const float dx = -D1 * Y[index] / box_size;
 				dxmax = std::max(dxmax, std::abs(dx * N));
-				particles_pos(dim, index) = x + dx;
+				x += dx;
+				if (x >= 1.0) {
+					x -= 1.0;
+				} else if (x < 0.0) {
+					x += 1.0;
+				}
+				particles_pos(dim, index) = x;
 			}
 		}
 	}
@@ -209,7 +215,7 @@ void initialize() {
 		fft3d_inv_execute();
 		float dxmax = zeldovich_end(dim);
 		fft3d_destroy();
-		PRINT( "%e\n", dxmax);
+		PRINT("%e\n", dxmax);
 
 	}
 }

@@ -232,7 +232,7 @@ static void kick_pme_test() {
 
 static void kick_treepm_test() {
 	timer tm;
-	particles_random_init();
+	initialize();
 
 	PRINT("DOMAIN SORT\n");
 	tm.start();

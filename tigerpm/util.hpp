@@ -79,3 +79,10 @@ CUDA_EXPORT inline fixed32 load(fixed32* number) {
 #endif
 }
 
+inline double sinc(double x) {
+	if( x != 0.0 ) {
+		return std::sin(x) / x;
+	} else {
+		return 1.0;
+	}
+}

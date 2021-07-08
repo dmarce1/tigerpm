@@ -39,8 +39,8 @@ struct sink_cell {
 	array<int, NDIM> loc;
 };
 
-#define WORKSPACE_SIZE  1024
-#define INTERSPACE_SIZE (2 * TREEPM_BLOCK_SIZE * SOURCE_BUCKET_SIZE)
+#define WORKSPACE_SIZE  (4*1024)
+#define INTERSPACE_SIZE (8*1024)
 
 struct treepm_params {
 	fixed32* x;
@@ -892,7 +892,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.7;
+		params.theta = 0.4;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
