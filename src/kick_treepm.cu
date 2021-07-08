@@ -70,6 +70,7 @@ struct treepm_params {
 	float scale;
 	float hsoft;
 	float inv2rs;
+	float phi0;
 	float twooversqrtpi;
 	float h2;
 	float hinv;
@@ -602,7 +603,7 @@ __global__ void kick_treepm_kernel() {
 				array<float, NDIM>& g = shmem.g[sink_index];
 				float& phi = shmem.phi[sink_index];
 				g[0] = g[1] = g[2] = 0.f;
-				phi = -SELF_PHI * params.hinv;
+				phi = params.phi0;
 				const fixed32 sink_x = shmem.x[sink_index];
 				const fixed32 sink_y = shmem.y[sink_index];
 				const fixed32 sink_z = shmem.z[sink_index];
@@ -661,7 +662,7 @@ __global__ void kick_treepm_kernel() {
 							g[2] -= w0 * phi1;
 							if (params.do_phi) {
 								w0 = w[0][i0] * w[1][i1] * w[2][i2];
-								phi -= w0 * phi0;
+								phi += w0 * phi0;
 							}
 						}
 					}
@@ -891,11 +892,13 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.4;
+		params.theta = 0.8;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
 		params.rcut = 1.0 / get_options().chain_dim;
+		params.hsoft = get_options().hsoft;
+		params.phi0 = std::pow(get_options().parts_dim,NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
 		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
 		params.GM = get_options().GM;
 		params.Nfour = get_options().four_dim;
@@ -904,7 +907,6 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		params.first_call = first_call;
 		params.t0 = t0;
 		params.scale = scale;
-		params.hsoft = get_options().hsoft;
 		params.inv2rs = 1.0f / params.rs / 2.0f;
 		params.twooversqrtpi = 2.0f / sqrtf(M_PI);
 		params.h2 = sqr(params.hsoft);
