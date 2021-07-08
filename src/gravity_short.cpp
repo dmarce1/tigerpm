@@ -43,62 +43,40 @@ void gravity_short_ewald_compare(int Nsamples) {
 		sinky[i] = samples[i].x[YDIM];
 		sinkz[i] = samples[i].x[ZDIM];
 	}
-	double l2sum = 0.0;
-	double l2norm = 0.0;
+	double l2sum_phi = 0.0;
+	double l2norm_phi = 0.0;
+	double l2sum_force = 0.0;
+	double l2norm_force = 0.0;
 	auto results = do_ewald(sinkx, sinky, sinkz);
+	double lmax_phi = 0.0;
+	double lmax_force = 0.0;
 	for (int i = 0; i < Nsamples; i++) {
 		double f1 = 0.0, f2 = 0.0;
-		double r2 = 0.0;
-		/*for (int dim = 0; dim < NDIM; dim++) {
-			f1 += sqr(samples[i].g[dim]);
-			f2 += sqr(results.second[dim][i]);
+		double g1 = 0.0, g2 = 0.0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			g1 += sqr(samples[i].g[dim]);
+			g2 += sqr(results.second[dim][i]);
 		}
-		f1 = sqrt(f1);
-		f2 = sqrt(f2);
-		*/
+		g1 = sqrt(g1);
+		g2 = sqrt(g2);
 		f1 = samples[i].p;
 		f2 = results.first[i];
-		l2sum += sqr(f1-f2);
-		l2norm += sqr(f2);
-		printf("%e %e %e \n", f1, f2, f2 / f1);
+		l2sum_phi += sqr(f1 - f2);
+		lmax_phi += std::abs(f1 - f2);
+		l2norm_phi += sqr(f2);
+		l2sum_force += sqr(g1 - g2);
+		lmax_force += std::abs(g1 - g2);
+		l2norm_force += sqr(g2);
+	//	printf("%e %e %e \n", f1, f2, f2 / f1);
 	}
-	l2sum = sqrt(l2sum/l2norm);
-	PRINT( "L2 Error = %e\n", l2sum);
-	 /*
-	vector<fixed32> sinkx(Nsamples);
-	vector<fixed32> sinky(Nsamples);
-	vector<fixed32> sinkz(Nsamples);
-	for (int i = 0; i < Nsamples; i++) {
-		sinkx[i] = double(i) / Nsamples + 0.5 / Nsamples;
-		sinky[i] = 0.5;
-		sinkz[i] = 0.5;
-	}
-	FILE* fp = fopen("out.dat", "wt");
-	auto results = do_ewald(sinkx, sinky, sinkz);
-	double l1sum = 0.0, l2sum = 0.0;
-	double l1norm = 0.0, l2norm = 0.0;
-	for (int i = 0; i < Nsamples; i++) {
-		if( i >= Nsamples /4 && i < 3* Nsamples/4) {
-			continue;
-		}
-		array<double, NDIM> x;
-		x[0] = sinkx[i].to_double();
-		x[1] = sinky[i].to_double();
-		x[2] = sinkz[i].to_double();
-		auto g = gravity_long_force_at(x);
-		double f1 = 0.0, f2 = 0.0;
-		for (int dim = 0; dim < NDIM; dim++) {
-			f1 += sqr(results.second[dim][i]);
-			f2 += sqr(g.second[dim]);
-		}
-		l1sum += std::abs(f1 - f2);
-		l1norm += std::abs(f1);
-		l2sum += sqr(f1 - f2);
-		l2norm += sqr(f1);
-		fprintf(fp, "%e %e %e\n", x[0], results.second[0][i], g.second[0]);
-	}
-	fclose(fp);
-	printf("L1 = %e \n", l1sum / l1norm);
-	printf("L2 = %e \n", std::sqrt(l2sum / l2norm));*/
+	l2sum_force = sqrt(l2sum_force / l2norm_force);
+	lmax_force /= sqrt(l2norm_force);
+	PRINT("Force RMS Error     = %e\n", l2sum_force);
+	PRINT("Force Max Error     = %e\n", lmax_force);
+	l2sum_phi = sqrt(l2sum_phi / l2norm_phi);
+	lmax_phi /= sqrt(l2norm_phi);
+	PRINT("Potential RMS Error = %e\n", l2sum_phi);
+	PRINT("Potential Max Error = %e\n", lmax_phi);
+
 #endif
 }

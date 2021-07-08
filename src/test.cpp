@@ -8,6 +8,7 @@
 #include <tigerpm/kick_pme.hpp>
 #include <tigerpm/kick_treepm.hpp>
 #include <tigerpm/chainmesh.hpp>
+#include <tigerpm/initialize.hpp>
 
 static void chainmesh_test();
 static void kick_treepm_test();
@@ -17,11 +18,14 @@ static void fft_test();
 static void particle_test();
 static void gravity_long_test();
 static void sort_test();
+static void ic_test();
 
 void run_test(std::string test) {
 	printf("Testing\n");
 	if (test == "fft") {
 		fft_test();
+	} else if (test == "ic") {
+		ic_test();
 	} else if (test == "chainmesh") {
 		chainmesh_test();
 	} else if (test == "sort") {
@@ -40,6 +44,10 @@ void run_test(std::string test) {
 		PRINT("%s is an unknown test.\n", test.c_str());
 	}
 	printf("Test complete\n");
+}
+
+static void ic_test() {
+	initialize();
 }
 
 static void fft_test() {

@@ -21,6 +21,7 @@ set(tigerpm_source_files
     src/gravity_short.cpp
     src/gravity_short.cu
     src/hpx.cpp
+    src/initialize.cpp
     src/kick_pm.cpp
     src/kick_pme.cpp
     src/kick_pme.cu
@@ -47,6 +48,7 @@ set(tigerpm_header_files
 	tigerpm/hpx.hpp
 	tigerpm/fixed.hpp
 	tigerpm/fft.hpp
+	tigerpm/initialize.hpp
 	tigerpm/kick_pm.hpp
 	tigerpm/kick_pme.hpp
 	tigerpm/kick_treepm.hpp
@@ -60,6 +62,7 @@ set(tigerpm_header_files
 	tigerpm/util.hpp
 )
 
+execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 
 
 add_hpx_executable(
@@ -72,6 +75,7 @@ add_hpx_executable(
     ${tigerpm_header_files}
  )
 
+add_executable( code_gen src/code_gen.cpp )
 
 set_property(TARGET tigerpm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(tigerpm PUBLIC ${PROJECT_SOURCE_DIR})

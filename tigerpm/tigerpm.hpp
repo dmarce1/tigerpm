@@ -19,7 +19,6 @@
 
 #include <stdio.h>
 
-#define INTERP_FUNC_SIZE 64
 
 #define SELF_PHI float(-35.0/16.0)
 
@@ -72,4 +71,9 @@ inline void print(const char* fmt, Args ...args) {
 }
 
 #include <tigerpm/containers.hpp>
+
+namespace constants {
+	const double mpc_to_cm = 3.086e+24;
+}
+
 #endif /* TIGERFMM_HPP_ */

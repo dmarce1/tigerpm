@@ -89,6 +89,11 @@ bool process_options(int argc, char *argv[]) {
 	opts.GM = 1.0;
 	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);
+	opts.hubble = 0.7;
+	opts.sigma8 = 0.84;
+	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
+
+
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';
