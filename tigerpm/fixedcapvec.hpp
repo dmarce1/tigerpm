@@ -13,11 +13,10 @@
 
 template<class T, int N>
 class fixedcapvec {
-	std::array<T, N> data;
+	array<T, N> data;
 	int sz;
 public:
-	CUDA_EXPORT fixedcapvec() {
-		sz = 0;
+	CUDA_EXPORT constexpr fixedcapvec() : sz(0){
 	}
 	fixedcapvec(const fixedcapvec&) = default;
 	fixedcapvec& operator=(const fixedcapvec&) = default;
