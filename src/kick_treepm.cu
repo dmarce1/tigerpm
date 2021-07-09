@@ -28,10 +28,7 @@ struct fixed4 {
 __managed__ double Npp = 0;
 __managed__ double Npc = 0;
 
-__constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
-		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
-		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
-		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+extern __constant__ float rung_dt[MAX_RUNG];
 
 struct sink_cell {
 	int begin;
@@ -201,7 +198,7 @@ struct treepm_shmem {
 
 __constant__ treepm_params dev_treepm_params;
 
-__device__ int compute_indices(int index, int& total) {
+__device__ int inline compute_indices(int index, int& total) {
 	const int& tid = threadIdx.x;
 	for (int P = 1; P < TREEPM_BLOCK_SIZE; P *= 2) {
 		auto tmp = __shfl_up_sync(0xFFFFFFFF, index, P);
@@ -616,8 +613,8 @@ __global__ void kick_treepm_kernel() {
 				X[XDIM] = sink_x.to_float();
 				X[YDIM] = sink_y.to_float();
 				X[ZDIM] = sink_z.to_float();
-				array<array<float, NINTERP>, NINTERP> w;
-				array<array<float, NINTERP>, NINTERP> dw;
+				array<array<float, NINTERP>, NDIM> w;
+				array<array<float, NINTERP>, NDIM> dw;
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] *= params.Nfour;
 					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
@@ -930,7 +927,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 2.0/3.0;
+		params.theta = 0.8;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
