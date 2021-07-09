@@ -131,7 +131,7 @@ static void kick_pm_test() {
 	PRINT("COMPARISON\n");
 #ifdef FORCE_TEST
 	tm4.start();
-	gravity_short_ewald_compare(10000);
+	gravity_short_ewald_compare(100);
 	tm4.stop();
 #endif
 	PRINT("%e s to sort, %e s to compute gravity, %e s to kick, %e s on comparison, %e total\n", tm1.read(), tm2.read(),
@@ -232,6 +232,7 @@ static void kick_pme_test() {
 
 static void kick_treepm_test() {
 	timer tm;
+	//particles_random_init();
 	initialize();
 
 	PRINT("DOMAIN SORT\n");

@@ -124,6 +124,20 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	return std::make_pair((float) phi0, gret);
 }
 
+double cloud4(double x) {
+	double q1 = std::abs(x);
+	double q2 = q1 * q1;
+	double q3 = q2 * q1;
+	if (q1 < 1.0) {
+		return 0.16666667 * (4.0 - 6.0 * q2 + 3.0 * q3);
+	} else if (q1 < 2.0) {
+		return 0.16666667 * (8.0 - 12.0 * q1 + 6.0 * q2 - q3);
+	} else {
+		return 0.0;
+	}
+}
+
+#define CLOUD_W 4
 
 void compute_source() {
 	vector<hpx::future<void>> futs;
@@ -153,67 +167,28 @@ void compute_source() {
 			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
 			const int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
 			for (int i = begin; i < end; i++) {
-				const double x = particles_pos(0, i).to_double();
-				const double y = particles_pos(1, i).to_double();
-				const double z = particles_pos(2, i).to_double();
-				const int i1 = x * N + 0.5;
-				const int j1 = y * N + 0.5;
-				const int k1 = z * N + 0.5;
-				const int i2 = i1 + 1;
-				const int j2 = j1 + 1;
-				const int k2 = k1 + 1;
-				const int i0 = i1 - 1;
-				const int j0 = j1 - 1;
-				const int k0 = k1 - 1;
-				const double xN = x * N;
-				const double yN = y * N;
-				const double zN = z * N;
-				const double w0x = tsc(xN - i0);
-				const double w0y = tsc(yN - j0);
-				const double w0z = tsc(zN - k0);
-				const double w1x = tsc(xN - i1);
-				const double w1y = tsc(yN - j1);
-				const double w1z = tsc(zN - k1);
-				const double w2x = tsc(xN - i2);
-				const double w2y = tsc(yN - j2);
-				const double w2z = tsc(zN - k2);
+				array<double, NDIM> X;
+				array<int, NDIM> I;
+				array<array<double,CLOUD_W>,NDIM> w;
+				X[XDIM] = particles_pos(0, i).to_double();
+				X[YDIM] = particles_pos(1, i).to_double();
+				X[ZDIM] = particles_pos(2, i).to_double();
+				for( int dim = 0; dim < NDIM; dim++) {
+					I[dim] = int(X[dim] * N + PHI_BW - 1) - PHI_BW;
+					for( int i = 0; i < CLOUD_W; i++) {
+						w[dim][i] = cloud4(X[dim] * N - I[dim] - i);
+//						PRINT( "%e\n", X[dim] * N - I[dim] - i);
+					}
+				}
+				array<int, NDIM> J;
 				const double c0 = 4.0 * M_PI * N;
-
-				{
-					std::lock_guard<spinlock_type> lock(*mutexes[i0 - source_box.begin[XDIM]]);
-					source[source_box.index(i0, j0, k0)] += c0 * w0x * w0y * w0z;
-					source[source_box.index(i0, j0, k1)] += c0 * w0x * w0y * w1z;
-					source[source_box.index(i0, j0, k2)] += c0 * w0x * w0y * w2z;
-					source[source_box.index(i0, j1, k0)] += c0 * w0x * w1y * w0z;
-					source[source_box.index(i0, j1, k1)] += c0 * w0x * w1y * w1z;
-					source[source_box.index(i0, j1, k2)] += c0 * w0x * w1y * w2z;
-					source[source_box.index(i0, j2, k0)] += c0 * w0x * w2y * w0z;
-					source[source_box.index(i0, j2, k1)] += c0 * w0x * w2y * w1z;
-					source[source_box.index(i0, j2, k2)] += c0 * w0x * w2y * w2z;
-				}
-				{
-					std::lock_guard<spinlock_type> lock(*mutexes[i1 - source_box.begin[XDIM]]);
-					source[source_box.index(i1, j0, k0)] += c0 * w1x * w0y * w0z;
-					source[source_box.index(i1, j0, k1)] += c0 * w1x * w0y * w1z;
-					source[source_box.index(i1, j0, k2)] += c0 * w1x * w0y * w2z;
-					source[source_box.index(i1, j1, k0)] += c0 * w1x * w1y * w0z;
-					source[source_box.index(i1, j1, k1)] += c0 * w1x * w1y * w1z;
-					source[source_box.index(i1, j1, k2)] += c0 * w1x * w1y * w2z;
-					source[source_box.index(i1, j2, k0)] += c0 * w1x * w2y * w0z;
-					source[source_box.index(i1, j2, k1)] += c0 * w1x * w2y * w1z;
-					source[source_box.index(i1, j2, k2)] += c0 * w1x * w2y * w2z;
-				}
-				{
-					std::lock_guard<spinlock_type> lock(*mutexes[i2 - source_box.begin[XDIM]]);
-					source[source_box.index(i2, j0, k0)] += c0 * w2x * w0y * w0z;
-					source[source_box.index(i2, j0, k1)] += c0 * w2x * w0y * w1z;
-					source[source_box.index(i2, j0, k2)] += c0 * w2x * w0y * w2z;
-					source[source_box.index(i2, j1, k0)] += c0 * w2x * w1y * w0z;
-					source[source_box.index(i2, j1, k1)] += c0 * w2x * w1y * w1z;
-					source[source_box.index(i2, j1, k2)] += c0 * w2x * w1y * w2z;
-					source[source_box.index(i2, j2, k0)] += c0 * w2x * w2y * w0z;
-					source[source_box.index(i2, j2, k1)] += c0 * w2x * w2y * w1z;
-					source[source_box.index(i2, j2, k2)] += c0 * w2x * w2y * w2z;
+				for( J[0] = 0; J[0] < CLOUD_W; J[0]++) {
+					std::lock_guard<spinlock_type> lock(*mutexes[I[0] + J[0] - source_box.begin[XDIM]]);
+					for( J[1] = 0; J[1] < CLOUD_W; J[1]++) {
+						for( J[2] = 0; J[2] < CLOUD_W; J[2]++) {
+							source[source_box.index(I[0]+J[0],I[1]+J[1],I[2]+J[2])] += c0 * w[0][J[0]] * w[1][J[1]] * w[2][J[2]];
+						}
+					}
 				}
 			}
 		}));
@@ -243,7 +218,7 @@ void apply_laplacian(gravity_long_type type) {
 					k[dim] = i[dim] < N / 2 ? i[dim] : i[dim] - N;
 					k[dim] *= c0;
 				}
-	//			const double cosnk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
+				//			const double cosnk2 = 2.0 * (cos(k[0]) + cos(k[1]) + cos(k[2]) - 3.0);
 				const double nk2 = -sqr(k[0], k[1], k[2]);
 				const int index = box.index(i);
 				if (nk2 < 0.0) {
@@ -256,13 +231,12 @@ void apply_laplacian(gravity_long_type type) {
 					Y[index] *= exp(nk2 * rs2);
 				}
 
-				const double cic_x = std::pow(sinc(0.5 * k[0] * dx), 3);
-				const double cic_y = std::pow(sinc(0.5 * k[1] * dx), 3);
-				const double cic_z = std::pow(sinc(0.5 * k[2] * dx), 3);
-				const double cic = cic_x * cic_y * cic_z;
+				const double sx = sinc(0.5 * k[0] * dx);
+				const double sy = sinc(0.5 * k[1] * dx);
+				const double sz = sinc(0.5 * k[2] * dx);
+				const double s = sx * sy * sz;
 				//	PRINT( "%e\n", cic);
-				Y[index] *= 1.0 / cic;
-				Y[index] *= 1.0 / cic;
+				Y[index] *= std::pow(s,-4);
 			}
 		}
 	}
