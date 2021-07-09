@@ -125,10 +125,48 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 	}
 	if (end - begin <= SINK_BUCKET_SIZE && !sunk) {
 		sink_bucket bucket;
+		array<double, NDIM> x;
+		array<double, NDIM> xmin;
+		array<double, NDIM> xmax;
+		for (int dim = 0; dim < NDIM; dim++) {
+			x[dim] = 0.0;
+			xmin[dim] = 1.0;
+			xmax[dim] = 0.0;
+		}
+		for (int i = begin; i < end; i++) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				const auto x = particles_pos(dim, i).to_double();
+				xmax[dim] = std::max(xmax[dim], x);
+				xmin[dim] = std::min(xmin[dim], x);
+			}
+		}
+		if (end - begin) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				x[dim] = (xmax[dim] + xmin[dim]) * 0.5;
+			}
+		} else {
+			for (int dim = 0; dim < NDIM; dim++) {
+				x[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
+			}
+		}
+		for (int i = begin; i < end; i++) {
+			array<float, NDIM> dx;
+			for (int dim = 0; dim < NDIM; dim++) {
+				dx[dim] = particles_pos(dim, i).to_double() - x[dim];
+			}
+		}
+		double r2max = 0.0;
+		for (int i = begin; i < end; i++) {
+			double r2 = 0.0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				bucket.x[dim] = x[dim];
+				r2 += sqr(x[dim] - particles_pos(dim, i).to_double());
+			}
+			r2max = std::max(r2max, r2);
+		}
+		bucket.radius = std::sqrt(r2max) + get_options().hsoft;
 		bucket.snk_begin = bucket.src_begin = node.pbegin;
 		bucket.snk_end = bucket.src_end = node.pend;
-		bucket.radius = node.radius;
-		bucket.x = node.x;
 		sink_buckets.push_back(bucket);
 	}
 	t.set(node, index);

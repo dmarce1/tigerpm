@@ -55,6 +55,7 @@ struct treepm_params {
 	int* nextlist;
 	int* multilist;
 	int* partlist;
+	int* tmplist;
 	tree* tree_neighbors;
 	sink_bucket** buckets;
 	int* bucket_cnt;
@@ -104,6 +105,7 @@ struct treepm_params {
 		CUDA_CHECK(cudaMalloc(&nextlist, nblocks * sizeof(int) * WORKSPACE_SIZE));
 		CUDA_CHECK(cudaMalloc(&multilist, nblocks * sizeof(int) * INTERSPACE_SIZE));
 		CUDA_CHECK(cudaMalloc(&partlist, nblocks * sizeof(int) * INTERSPACE_SIZE));
+		CUDA_CHECK(cudaMalloc(&tmplist, nblocks * sizeof(int) * INTERSPACE_SIZE));
 #ifdef FORCE_TEST
 		CUDA_CHECK(cudaMalloc(&gx, source_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&gy, source_size * sizeof(float)));
@@ -128,6 +130,7 @@ struct treepm_params {
 		CUDA_CHECK(cudaFree(nextlist));
 		CUDA_CHECK(cudaFree(multilist));
 		CUDA_CHECK(cudaFree(partlist));
+		CUDA_CHECK(cudaFree(tmplist));
 #ifdef FORCE_TEST
 		CUDA_CHECK(cudaFree(gx));
 		CUDA_CHECK(cudaFree(gy));
@@ -216,7 +219,8 @@ __device__ int compute_indices(int index, int& total) {
 	return index;
 }
 
-__device__ inline void shared_reduce(float& number) {
+template<class T>
+__device__ inline void shared_reduce(T& number) {
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		number += __shfl_xor_sync(0xffffffff, number, P);
 	}
@@ -674,6 +678,7 @@ __global__ void kick_treepm_kernel() {
 			int* nextlist = params.nextlist + offset;
 			int* multilist = params.multilist + bid * INTERSPACE_SIZE;
 			int* partlist = params.partlist + bid * INTERSPACE_SIZE;
+			int* tmplist = params.tmplist + bid * WORKSPACE_SIZE;
 			const auto& sink_x = bucket.x[XDIM];
 			const auto& sink_y = bucket.x[YDIM];
 			const auto& sink_z = bucket.x[ZDIM];
@@ -688,6 +693,7 @@ __global__ void kick_treepm_kernel() {
 				tm = clock64();
 				while (check_size) {
 					const int maxi = round_up(check_size, TREEPM_BLOCK_SIZE);
+					int tmp_size = 0;
 					for (int ci = tid; ci < maxi; ci += TREEPM_BLOCK_SIZE) {
 						int this_index = 0;
 						bool nextb = false;
@@ -731,16 +737,16 @@ __global__ void kick_treepm_kernel() {
 						multi_size += total;
 						__syncwarp();
 
-						this_index = compute_indices(partb, total) + part_size;
-						if (part_size + total >= INTERSPACE_SIZE) {
-							PRINT("internal interspace exceeded on parts\n");
+						this_index = compute_indices(partb, total) + tmp_size;
+						if (tmp_size + total >= WORKSPACE_SIZE) {
+							PRINT("internal workspace exceeded on parts\n");
 							__trap();
 							assert(false);
 						}
 						if (partb) {
-							partlist[this_index] = index;
+							tmplist[this_index] = index;
 						}
-						part_size += total;
+						tmp_size += total;
 						__syncwarp();
 
 						this_index = compute_indices(nextb, total);
@@ -763,6 +769,39 @@ __global__ void kick_treepm_kernel() {
 					checklist = tmp1;
 					check_size = next_size;
 					next_size = 0;
+					for( int i = 0; i < tmp_size; i++) {
+						int index = tmplist[i];
+						auto source_x = tr.get_x(0, index);
+						auto source_y = tr.get_x(1, index);
+						auto source_z = tr.get_x(2, index);
+						const float source_radius = tr.get_radius(index);
+						int result = 0;
+						for( int j = tid; j < nactive; j+= TREEPM_BLOCK_SIZE) {
+							auto sink_x = shmem.x[j];
+							auto sink_y = shmem.y[j];
+							auto sink_z = shmem.z[j];
+							const float dx = distance(sink_x, source_x);
+							const float dy = distance(sink_y, source_y);
+							const float dz = distance(sink_z, source_z);
+							const float R2 = sqr(dx, dy, dz);
+							const bool far = R2 > sqr(source_radius) * theta2inv;
+							result += !far;
+						}
+						shared_reduce(result);
+						if( result ) {
+							if( tid == 0 ) {
+								partlist[part_size] = index;
+							}
+							part_size++;
+						} else {
+							if( tid == 0 ) {
+								multilist[multi_size] = index;
+							}
+							multi_size++;
+						}
+						__syncwarp();
+					}
+
 				}
 				atomicAdd(&tm2, (double) (clock64() - tm));
 				tm = clock64();
@@ -891,10 +930,10 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.5;
+		params.theta = 2.0/3.0;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
-		params.do_phi = false;
+		params.do_phi = true;
 		params.rcut = 1.0 / get_options().chain_dim;
 		params.hsoft = get_options().hsoft;
 		params.phi0 = std::pow(get_options().parts_dim, NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
