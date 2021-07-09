@@ -222,7 +222,6 @@ __device__ inline void shared_reduce(float& number) {
 	}
 }
 
-
 __device__ void greens_function(array<float, 20> &D, float dx, float dy, float dz) {
 	const treepm_params& params = dev_treepm_params;
 	const float& twooversqrtpi = params.twooversqrtpi;
@@ -290,26 +289,26 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	x_3_1_010 *= Drinvpow_2_1;
 	x_3_1_100 *= Drinvpow_2_1;
 	D[0] = Drinvpow_0_0;
-	D[1] = x100* Drinvpow_1_0;
-	D[2] = x010* Drinvpow_1_0;
-	D[3] = x001* Drinvpow_1_0;
+	D[1] = x100 * Drinvpow_1_0;
+	D[2] = x010 * Drinvpow_1_0;
+	D[3] = x001 * Drinvpow_1_0;
 	D[4] = x_2_1_000;
 	D[5] = x110 * Drinvpow_2_0;
 	D[6] = x101 * Drinvpow_2_0;
 	D[7] = x_2_1_000;
 	D[8] = x011 * Drinvpow_2_0;
 	D[9] = x_2_1_000;
-	D[10] = float(3.00000000e+00)* x_3_1_100;
+	D[10] = float(3.00000000e+00) * x_3_1_100;
 	D[11] = x_3_1_010;
 	D[12] = x_3_1_001;
 	D[13] = x_3_1_100;
-	D[14] = x111* Drinvpow_3_0;
+	D[14] = x111 * Drinvpow_3_0;
 	D[15] = x_3_1_100;
-	D[16] = float(3.00000000e+00)* x_3_1_010;
+	D[16] = float(3.00000000e+00) * x_3_1_010;
 	D[17] = x_3_1_001;
 	D[18] = x_3_1_010;
-	D[19] = float(3.00000000e+00)* x_3_1_001;
-	D[7] = fmaf(x020,  Drinvpow_2_0, D[7]);
+	D[19] = float(3.00000000e+00) * x_3_1_001;
+	D[7] = fmaf(x020, Drinvpow_2_0, D[7]);
 	D[4] = fmaf(x200, Drinvpow_2_0, D[4]);
 	D[9] = fmaf(x002, Drinvpow_2_0, D[9]);
 	D[10] = fmaf(x300, Drinvpow_3_0, D[10]);
@@ -322,7 +321,6 @@ __device__ void greens_function(array<float, 20> &D, float dx, float dy, float d
 	D[18] = fmaf(x012, Drinvpow_3_0, D[18]);
 	D[19] = fmaf(x003, Drinvpow_3_0, D[19]);
 }
-
 
 inline __device__ void compute_pc_interaction(float dx, float dy, float dz, const multipole& M, float& gx, float& gy, float& gz, float& phi) {
 	const treepm_params& params = dev_treepm_params;
@@ -610,64 +608,100 @@ __global__ void kick_treepm_kernel() {
 				array<int, NDIM> I;
 				array<int, NDIM> J;
 				array<float, NDIM> X;
+				array<array<float, 3>, NDIM> w;
 				X[XDIM] = sink_x.to_float();
 				X[YDIM] = sink_y.to_float();
 				X[ZDIM] = sink_z.to_float();
-				array<array<float, NINTERP>, NINTERP> w;
-				array<array<float, NINTERP>, NINTERP> dw;
+				array<array<array<array<float, 3>, 3>, 3>, NDIM> force;
+				array<array<array<float, 7>, 7>, 7> pot;
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] *= params.Nfour;
+					X[dim] += 0.5;
 					I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
-					X[dim] -= float(I[dim]);
-					I[dim] -= 2;
+					I[dim] -= 3;
+				}
+				for (J[0] = I[0]; J[0] < I[0] + 7; J[0]++) {
+					for (J[1] = I[1]; J[1] < I[1] + 7; J[1]++) {
+						for (J[2] = I[2]; J[2] < I[2] + 7; J[2]++) {
+							const int l = params.phi_box.index(J);
+							pot[J[0] - I[0]][J[1] - I[1]][J[2] - I[2]] = params.phi[l];
+						}
+					}
+				}
+				for (J[0] = I[0] + 2; J[0] < I[0] + 5; J[0]++) {
+					for (J[1] = I[1] + 2; J[1] < I[1] + 5; J[1]++) {
+						for (J[2] = I[2] + 2; J[2] < I[2] + 5; J[2]++) {
+							const int i = J[0] - I[0] - 2;
+							const int j = J[1] - I[1] - 2;
+							const int k = J[2] - I[2] - 2;
+							const int ip = i + 2;
+							const int jp = j + 2;
+							const int kp = k + 2;
+							force[0][i][j][k] = -((2.f / 3.f) * (pot[ip + 1][jp][kp] - pot[ip - 1][jp][kp])
+									- (1.f / 12.f) * (pot[ip + 2][jp][kp] - pot[ip - 2][jp][kp])) * params.Nfour;
+							force[1][i][j][k] = -((2.f / 3.f) * (pot[ip][jp + 1][kp] - pot[ip][jp - 1][kp])
+									- (1.f / 12.f) * (pot[ip][jp + 2][kp] - pot[ip][jp - 2][kp])) * params.Nfour;
+							force[2][i][j][k] = -((2.f / 3.f) * (pot[ip][jp][kp + 1] - pot[ip][jp][kp - 1])
+									- (1.f / 12.f) * (pot[ip][jp][kp + 2] - pot[ip][jp][kp - 2])) * params.Nfour;
+						}
+					}
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
-					float x1 = X[dim];
-					float x2 = X[dim] * x1;
-					float x3 = x1 * x2;
-					float x4 = x2 * x2;
-					float x5 = x3 * x2;
-					w[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
-					w[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
-					w[dim][2] = 1.0f - (5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
-					w[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
-					w[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
-					w[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
-					x5 = 5.0f * x4;
-					x4 = 4.0f * x3;
-					x3 = 3.0f * x2;
-					x2 = 2.0f * x1;
-					x1 = 1.0f;
-					dw[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
-					dw[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
-					dw[dim][2] = -(5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
-					dw[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
-					dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
-					dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+					for (int i = 0; i < 3; i++) {
+						const float x = X[dim] - (I[dim] + 2 + i) - 0.5f;
+						w[dim][i] = tsc(x);
+					}
 				}
-				for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
-					for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
-						for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
-							const int l = params.phi_box.index(J);
-							const int i0 = J[0] - I[0];
-							const int i1 = J[1] - I[1];
-							const int i2 = J[2] - I[2];
-							const float phi0 = params.phi[l];
-							const float phi1 = phi0 * params.Nfour;
-							double w0 = dw[0][i0] * w[1][i1] * w[2][i2];
-							g[0] -= w0 * phi1;
-							w0 = w[0][i0] * dw[1][i1] * w[2][i2];
-							g[1] -= w0 * phi1;
-							w0 = w[0][i0] * w[1][i1] * dw[2][i2];
-							g[2] -= w0 * phi1;
-							if (params.do_phi) {
-								w0 = w[0][i0] * w[1][i1] * w[2][i2];
-								phi += w0 * phi0;
+				float gx = 0.f;
+				for (J[0] = I[0] + 2; J[0] < I[0] + 5; J[0]++) {
+					for (J[1] = I[1] + 2; J[1] < I[1] + 5; J[1]++) {
+						for (J[2] = I[2] + 2; J[2] < I[2] + 5; J[2]++) {
+							const int i = J[0] - I[0] - 2;
+							const int j = J[1] - I[1] - 2;
+							const int k = J[2] - I[2] - 2;
+							gx += force[0][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+						}
+					}
+				}
+				float gy = 0.f;
+				for (J[0] = I[0] + 2; J[0] < I[0] + 5; J[0]++) {
+					for (J[1] = I[1] + 2; J[1] < I[1] + 5; J[1]++) {
+						for (J[2] = I[2] + 2; J[2] < I[2] + 5; J[2]++) {
+							const int i = J[0] - I[0] - 2;
+							const int j = J[1] - I[1] - 2;
+							const int k = J[2] - I[2] - 2;
+							gy += force[1][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+						}
+					}
+				}
+				float gz = 0.f;
+				for (J[0] = I[0] + 2; J[0] < I[0] + 5; J[0]++) {
+					for (J[1] = I[1] + 2; J[1] < I[1] + 5; J[1]++) {
+						for (J[2] = I[2] + 2; J[2] < I[2] + 5; J[2]++) {
+							const int i = J[0] - I[0] - 2;
+							const int j = J[1] - I[1] - 2;
+							const int k = J[2] - I[2] - 2;
+							gz += force[2][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+						}
+					}
+				}
+				if (params.do_phi) {
+					for (J[0] = I[0] + 2; J[0] < I[0] + 5; J[0]++) {
+						for (J[1] = I[1] + 2; J[1] < I[1] + 5; J[1]++) {
+							for (J[2] = I[2] + 2; J[2] < I[2] + 5; J[2]++) {
+								const int i = J[0] - I[0];
+								const int j = J[1] - I[1];
+								const int k = J[2] - I[2];
+								phi += pot[i][j][k] * w[0][i - 2] * w[1][j - 2] * w[2][k - 2];
 							}
 						}
 					}
 				}
+				g[XDIM] += gx;
+				g[YDIM] += gy;
+				g[ZDIM] += gz;
 			}
+
 			atomicAdd(&tm1, (double) (clock64() - tm));
 
 			const size_t offset = bid * WORKSPACE_SIZE;
@@ -892,13 +926,13 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.4;
+		params.theta = 0.8;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
 		params.rcut = 1.0 / get_options().chain_dim;
 		params.hsoft = get_options().hsoft;
-		params.phi0 = std::pow(get_options().parts_dim,NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
+		params.phi0 = std::pow(get_options().parts_dim, NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
 		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
 		params.GM = get_options().GM;
 		params.Nfour = get_options().four_dim;

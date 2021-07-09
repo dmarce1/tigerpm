@@ -124,15 +124,6 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	return std::make_pair((float) phi0, gret);
 }
 
-static double tsc(double x) {
-	if (std::abs(x) < 0.5) {
-		return 0.75 - sqr(x);
-	} else if (std::abs(x) < 1.5) {
-		return 0.5 * sqr(1.5 - std::abs(x));
-	} else {
-		return 0.0;
-	}
-}
 
 void compute_source() {
 	vector<hpx::future<void>> futs;
@@ -264,11 +255,13 @@ void apply_laplacian(gravity_long_type type) {
 				if (type == GRAVITY_LONG_PME) {
 					Y[index] *= exp(nk2 * rs2);
 				}
+
 				const double cic_x = std::pow(sinc(0.5 * k[0] * dx), 3);
 				const double cic_y = std::pow(sinc(0.5 * k[1] * dx), 3);
 				const double cic_z = std::pow(sinc(0.5 * k[2] * dx), 3);
 				const double cic = cic_x * cic_y * cic_z;
 				//	PRINT( "%e\n", cic);
+				Y[index] *= 1.0 / cic;
 				Y[index] *= 1.0 / cic;
 			}
 		}
