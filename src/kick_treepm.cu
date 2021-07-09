@@ -654,11 +654,11 @@ __global__ void kick_treepm_kernel() {
 							const float phi0 = params.phi[l];
 							const float phi1 = phi0 * params.Nfour;
 							double w0 = dw[0][i0] * w[1][i1] * w[2][i2];
-							g[0] -= w0 * phi1;
+							g[XDIM] -= w0 * phi1;
 							w0 = w[0][i0] * dw[1][i1] * w[2][i2];
-							g[1] -= w0 * phi1;
+							g[YDIM] -= w0 * phi1;
 							w0 = w[0][i0] * w[1][i1] * dw[2][i2];
-							g[2] -= w0 * phi1;
+							g[ZDIM] -= w0 * phi1;
 							if (params.do_phi) {
 								w0 = w[0][i0] * w[1][i1] * w[2][i2];
 								phi += w0 * phi0;
@@ -891,10 +891,10 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.2;
+		params.theta = 0.5;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
-		params.do_phi = true;
+		params.do_phi = false;
 		params.rcut = 1.0 / get_options().chain_dim;
 		params.hsoft = get_options().hsoft;
 		params.phi0 = std::pow(get_options().parts_dim, NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
