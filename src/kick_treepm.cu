@@ -223,11 +223,14 @@ __device__ inline void shared_reduce(T& number) {
 	}
 }
 
-
 inline __device__ void compute_pc_interaction(float dx, float dy, float dz, const multipole& M, float& gx, float& gy, float& gz, float& phi) {
 	const treepm_params& params = dev_treepm_params;
 	array<float, EXPANSION_SIZE> D;
 	array<float, NDIM + 1> L;
+	L[0] = L[1] = L[2] = L[3] = 0.0;
+	for (int i = 0; i < EXPANSION_SIZE; i++) {
+		D[i] = 0.0;
+	}
 	greens_function(D, dx, dy, dz, params.inv2rs);
 	M2L_kernel(L, M, D, params.do_phi);
 	gx -= L[1];
@@ -499,7 +502,6 @@ __global__ void kick_treepm_kernel() {
 				__syncwarp();
 			}
 
-
 			for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
 				array<float, NDIM>& g = shmem.g[sink_index];
 				float& phi = shmem.phi[sink_index];
@@ -667,14 +669,14 @@ __global__ void kick_treepm_kernel() {
 					checklist = tmp1;
 					check_size = next_size;
 					next_size = 0;
-					for( int i = 0; i < tmp_size; i++) {
+					for (int i = 0; i < tmp_size; i++) {
 						int index = tmplist[i];
 						auto source_x = tr.get_x(0, index);
 						auto source_y = tr.get_x(1, index);
 						auto source_z = tr.get_x(2, index);
 						const float source_radius = tr.get_radius(index);
 						int result = 0;
-						for( int j = tid; j < nactive; j+= TREEPM_BLOCK_SIZE) {
+						for (int j = tid; j < nactive; j += TREEPM_BLOCK_SIZE) {
 							auto sink_x = shmem.x[j];
 							auto sink_y = shmem.y[j];
 							auto sink_z = shmem.z[j];
@@ -686,13 +688,13 @@ __global__ void kick_treepm_kernel() {
 							result += !far;
 						}
 						shared_reduce(result);
-						if( result ) {
-							if( tid == 0 ) {
+						if (result) {
+							if (tid == 0) {
 								partlist[part_size] = index;
 							}
 							part_size++;
 						} else {
-							if( tid == 0 ) {
+							if (tid == 0) {
 								multilist[multi_size] = index;
 							}
 							multi_size++;

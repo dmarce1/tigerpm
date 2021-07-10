@@ -54,11 +54,15 @@ public:
 		const int& blocksize = blockDim.x;
 		const int& tid = threadIdx.x;
 		const auto sz = size();
-		bounds.push_back(end() + sz);
-		data.resize(data.size() + sz);
+		if( tid == 0 ) {
+			bounds.push_back(end() + sz);
+			data.resize(data.size() + sz);
+		}
+		__syncwarp();
 		for (int i = begin() + tid; i < end(); i += blocksize) {
 			data[i] = data[i - sz];
 		}
+		__syncwarp();
 	}
 	__device__
 	inline void pop_top() {

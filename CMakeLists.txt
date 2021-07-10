@@ -87,35 +87,9 @@ set_property(TARGET tigerpm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(tigerpm PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_options(tigerpm PUBLIC "-DUSE_HPX")
 target_compile_options(tigerpm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math ;
+                        --use_fast_math -G --maxrregcount 128 ;
                         >)
-set_source_files_properties(src/kick_treepm.cu PROPERTIES COMPILE_FLAGS "--maxrregcount 128 ")
                         
 set_property(TARGET tigerpm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 
 
-
-
-#add_library(hpx_lite 
-#	hpx_lite/src/hpx.cpp
-#	hpx_lite/src/id_type.cpp
-#	hpx_lite/src/thread.cpp
-#	hpx_lite/src/future.cpp
-#	hpx_lite/src/mutex.cpp
-#	hpx_lite/src/serialize.cpp
-#)
-
-
-#add_executable(
-#  tigerpm_lite
-#  ${tigerpm_source_files}
-#  ${tigerpm_header_files}
-# )
-
-#target_link_libraries(tigerpm_lite PUBLIC  boost_program_options cudart fftw3f gsl gslcblas hpx_lite hwloc)
-#target_include_directories(tigerpm_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
-#target_include_directories(hpx_lite PUBLIC  ${PROJECT_SOURCE_DIR}/hpx_lite)
-#target_compile_options(tigerpm_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-#                        --use_fast_math --maxrregcount 128;
-#                        >)
-#set_property(TARGET tigerpm_lite PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
