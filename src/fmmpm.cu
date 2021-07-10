@@ -20,7 +20,7 @@ __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define LIST_SIZE  (1024)
+#define LIST_SIZE  (8*1024)
 #define STACK_SIZE (32*1024)
 #define MAX_DEPTH 64
 
@@ -450,7 +450,7 @@ __device__ void long_range_interp(int nactive) {
 	for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 		array<float, NDIM>& g = shmem.g[sink_index];
 		float& phi = shmem.phi[sink_index];
-		g[0] = g[1] = g[2] = 0.f;
+		g[XDIM] = g[YDIM] = g[ZDIM] = 0.f;
 		phi = params.phi0;
 		const fixed32 sink_x = shmem.x[sink_index];
 		const fixed32 sink_y = shmem.y[sink_index];
@@ -516,6 +516,7 @@ __device__ void long_range_interp(int nactive) {
 			}
 		}
 	}
+	__syncwarp();
 }
 
 __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos) {
@@ -669,8 +670,8 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	cc_interactions(mycheck, Lexpansion);
 
 	if (iamleaf) {
-		const auto& snk_begin = mycheck.get_snk_begin();
-		const auto& snk_end = mycheck.get_snk_end();
+		const auto snk_begin = mycheck.get_snk_begin();
+		const auto snk_end = mycheck.get_snk_end();
 		const int nsinks = snk_end - snk_begin;
 		const int imax = round_up(nsinks, warpSize);
 		int nactive = 0;
@@ -697,7 +698,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 
 		long_range_interp(nactive);
 
-		pp_interactions(nactive);
+	//	pp_interactions(nactive);
 
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 			array<float, NDIM>& g = shmem.g[sink_index];
@@ -707,9 +708,9 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			dX[ZDIM] = distance(shmem.z[sink_index], Lpos[ZDIM]);
 			const auto L2 = L2P_kernel(Lexpansion, dX, params.do_phi);
 			phi += L2[0];
-			g[XDIM] -= L2[XDIM + 1];
-			g[YDIM] -= L2[YDIM + 1];
-			g[ZDIM] -= L2[ZDIM + 1];
+		//	g[XDIM] -= L2[XDIM + 1];
+		//	g[YDIM] -= L2[YDIM + 1];
+		//	g[ZDIM] -= L2[ZDIM + 1];
 			const int snki = active[sink_index];
 			g[XDIM] *= params.GM;
 			g[YDIM] *= params.GM;
@@ -882,7 +883,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.8;
+		params.theta = 0.3;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
@@ -1001,21 +1002,6 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 					cpy.dest = params.rung + count;
 					cpy.src = &particles_rung(begin);
 					copies.push_back(cpy);
-#ifdef FORCE_TEST
-					cpy.size = sizeof(float) * this_size;
-					cpy.dest = params.gx + count;
-					cpy.src = &particles_gforce(XDIM, begin);
-					copies.push_back(cpy);
-					cpy.dest = params.gy + count;
-					cpy.src = &particles_gforce(YDIM, begin);
-					copies.push_back(cpy);
-					cpy.dest = params.gz + count;
-					cpy.src = &particles_gforce(ZDIM, begin);
-					copies.push_back(cpy);
-					cpy.dest = params.pot + count;
-					cpy.src = &particles_pot(begin);
-					copies.push_back(cpy);
-#endif
 					count += this_size;
 					array<int, NDIM> j;
 					int p = 0;

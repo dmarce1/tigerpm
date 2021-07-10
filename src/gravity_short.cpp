@@ -67,7 +67,7 @@ void gravity_short_ewald_compare(int Nsamples) {
 		l2sum_force += sqr(g1 - g2);
 		lmax_force += std::abs(g1 - g2);
 		l2norm_force += sqr(g2);
-	//	printf("%e %e %e \n", f1, f2, f2 / f1);
+		printf("%e %e %e \n", g1, g2, g2 / g1);
 	}
 	l2sum_force = sqrt(l2sum_force / l2norm_force);
 	lmax_force /= sqrt(l2norm_force);
