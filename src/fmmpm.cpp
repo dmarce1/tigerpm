@@ -23,9 +23,9 @@ void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
 	array<int, NDIM> i;
 	std::vector<hpx::future<void>> futs1;
 	trees.resize(bigvol);
-	for (i[0] = bigbox.begin[0]; i[0] < bigbox.end[0]; i[0]++) {
-		for (i[1] = bigbox.begin[1]; i[1] < bigbox.end[1]; i[1]++) {
-			for (i[2] = bigbox.begin[2]; i[2] < bigbox.end[2]; i[2]++) {
+	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
+		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
+			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
 				const auto func = [i,bigbox,box,&trees]() {
 					const auto cell = chainmesh_get(i);
 					const auto rc = tree_create(i,cell);
@@ -36,8 +36,26 @@ void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
 			}
 		}
 	}
+	const int N = get_options().chain_dim;
 	hpx::wait_all(futs1.begin(), futs1.end());
 	tm.stop();
+	for (i[0] = bigbox.begin[0]; i[0] < bigbox.end[0]; i[0]++) {
+		for (i[1] = bigbox.begin[1]; i[1] < bigbox.end[1]; i[1]++) {
+			for (i[2] = bigbox.begin[2]; i[2] < bigbox.end[2]; i[2]++) {
+				if( !box.contains(i)) {
+					auto j = i;
+					for( int dim = 0; dim < NDIM; dim++) {
+						if( j[dim] < 0 ) {
+							j[dim] += N;
+						} else if( j[dim] >= N) {
+							j[dim] -= N;
+						}
+					}
+					trees[bigbox.index(i)] = trees[bigbox.index(j)];
+				}
+			}
+		}
+	}
 	PRINT("Trees took %e s\n", tm.read());
 	tm.reset();
 

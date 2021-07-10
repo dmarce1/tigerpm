@@ -20,7 +20,7 @@ __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define LIST_SIZE  (4*1024)
+#define LIST_SIZE  (8*1024)
 #define STACK_SIZE (32*1024)
 #define MAX_DEPTH 64
 
@@ -533,8 +533,8 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 //	auto& tmplist =lists->tmplist;
 	auto& openlist = lists->openlist;
 	auto& nextlist = lists->nextlist;
-//	auto& Lexpansion = lists->Lexpansion[depth];
-//	auto* active = params.active + bid * FMM_BUCKET_SIZE;
+	auto& Lexpansion = lists->Lexpansion[depth];
+	auto* active = params.active + bid * FMM_BUCKET_SIZE;
 	const bool iamleaf = mycheck.is_leaf();
 	const float myradius = mycheck.get_radius();
 	const fixed32 sink_x = mycheck.get_x(XDIM);
@@ -544,15 +544,15 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	dX[XDIM] = distance(sink_x, Lpos[XDIM]);
 	dX[YDIM] = distance(sink_y, Lpos[YDIM]);
 	dX[ZDIM] = distance(sink_z, Lpos[ZDIM]);
-//	auto Ltmp = L2L_kernel(Lexpansion, dX, params.do_phi);
+	auto Ltmp = L2L_kernel(Lexpansion, dX, params.do_phi);
 	__syncwarp();
 	if( tid == 0 ) {
-//		Lexpansion = Ltmp;
+		Lexpansion = Ltmp;
 		multilist.resize(0);
 		pplist.resize(0);
 	}
 	__syncwarp();
-//	do {
+	do {
 		__syncwarp();
 		if (tid == 0) {
 			nextlist.resize(0);
@@ -656,7 +656,9 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		for (int ci = tid; ci < openlist.size(); ci += warpSize) {
 			checklist[ci + offset] = openlist[ci];
 		}
-//	} while (iamleaf && checklist.size());
+	} while (iamleaf && checklist.size());
+//	if( nextlist.size() > 1024 || openlist.size() > 1024 || multilist.size() > 1024 || pplist.size() > 1024)
+//	PRINT( "%i %i %i %i %i \n", checklist.size(), nextlist.size(), openlist.size(), multilist.size(), pplist.size());
 
 	//cc_interactions(mycheck, Lexpansion);
 
@@ -742,22 +744,22 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		const auto children = mycheck.get_children();
 		__syncwarp();
 		if( tid == 0 ) {
-//			(params.lists + bid)->Lexpansion[depth + 1] = Lexpansion;
+			(params.lists + bid)->Lexpansion[depth + 1] = Lexpansion;
 		}
 		__syncwarp();
 		array<fixed32, NDIM> X;
 		X[XDIM] = mycheck.get_x(XDIM);
 		X[YDIM] = mycheck.get_x(YDIM);
 		X[ZDIM] = mycheck.get_x(ZDIM);
-	//	checklist.push_top();
+		checklist.push_top();
 		do_kick(children[0], depth + 1, X);
 		__syncwarp();
 		if( tid == 0 ) {
-//			(params.lists + bid)->Lexpansion[depth + 1] = Lexpansion;
-		//	checklist.pop_top();
+			(params.lists + bid)->Lexpansion[depth + 1] = Lexpansion;
+			checklist.pop_top();
 		}
 		__syncwarp();
-//		do_kick(children[1], depth + 1, X);
+		do_kick(children[1], depth + 1, X);
 	}
 
 }

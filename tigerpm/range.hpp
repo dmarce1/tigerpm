@@ -103,7 +103,7 @@ struct range {
 	}
 
 	inline int longest_dim() const {
-		int max_dim;
+		int max_dim = 0;
 		T max_span = 0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			const T span = end[dim] - begin[dim];
@@ -118,7 +118,7 @@ struct range {
 	inline std::pair<range<T>, range<T>> split() const {
 		auto left = *this;
 		auto right = *this;
-		int max_dim;
+		int max_dim = 0;
 		T max_span = 0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			const T span = end[dim] - begin[dim];

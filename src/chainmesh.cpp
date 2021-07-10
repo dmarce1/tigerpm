@@ -157,6 +157,15 @@ static void sort(const range<int> chain_box, int pbegin, int pend) {
 	static int N = get_options().chain_dim;
 	static double Ninv = 1.0 / N;
 	const int vol = chain_box.volume();
+#ifndef NDEBUG
+	for( int i = pbegin; i < pend; i++) {
+		for( int dim = 0; dim < NDIM; dim++) {
+			const auto x = particles_pos(dim,i).to_double();
+			assert( x >= chain_box.begin[dim] * Ninv);
+			assert( x <= chain_box.end[dim] * Ninv);
+		}
+	}
+#endif
 	if (vol == 1) {
 		std::unique_lock<mutex_type> lock(mutex);
 		auto& cell = cells[chain_box.begin];

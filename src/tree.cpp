@@ -6,6 +6,13 @@
 
 static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>& box, int begin, int end, int depth, bool sunk = false) {
 	tree_node node;
+	for (int dim = 0; dim < NDIM; dim++) {
+		if (box.end[dim] < 0.0) {
+			PRINT("%e %e\n", box.begin[dim], box.end[dim]);
+			assert(false);
+		}
+	}
+
 	if (depth > MAX_DEPTH) {
 		PRINT("Tree depth exceeded - two identical particles ? \n");
 		abort();
@@ -30,6 +37,14 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		for (int i = begin; i < end; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const auto x = particles_pos(dim, i).to_double();
+//				if( x > box.end[dim] ) {
+//					PRINT( "%e %e\n", x, box.end[dim]);
+//				}
+				if( x > box.end[dim] ) {
+					PRINT( "%e %e\n", x, box.end[dim]);
+				}
+				assert(x <= box.end[dim]);
+				assert(x >= box.begin[dim]);
 				xmax[dim] = std::max(xmax[dim], x);
 				xmin[dim] = std::min(xmin[dim], x);
 			}
@@ -37,6 +52,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		if (mass > 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				x[dim] = (xmax[dim] + xmin[dim]) * 0.5;
+				assert(x[dim] <= box.end[dim]);
+				assert(x[dim] >= box.begin[dim]);
 			}
 		} else {
 			for (int dim = 0; dim < NDIM; dim++) {
@@ -71,6 +88,13 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 	} else {
 		const int long_dim = box.longest_dim();
 		const auto child_boxes = box.split();
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (child_boxes.second.end[dim] < 0.0) {
+				PRINT("%e %e\n", box.begin[dim], box.end[dim]);
+				PRINT("%e %e\n", child_boxes.first.begin[dim], child_boxes.first.end[dim]);
+				assert(false);
+			}
+		}
 		const int mid = particles_sort(begin, end, child_boxes.first.end[long_dim], long_dim);
 		//	PRINT( "%i %i %i\n", begin, mid, end);
 		bool this_sunk = end - begin <= SINK_BUCKET_SIZE;
@@ -89,7 +113,15 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			n[dim] *= norminv;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = (t.get_x(dim, i0).to_double() + t.get_x(dim, i1).to_double() + n[dim] * t.get_radius(i1) - n[dim] * t.get_radius(i0)) * 0.5;
+			x[dim] = (t.get_x(dim, i0).to_double() + t.get_x(dim, i1).to_double()) * 0.5;
+			if( x[dim] > box.end[dim] ) {
+				PRINT( "%e %e %e\n", box.begin[dim], x[dim], box.end[dim]);
+			}
+			if( x[dim] <= box.begin[dim] ) {
+				PRINT( "%e %e %e\n", box.begin[dim], x[dim], box.end[dim]);
+			}
+//			assert(x[dim] <= box.end[dim]);
+//			assert(x[dim] >= box.begin[dim]);
 		}
 		multipole m, m1;
 		array<float, NDIM> dx0, dx1;
@@ -171,6 +203,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 	}
 	node.snk_begin = node.src_begin;
 	node.snk_end = node.src_end;
+	//PRINT("%e\n", node.radius);
 	t.set(node, index);
 	return index;
 }
@@ -182,8 +215,24 @@ std::pair<tree, vector<sink_bucket>> tree_create(const array<int, NDIM>& cell_in
 	const double Nchain = get_options().chain_dim;
 	const double Ninv = 1.0 / Nchain;
 	for (int dim = 0; dim < NDIM; dim++) {
-		box.begin[dim] = cell_index[dim] * Ninv;
-		box.end[dim] = (cell_index[dim] + 1) * Ninv;
+		int i = cell_index[dim];
+		if (i >= Nchain) {
+			i -= Nchain;
+		} else if (i < 0) {
+			i += Nchain;
+		}
+		box.begin[dim] = i * Ninv;
+		box.end[dim] = (i + 1) * Ninv;
+		if (box.end[dim] > 1.0 || box.begin[dim] > 1.0) {
+			box.end[dim] -= 1.0;
+			box.begin[dim] -= 1.0;
+		} else if (box.end[dim] < 0.0 || box.begin[dim] < 0.0) {
+			box.end[dim] += 1.0;
+			box.begin[dim] += 1.0;
+		}
+		if (box.end[dim] < 0.0) {
+			PRINT("%i %i %e %e -----\n", i, cell_index[dim], box.begin[dim], box.end[dim]);
+		}
 	}
 	sort(new_tree, sink_buckets, box, cell.pbegin, cell.pend, 0);
 	return std::make_pair(std::move(new_tree), std::move(sink_buckets));

@@ -5,6 +5,15 @@
 #include <tigerpm/range.hpp>
 #include <tigerpm/tigerpm.hpp>
 
+template<class T>
+void constrain_range(T& x ) {
+	if( x >= T(1)) {
+		x -= T(1);
+	} else if( x < T(0)) {
+		x += T(1);
+	}
+}
+
 range<int> find_my_box(int N);
 void find_all_boxes(vector<range<int>>& boxes, int N);
 
