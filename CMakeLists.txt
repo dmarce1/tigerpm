@@ -87,7 +87,7 @@ set_property(TARGET tigerpm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(tigerpm PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_options(tigerpm PUBLIC "-DUSE_HPX")
 target_compile_options(tigerpm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math -G --maxrregcount 128 ;
+                        --use_fast_math --maxrregcount 128 ;
                         >)
                         
 set_property(TARGET tigerpm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})

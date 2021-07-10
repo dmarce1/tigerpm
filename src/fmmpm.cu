@@ -298,11 +298,15 @@ inline __device__ void compute_pp_interaction(float dx, float dy, float dz, floa
 
 __device__ void pp_interactions(int nactive) {
 	const int& tid = threadIdx.x;
-	const int& bid = blockDim.x;
+	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
 	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
 	const fmmpm_params& params = dev_fmmpm_params;
 	const auto& list = (params.lists + bid)->pplist;
+	if( list.size() == 0 ) {
+		PRINT( "ZERO\n");
+		return;
+	}
 	int i = 0;
 	int N = 0;
 	int part_index;
@@ -402,7 +406,7 @@ __device__ void pp_interactions(int nactive) {
 
 __device__ void cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 	const int& tid = threadIdx.x;
-	const int& bid = blockDim.x;
+	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
 	const fmmpm_params& params = dev_fmmpm_params;
 	const auto& list = (params.lists + bid)->multilist;
@@ -546,7 +550,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	dX[ZDIM] = distance(sink_z, Lpos[ZDIM]);
 	auto Ltmp = L2L_kernel(Lexpansion, dX, params.do_phi);
 	__syncwarp();
-	if( tid == 0 ) {
+	if (tid == 0) {
 		Lexpansion = Ltmp;
 		multilist.resize(0);
 		pplist.resize(0);
@@ -658,92 +662,94 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		}
 	} while (iamleaf && checklist.size());
 //	if( nextlist.size() > 1024 || openlist.size() > 1024 || multilist.size() > 1024 || pplist.size() > 1024)
-//	PRINT( "%i %i %i %i %i \n", checklist.size(), nextlist.size(), openlist.size(), multilist.size(), pplist.size());
+	if( iamleaf) {
+//		PRINT( "%i %i %i %i %i \n", checklist.size(), nextlist.size(), openlist.size(), multilist.size(), pplist.size());
+	}
 
-	//cc_interactions(mycheck, Lexpansion);
+	cc_interactions(mycheck, Lexpansion);
 
 	if (iamleaf) {
-		/*  const auto& snk_begin = mycheck.get_snk_begin();
-		 const auto& snk_end = mycheck.get_snk_end();
-		 const int nsinks = snk_end - snk_begin;
-		 const int imax = round_up(nsinks, warpSize);
-		 int nactive = 0;
-		 for (int i = tid; i < imax; i += warpSize) {
-		 const int snki = snk_begin + i;
-		 bool is_active;
-		 if (i < nsinks) {
-		 is_active = (params.rung[snki] >= params.min_rung);
-		 } else {
-		 is_active = false;
-		 }
-		 int total;
-		 int active_index = compute_indices(int(is_active), total) + nactive;
-		 int srci = mycheck.get_src_begin() + i;
-		 if (is_active) {
-		 active[active_index] = snki;
-		 }
-		 nactive += total;
-		 shmem.x[active_index] = params.x[srci];
-		 shmem.y[active_index] = params.y[srci];
-		 shmem.z[active_index] = params.z[srci];
-		 __syncwarp();
-		 }
+		const auto& snk_begin = mycheck.get_snk_begin();
+		const auto& snk_end = mycheck.get_snk_end();
+		const int nsinks = snk_end - snk_begin;
+		const int imax = round_up(nsinks, warpSize);
+		int nactive = 0;
+		for (int i = tid; i < imax; i += warpSize) {
+			const int snki = snk_begin + i;
+			bool is_active;
+			if (i < nsinks) {
+				is_active = (params.rung[snki] >= params.min_rung);
+			} else {
+				is_active = false;
+			}
+			int total;
+			int active_index = compute_indices(int(is_active), total) + nactive;
+			int srci = mycheck.get_src_begin() + i;
+			if (is_active) {
+				active[active_index] = snki;
+			}
+			nactive += total;
+			shmem.x[active_index] = params.x[srci];
+			shmem.y[active_index] = params.y[srci];
+			shmem.z[active_index] = params.z[srci];
+			__syncwarp();
+		}
 
-		 long_range_interp(nactive);
+		long_range_interp(nactive);
 
-		 pp_interactions(nactive);
+		pp_interactions(nactive);
 
-		 for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
-		 array<float, NDIM>& g = shmem.g[sink_index];
-		 float& phi = shmem.phi[sink_index];
-		 dX[XDIM] = distance(shmem.x[sink_index], Lpos[XDIM]);
-		 dX[YDIM] = distance(shmem.y[sink_index], Lpos[YDIM]);
-		 dX[ZDIM] = distance(shmem.z[sink_index], Lpos[ZDIM]);
-		 const auto L2 = L2P_kernel(Lexpansion, dX, params.do_phi);
-		 phi += L2[0];
-		 g[XDIM] -= L2[XDIM + 1];
-		 g[YDIM] -= L2[YDIM + 1];
-		 g[ZDIM] -= L2[ZDIM + 1];
-		 const int snki = active[sink_index];
-		 g[XDIM] *= params.GM;
-		 g[YDIM] *= params.GM;
-		 g[ZDIM] *= params.GM;
-		 phi *= params.GM;
-		 #ifdef FORCE_TEST
-		 params.gx[snki] = g[XDIM];
-		 params.gy[snki] = g[YDIM];
-		 params.gz[snki] = g[ZDIM];
-		 params.pot[snki] = phi;
-		 #endif
-		 auto& vx = params.velx[snki];
-		 auto& vy = params.vely[snki];
-		 auto& vz = params.velz[snki];
-		 auto& rung = params.rung[snki];
-		 auto dt = 0.5f * rung_dt[rung] * params.t0;
-		 if (!params.first_call) {
-		 vx = fmaf(g[XDIM], dt, vx);
-		 vy = fmaf(g[YDIM], dt, vy);
-		 vz = fmaf(g[ZDIM], dt, vz);
-		 }
-		 const auto g2 = sqr(g[0], g[1], g[2]);
-		 const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
-		 dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
-		 rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
-		 if (rung < 0 || rung >= MAX_RUNG) {
-		 PRINT("Rung out of range %i\n", rung);
-		 }
-		 assert(rung >= 0);
-		 assert(rung < MAX_RUNG);
-		 dt = 0.5f * rung_dt[rung] * params.t0;
-		 vx = fmaf(g[XDIM], dt, vx);
-		 vy = fmaf(g[YDIM], dt, vy);
-		 vz = fmaf(g[ZDIM], dt, vz);
-		 }
-		 */
+		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
+			array<float, NDIM>& g = shmem.g[sink_index];
+			float& phi = shmem.phi[sink_index];
+			dX[XDIM] = distance(shmem.x[sink_index], Lpos[XDIM]);
+			dX[YDIM] = distance(shmem.y[sink_index], Lpos[YDIM]);
+			dX[ZDIM] = distance(shmem.z[sink_index], Lpos[ZDIM]);
+			const auto L2 = L2P_kernel(Lexpansion, dX, params.do_phi);
+			phi += L2[0];
+			g[XDIM] -= L2[XDIM + 1];
+			g[YDIM] -= L2[YDIM + 1];
+			g[ZDIM] -= L2[ZDIM + 1];
+			const int snki = active[sink_index];
+			g[XDIM] *= params.GM;
+			g[YDIM] *= params.GM;
+			g[ZDIM] *= params.GM;
+			phi *= params.GM;
+#ifdef FORCE_TEST
+			params.gx[snki] = g[XDIM];
+			params.gy[snki] = g[YDIM];
+			params.gz[snki] = g[ZDIM];
+			params.pot[snki] = phi;
+#endif
+			auto& vx = params.velx[snki];
+			auto& vy = params.vely[snki];
+			auto& vz = params.velz[snki];
+			auto& rung = params.rung[snki];
+			auto dt = 0.5f * rung_dt[rung] * params.t0;
+			if (!params.first_call) {
+				vx = fmaf(g[XDIM], dt, vx);
+				vy = fmaf(g[YDIM], dt, vy);
+				vz = fmaf(g[ZDIM], dt, vz);
+			}
+			const auto g2 = sqr(g[0], g[1], g[2]);
+			const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
+			dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
+			rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
+			if (rung < 0 || rung >= MAX_RUNG) {
+				PRINT("Rung out of range %i\n", rung);
+			}
+			assert(rung >= 0);
+			assert(rung < MAX_RUNG);
+			dt = 0.5f * rung_dt[rung] * params.t0;
+			vx = fmaf(g[XDIM], dt, vx);
+			vy = fmaf(g[YDIM], dt, vy);
+			vz = fmaf(g[ZDIM], dt, vz);
+		}
+
 	} else {
 		const auto children = mycheck.get_children();
 		__syncwarp();
-		if( tid == 0 ) {
+		if (tid == 0) {
 			(params.lists + bid)->Lexpansion[depth + 1] = Lexpansion;
 		}
 		__syncwarp();
@@ -754,7 +760,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		checklist.push_top();
 		do_kick(children[0], depth + 1, X);
 		__syncwarp();
-		if( tid == 0 ) {
+		if (tid == 0) {
 			(params.lists + bid)->Lexpansion[depth + 1] = Lexpansion;
 			checklist.pop_top();
 		}
