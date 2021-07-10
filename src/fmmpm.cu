@@ -698,7 +698,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 
 		long_range_interp(nactive);
 
-	//	pp_interactions(nactive);
+		pp_interactions(nactive);
 
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 			array<float, NDIM>& g = shmem.g[sink_index];
@@ -708,9 +708,9 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			dX[ZDIM] = distance(shmem.z[sink_index], Lpos[ZDIM]);
 			const auto L2 = L2P_kernel(Lexpansion, dX, params.do_phi);
 			phi += L2[0];
-		//	g[XDIM] -= L2[XDIM + 1];
-		//	g[YDIM] -= L2[YDIM + 1];
-		//	g[ZDIM] -= L2[ZDIM + 1];
+			g[XDIM] -= L2[XDIM + 1];
+			g[YDIM] -= L2[YDIM + 1];
+			g[ZDIM] -= L2[ZDIM + 1];
 			const int snki = active[sink_index];
 			g[XDIM] *= params.GM;
 			g[YDIM] *= params.GM;
@@ -968,15 +968,6 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		all_trees.resize(trees_size);
 		CUDA_CHECK(cudaMallocAsync(&dev_all_trees, sizeof(tree_node) * trees_size, stream));
 		count = 0;
-		vector<tree> dev_trees(bigvol);
-		for (int j = 0; j < bigvol; j++) {
-			dev_trees[j] = trees[j].to_device();
-			dev_trees[j].nodes = dev_all_trees + count;
-			std::memcpy(all_trees.data() + count, trees[j].nodes, sizeof(tree_node) * trees[j].size());
-			count += dev_trees[j].size();
-		}
-		CUDA_CHECK(cudaMemcpyAsync(dev_all_trees, all_trees.data(), trees_size * sizeof(tree_node), cudaMemcpyHostToDevice));
-		count = 0;
 		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
 			for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
 				for (i[2] = box.begin[2]; i[2] != box.end[2]; i[2]++) {
@@ -1003,6 +994,23 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 					cpy.src = &particles_rung(begin);
 					copies.push_back(cpy);
 					count += this_size;
+				}
+			}
+		}
+		count = 0;
+		vector<tree> dev_trees(bigvol);
+		for (int j = 0; j < bigvol; j++) {
+			dev_trees[j] = trees[j].to_device();
+			dev_trees[j].nodes = dev_all_trees + count;
+			std::memcpy(all_trees.data() + count, trees[j].nodes, sizeof(tree_node) * trees[j].size());
+			count += dev_trees[j].size();
+		}
+		CUDA_CHECK(cudaMemcpyAsync(dev_all_trees, all_trees.data(), trees_size * sizeof(tree_node), cudaMemcpyHostToDevice));
+		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
+			for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
+				for (i[2] = box.begin[2]; i[2] != box.end[2]; i[2]++) {
+					auto this_cell = chainmesh_get(i);
+					const int l = box.index(i);
 					array<int, NDIM> j;
 					int p = 0;
 					for (j[0] = i[0] - 1; j[0] <= i[0] + 1; j[0]++) {
