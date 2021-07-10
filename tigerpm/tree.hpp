@@ -19,8 +19,10 @@ struct tree_node {
 	array<fixed32, NDIM> x;
 	float radius;
 	array<int, NCHILD> children;
-	int pbegin;
-	int pend;
+	int src_begin;
+	int src_end;
+	int snk_begin;
+	int snk_end;
 	multipole multi;
 };
 
@@ -56,10 +58,16 @@ public:
 		return nodes[i].x[dim];
 	}
 	CUDA_EXPORT inline int get_pbegin(int i) const {
-		return nodes[i].pbegin;
+		return nodes[i].src_begin;
 	}
 	CUDA_EXPORT inline int get_pend(int i) const {
-		return nodes[i].pend;
+		return nodes[i].src_end;
+	}
+	CUDA_EXPORT inline int get_snk_begin(int i) const {
+		return nodes[i].snk_begin;
+	}
+	CUDA_EXPORT inline int get_snk_end(int i) const {
+		return nodes[i].snk_end;
 	}
 	CUDA_EXPORT inline multipole get_multipole(int i) const {
 		return nodes[i].multi;
@@ -82,10 +90,16 @@ public:
 	inline void set(tree_node node, int i) {
 		nodes[i] = node;
 	}
-	inline void adjust_indexes(int dif) {
+	inline void adjust_src_indexes(int dif) {
 		for( int i = 0; i < sz; i++) {
-			nodes[i].pbegin += dif;
-			nodes[i].pend += dif;
+			nodes[i].src_begin += dif;
+			nodes[i].src_end += dif;
+		}
+	}
+	inline void adjust_snk_indexes(int dif) {
+		for( int i = 0; i < sz; i++) {
+			nodes[i].snk_begin += dif;
+			nodes[i].snk_end += dif;
 		}
 	}
 }

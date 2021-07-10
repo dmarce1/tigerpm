@@ -12,8 +12,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 	}
 	int index = t.allocate();
 //	PRINT( "%i %i\n", begin, end);
-	node.pbegin = begin;
-	node.pend = end;
+	node.src_begin = begin;
+	node.src_end = end;
 	if (end - begin <= std::min(SOURCE_BUCKET_SIZE, SINK_BUCKET_SIZE)) {
 //		PRINT( "END %i %i\n", begin, end);
 		float mass = end - begin;
@@ -165,10 +165,12 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			r2max = std::max(r2max, r2);
 		}
 		bucket.radius = std::sqrt(r2max) + get_options().hsoft;
-		bucket.snk_begin = bucket.src_begin = node.pbegin;
-		bucket.snk_end = bucket.src_end = node.pend;
+		bucket.snk_begin = bucket.src_begin = node.src_begin;
+		bucket.snk_end = bucket.src_end = node.src_end;
 		sink_buckets.push_back(bucket);
 	}
+	node.snk_begin = node.src_begin;
+	node.snk_end = node.src_end;
 	t.set(node, index);
 	return index;
 }

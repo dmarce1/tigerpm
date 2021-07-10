@@ -1364,7 +1364,7 @@ static __device__ float phi_factor[55] = { 1.00000000e+00, 5.00000000e-01, 1.666
 static __device__ char phi_Lsrc[55] = { 3, 9, 19, 34, 55, 2, 8, 18, 33, 54, 7, 17, 32, 53, 16, 31, 52, 30, 51, 50, 1, 6, 15, 29, 49, 5, 14, 28, 48, 13, 27, 47,
 		26, 46, 45, 4, 12, 25, 44, 11, 24, 43, 23, 42, 41, 10, 22, 40, 21, 39, 38, 20, 37, 36, 35 };
 
-#ifdef __CUDA_ARCH__
+#ifdef __CUDACC__
 __device__
 inline array<float, 56> L2L_kernel(const array<float, 56>& La, const array<float, NDIM>& X, bool do_phi) {
 	const int tid = threadIdx.x;

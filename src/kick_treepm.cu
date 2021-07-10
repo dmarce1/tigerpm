@@ -888,7 +888,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 			const auto begin = this_cell.pbegin;
 			const auto dif = count - begin;
 			const int l = chaincells[j].bigbox_index;
-			trees[l].adjust_indexes(dif);
+			trees[l].adjust_src_indexes(dif);
 			if (chaincells[j].box_index >= 0) {
 				const int q = chaincells[j].box_index;
 				for (auto& bucket : buckets[q]) {

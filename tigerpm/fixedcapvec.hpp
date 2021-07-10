@@ -27,11 +27,27 @@ public:
 	CUDA_EXPORT
 	inline void resize(int new_sz) {
 		sz = new_sz;
+		if( sz >= N ) {
+			PRINT( "fixedcapvec exceeded size of %i in %s on line %i\n", N, __FILE__, __LINE__);
+#ifdef __CUDA_ARCH__
+			__trap();
+#else
+			abort();
+#endif
+		}
 	}
 	CUDA_EXPORT
 	inline void push_back(const T& item) {
 		data[sz] = item;
 		sz++;
+		if( sz >= N ) {
+			PRINT( "fixedcapvec exceeded size of %i in %s on line %i\n", N, __FILE__, __LINE__);
+#ifdef __CUDA_ARCH__
+			__trap();
+#else
+			abort();
+#endif
+		}
 	}
 	CUDA_EXPORT
 	inline void pop_back() {
