@@ -54,6 +54,14 @@ public:
 		const int& blocksize = blockDim.x;
 		const int& tid = threadIdx.x;
 		const auto sz = size();
+		if( end() + sz >= N ) {
+			PRINT( "Maximum stack_vector size exceeded\n");
+			__trap();
+		}
+		if( bounds.size() > D ) {
+			PRINT( "Maximum stack_vector depth exceeded\n");
+			__trap();
+		}
 		if( tid == 0 ) {
 			bounds.push_back(end() + sz);
 			data.resize(data.size() + sz);
