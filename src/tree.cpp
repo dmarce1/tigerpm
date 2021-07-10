@@ -40,8 +40,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 //				if( x > box.end[dim] ) {
 //					PRINT( "%e %e\n", x, box.end[dim]);
 //				}
-				if( x > box.end[dim] ) {
-					PRINT( "%e %e\n", x, box.end[dim]);
+				if (x > box.end[dim]) {
+					PRINT("%e %e\n", x, box.end[dim]);
 				}
 				assert(x <= box.end[dim]);
 				assert(x >= box.begin[dim]);
@@ -58,6 +58,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		} else {
 			for (int dim = 0; dim < NDIM; dim++) {
 				x[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
+				assert(x[dim] <= box.end[dim]);
+				assert(x[dim] >= box.begin[dim]);
 			}
 		}
 		multipole m;
@@ -76,6 +78,9 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		}
 		node.multi = m;
 		double r2max = 0.0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			node.x[dim] = x[dim];
+		}
 		for (int i = begin; i < end; i++) {
 			double r2 = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
@@ -113,12 +118,18 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			n[dim] *= norminv;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = (t.get_x(dim, i0).to_double() + t.get_x(dim, i1).to_double()) * 0.5;
-			if( x[dim] > box.end[dim] ) {
-				PRINT( "%e %e %e\n", box.begin[dim], x[dim], box.end[dim]);
+			if (t.get_mass(i0) == 0.0) {
+				x[dim] = t.get_x(dim, i0).to_double();
+			} else if (t.get_mass(i1) == 0.0) {
+				x[dim] = t.get_x(dim, i1).to_double();
+			} else {
+				x[dim] = (t.get_x(dim, i0).to_double() + t.get_x(dim, i1).to_double() + n[dim] * (t.get_radius(i1) - t.get_radius(i0))) * 0.5;
 			}
-			if( x[dim] <= box.begin[dim] ) {
-				PRINT( "%e %e %e\n", box.begin[dim], x[dim], box.end[dim]);
+			if (x[dim] > box.end[dim]) {
+				PRINT("! %e %e %e %e %e\n", box.begin[dim], x[dim], box.end[dim], t.get_x(dim, i0).to_double(), t.get_x(dim, i1).to_double());
+			}
+			if (x[dim] <= box.begin[dim]) {
+				PRINT("! %e %e %e %e %e\n", box.begin[dim], x[dim], box.end[dim], t.get_x(dim, i0).to_double(), t.get_x(dim, i1).to_double());
 			}
 //			assert(x[dim] <= box.end[dim]);
 //			assert(x[dim] >= box.begin[dim]);
@@ -141,8 +152,12 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		double r20 = 0.0;
 		double r21 = 0.0;
 		for (int dim = 0; dim < NDIM; dim++) {
-			r20 += sqr(t.get_x(dim, i0).to_double() - x[dim]);
-			r21 += sqr(t.get_x(dim, i1).to_double() - x[dim]);
+			if (t.get_mass(i0)) {
+				r20 += sqr(t.get_x(dim, i0).to_double() - x[dim]);
+			}
+			if (t.get_mass(i1)) {
+				r21 += sqr(t.get_x(dim, i1).to_double() - x[dim]);
+			}
 		}
 		const auto r2_bbb = sqr(box.begin[0] - x[0], box.begin[1] - x[1], box.begin[2] - x[2]);
 		const auto r2_bbe = sqr(box.begin[0] - x[0], box.begin[1] - x[1], box.end[2] - x[2]);
@@ -203,7 +218,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 	}
 	node.snk_begin = node.src_begin;
 	node.snk_end = node.src_end;
-	//PRINT("%e\n", node.radius);
+//	PRINT("%e\n", node.radius);
 	t.set(node, index);
 	return index;
 }
