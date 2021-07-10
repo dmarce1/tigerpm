@@ -53,6 +53,7 @@ set(tigerpm_header_files
 	tigerpm/fft.hpp
 	tigerpm/fmmpm.hpp
 	tigerpm/initialize.hpp
+	tigerpm/kernels.hpp
 	tigerpm/kick_pm.hpp
 	tigerpm/kick_pme.hpp
 	tigerpm/kick_treepm.hpp

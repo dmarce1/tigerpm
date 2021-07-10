@@ -12,7 +12,7 @@
 #include <tigerpm/cuda.hpp>
 #include <tigerpm/fixed.hpp>
 #include <tigerpm/chainmesh.hpp>
-#include <tigerpm/pckernels.hpp>
+#include <tigerpm/kernels.hpp>
 
 
 struct tree_node {

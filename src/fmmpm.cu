@@ -47,6 +47,8 @@ struct checkitem {
 		c[0].index = indices[0];
 		c[1].index = indices[1];
 		c[0].opened = c[1].opened = 0;
+		c[0].tr = c[1].tr = tr;
+		return c;
 	}
 };
 

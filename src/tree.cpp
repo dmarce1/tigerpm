@@ -52,7 +52,7 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = particles_pos(dim, i).to_double() - x[dim];
 			}
-			const auto this_pole = monopole_translate(dx);
+			const auto this_pole = P2M_kernel(dx);
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				m[j] += this_pole[j];
 			}
@@ -97,8 +97,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			dx0[dim] = t.get_x(dim, i0).to_double() - x[dim];
 			dx1[dim] = t.get_x(dim, i1).to_double() - x[dim];
 		}
-		m = multipole_translate(t.get_multipole(i0), dx0);
-		m1 = multipole_translate(t.get_multipole(i1), dx1);
+		m = M2M_kernel(t.get_multipole(i0), dx0);
+		m1 = M2M_kernel(t.get_multipole(i1), dx1);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			m[i] += m1[i];
 		}
