@@ -705,9 +705,9 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 			array<float, NDIM>& g = shmem.g[sink_index];
 			float& phi = shmem.phi[sink_index];
-			dX[XDIM] = distance(shmem.x[sink_index], Lpos[XDIM]);
-			dX[YDIM] = distance(shmem.y[sink_index], Lpos[YDIM]);
-			dX[ZDIM] = distance(shmem.z[sink_index], Lpos[ZDIM]);
+			dX[XDIM] = distance(shmem.x[sink_index], sink_x);
+			dX[YDIM] = distance(shmem.y[sink_index], sink_y);
+			dX[ZDIM] = distance(shmem.z[sink_index], sink_z);
 			const auto L2 = L2P_kernel(Lexpansion, dX, params.do_phi);
 			phi += L2[0];
 			g[XDIM] -= L2[XDIM + 1];
@@ -888,7 +888,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.7;
+		params.theta = 0.6;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
