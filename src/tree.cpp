@@ -118,9 +118,9 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			n[dim] *= norminv;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			if (t.get_mass(i0) == 0.0) {
+			if (t.get_mass(i1) == 0.0) {
 				x[dim] = t.get_x(dim, i0).to_double();
-			} else if (t.get_mass(i1) == 0.0) {
+			} else if (t.get_mass(i0) == 0.0) {
 				x[dim] = t.get_x(dim, i1).to_double();
 			} else {
 				x[dim] = (t.get_x(dim, i0).to_double() + t.get_x(dim, i1).to_double() + n[dim] * (t.get_radius(i1) - t.get_radius(i0))) * 0.5;

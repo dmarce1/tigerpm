@@ -830,7 +830,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.8;
+		params.theta = 0.4;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
