@@ -22,15 +22,18 @@
 
 #define SELF_PHI float(-35.0/16.0)
 
-//#define CHECK_BOUNDS
+#define CHECK_BOUNDS
 #define FORCE_TEST
 //#define SORT_TEST
 
 #define USE_QUADRUPOLE
 #define TREEPM_BLOCK_SIZE 32
 #define TREEPM_OVERSUBSCRIPTION 4
-#define SINK_BUCKET_SIZE 96
-#define SOURCE_BUCKET_SIZE 48
+
+#define SINK_BUCKET_SIZE 128
+#define SOURCE_BUCKET_SIZE 32
+#define FMM_BUCKET_SIZE 64
+
 #define MAX_RUNG 32
 #define NINTERP 6
 #define NCELLS 27

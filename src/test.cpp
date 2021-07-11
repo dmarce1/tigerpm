@@ -292,8 +292,8 @@ static void kick_treepm_test() {
 
 static void kick_fmmpm_test() {
 	timer tm;
-	//particles_random_init();
-	initialize();
+	particles_random_init();
+	//initialize();
 
 	PRINT("DOMAIN SORT\n");
 	tm.start();

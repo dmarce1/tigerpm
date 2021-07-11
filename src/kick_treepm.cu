@@ -495,9 +495,11 @@ __global__ void kick_treepm_kernel() {
 					params.active[bid * SINK_BUCKET_SIZE + active_index] = this_index;
 				}
 				nactive += total;
-				shmem.x[active_index] = params.x[that_index];
-				shmem.y[active_index] = params.y[that_index];
-				shmem.z[active_index] = params.z[that_index];
+				if( is_active ) {
+					shmem.x[active_index] = params.x[that_index];
+					shmem.y[active_index] = params.y[that_index];
+					shmem.z[active_index] = params.z[that_index];
+				}
 				__syncwarp();
 			}
 
@@ -830,7 +832,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.7;
+		params.theta = 0.9;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;

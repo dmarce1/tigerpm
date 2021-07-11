@@ -8,8 +8,6 @@
 #ifndef FMMPM_HPP_
 #define FMMPM_HPP_
 
-#define FMM_BUCKET_SIZE 128
-
 #include <tigerpm/tree.hpp>
 
 void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call);
