@@ -73,7 +73,6 @@ struct list_set {
 	fixedcapvec<checkitem, LIST_SIZE> openlist;
 	fixedcapvec<checkitem, LIST_SIZE> nextlist;
 	fixedcapvec<checkitem, LIST_SIZE> multilist;
-	fixedcapvec<checkitem, LIST_SIZE> cplist;
 	fixedcapvec<checkitem, LIST_SIZE> pplist;
 	fixedcapvec<checkitem, LIST_SIZE> tmplist;
 	array<expansion, MAX_DEPTH> Lexpansion;
@@ -399,6 +398,51 @@ __device__ void pp_interactions(int nactive) {
 
 }
 
+
+__device__ void pc_interactions(int nactive) {
+	const int& tid = threadIdx.x;
+	const int& bid = blockIdx.x;
+	__shared__ extern int shmem_ptr[];
+	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
+	const fmmpm_params& params = dev_fmmpm_params;
+	const auto& list = (params.lists + bid)->multilist;
+
+	for (int k = 0; k < nactive; k++) {
+		float& phi = shmem.phi[k];
+		auto& g = shmem.g[k];
+		const fixed32 sink_x = shmem.x[k];
+		const fixed32 sink_y = shmem.y[k];
+		const fixed32 sink_z = shmem.z[k];
+		array<float, NDIM + 1> L;
+		L[0] = L[1] = L[2] = L[3] = 0.f;
+		for (int i = tid; i < list.size(); i += warpSize) {
+			const fixed32 src_x = list[i].get_x(XDIM);
+			const fixed32 src_y = list[i].get_x(YDIM);
+			const fixed32 src_z = list[i].get_x(ZDIM);
+			const float dx = distance(sink_x, src_x);
+			const float dy = distance(sink_y, src_y);
+			const float dz = distance(sink_z, src_z);
+			const auto M = list[i].get_multipole();
+			expansion D;
+			for (int j = 0; j < EXPANSION_SIZE; j++) {
+				D[j] = 0.f;
+			}
+			greens_function(D, dx, dy, dz, params.inv2rs);
+			M2L_kernel(L, M, D, params.do_phi);
+		}
+		for (int P = warpSize / 2; P >= 1; P /= 2) {
+			for (int i = 0; i < EXPANSION_SIZE; i++) {
+				L[i] += __shfl_xor_sync(0xffffffff, L[i], P);
+			}
+		}
+		g[XDIM] -= L[XDIM + 1];
+		g[YDIM] -= L[YDIM + 1];
+		g[ZDIM] -= L[ZDIM + 1];
+		phi += L[0];
+	}
+	__syncwarp();
+}
+
 __device__ void cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -565,8 +609,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	auto& checklist = lists->checklist;
 	auto& multilist = lists->multilist;
 	auto& pplist = lists->pplist;
-//	auto& cplist = lists->cplist;
-//	auto& tmplist =lists->tmplist;
+	auto& tmplist = lists->tmplist;
 	auto& openlist = lists->openlist;
 	auto& nextlist = lists->nextlist;
 	auto& Lexpansion = lists->Lexpansion[depth];
@@ -587,7 +630,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	}
 	if (tid == 0) {
 		multilist.resize(0);
-		pplist.resize(0);
+		tmplist.resize(0);
 	}
 	__syncwarp();
 	do {
@@ -652,14 +695,14 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 
 			if (iamleaf) {
 				index = part;
-				index = compute_indices(index, total) + pplist.size();
+				index = compute_indices(index, total) + tmplist.size();
 				__syncwarp();
 				if (tid == 0) {
-					pplist.resize(pplist.size() + total);
+					tmplist.resize(tmplist.size() + total);
 				}
 				__syncwarp();
 				if (part) {
-					pplist[index] = check;
+					tmplist[index] = check;
 				}
 			} else {
 				index = open;
@@ -733,7 +776,66 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		}
 
 		long_range_interp(nactive);
+		__syncwarp();
+		if (tid == 0) {
+			pplist.resize(0);
+			multilist.resize(0);
+		}
+		__syncwarp();
+		const int maxi = round_up(tmplist.size(), warpSize);
+		for (int i = tid; i < maxi; i += warpSize) {
+			bool pc = false;
+			bool pp = false;
+			checkitem check;
+			if (i < tmplist.size()) {
+				check = tmplist[i];
+				const int begin = mycheck.get_src_begin();
+				const int end = mycheck.get_src_end();
+				const fixed32 src_x = check.get_x(XDIM);
+				const fixed32 src_y = check.get_x(YDIM);
+				const fixed32 src_z = check.get_x(ZDIM);
+				float source_radius = check.get_radius();
+				bool far = true;
+				for (int j = 0; j < nactive; j++) {
+					const fixed32& sink_x = shmem.x[j];
+					const fixed32& sink_y = shmem.y[j];
+					const fixed32& sink_z = shmem.z[j];
+					const float dx = distance(sink_x, src_x);
+					const float dy = distance(sink_y, src_y);
+					const float dz = distance(sink_z, src_z);
+					const float R2 = sqr(dx, dy, dz);
+					far = R2 > sqr(source_radius) * theta2inv;
+					if( !far ) {
+						break;
+					}
+				}
+				pp = !far;
+				pc = far;
+			}
+			int total;
+			int index = pp;
+			index = compute_indices(index, total) + pplist.size();
+			__syncwarp();
+			if (tid == 0) {
+				pplist.resize(pplist.size() + total);
+			}
+			__syncwarp();
+			if (pp) {
+				pplist[index] = check;
+			}
+			index = pc;
+			index = compute_indices(index, total) + multilist.size();
+			__syncwarp();
+			if (tid == 0) {
+				multilist.resize(multilist.size() + total);
+			}
+			__syncwarp();
+			if (pc) {
+				multilist[index] = check;
+			}
 
+		}
+		pc_interactions(nactive);
 		pp_interactions(nactive);
 
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
