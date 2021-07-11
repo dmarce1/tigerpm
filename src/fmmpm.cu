@@ -661,6 +661,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		for (int ci = tid; ci < openlist.size(); ci += warpSize) {
 			checklist[ci + offset] = openlist[ci];
 		}
+		__syncwarp();
 	} while (iamleaf && checklist.size());
 //	if( nextlist.size() > 1024 || openlist.size() > 1024 || multilist.size() > 1024 || pplist.size() > 1024)
 	if (iamleaf) {
@@ -883,7 +884,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.5;
+		params.theta = 0.7;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
