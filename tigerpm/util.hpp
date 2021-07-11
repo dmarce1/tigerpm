@@ -79,7 +79,7 @@ CUDA_EXPORT inline fixed32 load(fixed32* number) {
 #endif
 }
 
-inline double sinc(double x) {
+inline float sinc(float x) {
 	if( x != 0.0 ) {
 		return std::sin(x) / x;
 	} else {
@@ -94,6 +94,20 @@ inline float tsc(float x) {
 		return 0.75 - sqr(x);
 	} else if (absx < 1.5) {
 		return 0.5 * sqr(1.5 - absx);
+	} else {
+		return 0.0;
+	}
+}
+
+CUDA_EXPORT
+inline float cloud4(float x) {
+	float q1 = std::abs(x);
+	float q2 = q1 * q1;
+	float q3 = q2 * q1;
+	if (q1 < 1.0) {
+		return 0.16666667 * (4.0 - 6.0 * q2 + 3.0 * q3);
+	} else if (q1 < 2.0) {
+		return 0.16666667 * (8.0 - 12.0 * q1 + 6.0 * q2 - q3);
 	} else {
 		return 0.0;
 	}

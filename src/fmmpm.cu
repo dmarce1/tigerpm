@@ -444,10 +444,10 @@ __device__ void long_range_interp(int nactive) {
 	__shared__ extern int shmem_ptr[];
 	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
 	const auto& params = dev_fmmpm_params;
-	for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
+	for (int sink_index = tid; sink_index < nactive; sink_index += TREEPM_BLOCK_SIZE) {
 		array<float, NDIM>& g = shmem.g[sink_index];
 		float& phi = shmem.phi[sink_index];
-		g[XDIM] = g[YDIM] = g[ZDIM] = 0.f;
+		g[0] = g[1] = g[2] = 0.f;
 		phi = params.phi0;
 		const fixed32 sink_x = shmem.x[sink_index];
 		const fixed32 sink_y = shmem.y[sink_index];
@@ -455,63 +455,97 @@ __device__ void long_range_interp(int nactive) {
 		array<int, NDIM> I;
 		array<int, NDIM> J;
 		array<float, NDIM> X;
+		array<array<float, 4>, NDIM> w;
 		X[XDIM] = sink_x.to_float();
 		X[YDIM] = sink_y.to_float();
 		X[ZDIM] = sink_z.to_float();
-		array<array<float, NINTERP>, NDIM> w;
-		array<array<float, NINTERP>, NDIM> dw;
+		array<array<array<array<float, 4>, 4>, 4>, NDIM> force;
+		array<array<array<float, 8>, 8>, 8> pot;
 		for (int dim = 0; dim < NDIM; dim++) {
 			X[dim] *= params.Nfour;
 			I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
-			X[dim] -= float(I[dim]);
-			I[dim] -= 2;
+			I[dim] -= 3;
+		}
+		for (J[0] = I[0]; J[0] < I[0] + 8; J[0]++) {
+			for (J[1] = I[1]; J[1] < I[1] + 8; J[1]++) {
+				for (J[2] = I[2]; J[2] < I[2] + 8; J[2]++) {
+					const int l = params.phi_box.index(J);
+					pot[J[0] - I[0]][J[1] - I[1]][J[2] - I[2]] = params.phi[l];
+				}
+			}
+		}
+		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
+			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
+				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
+					const int i = J[0] - I[0] - 2;
+					const int j = J[1] - I[1] - 2;
+					const int k = J[2] - I[2] - 2;
+					const int ip = i + 2;
+					const int jp = j + 2;
+					const int kp = k + 2;
+					force[0][i][j][k] = -((2.f / 3.f) * (pot[ip + 1][jp][kp] - pot[ip - 1][jp][kp]) - (1.f / 12.f) * (pot[ip + 2][jp][kp] - pot[ip - 2][jp][kp]))
+							* params.Nfour;
+					force[1][i][j][k] = -((2.f / 3.f) * (pot[ip][jp + 1][kp] - pot[ip][jp - 1][kp]) - (1.f / 12.f) * (pot[ip][jp + 2][kp] - pot[ip][jp - 2][kp]))
+							* params.Nfour;
+					force[2][i][j][k] = -((2.f / 3.f) * (pot[ip][jp][kp + 1] - pot[ip][jp][kp - 1]) - (1.f / 12.f) * (pot[ip][jp][kp + 2] - pot[ip][jp][kp - 2]))
+							* params.Nfour;
+				}
+			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			float x1 = X[dim];
-			float x2 = X[dim] * x1;
-			float x3 = x1 * x2;
-			float x4 = x2 * x2;
-			float x5 = x3 * x2;
-			w[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
-			w[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
-			w[dim][2] = 1.0f - (5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
-			w[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
-			w[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
-			w[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
-			x5 = 5.0f * x4;
-			x4 = 4.0f * x3;
-			x3 = 3.0f * x2;
-			x2 = 2.0f * x1;
-			x1 = 1.0f;
-			dw[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
-			dw[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
-			dw[dim][2] = -(5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
-			dw[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
-			dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
-			dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+			for (int i = 0; i < 4; i++) {
+				const float x = X[dim] - (I[dim] + 2 + i);
+				w[dim][i] = cloud4(x);
+			}
 		}
-		for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
-			for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
-				for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
-					const int l = params.phi_box.index(J);
-					const int i0 = J[0] - I[0];
-					const int i1 = J[1] - I[1];
-					const int i2 = J[2] - I[2];
-					const float phi0 = params.phi[l];
-					const float phi1 = phi0 * params.Nfour;
-					double w0 = dw[0][i0] * w[1][i1] * w[2][i2];
-					g[XDIM] -= w0 * phi1;
-					w0 = w[0][i0] * dw[1][i1] * w[2][i2];
-					g[YDIM] -= w0 * phi1;
-					w0 = w[0][i0] * w[1][i1] * dw[2][i2];
-					g[ZDIM] -= w0 * phi1;
-					if (params.do_phi) {
-						w0 = w[0][i0] * w[1][i1] * w[2][i2];
-						phi += w0 * phi0;
+		float gx = 0.f;
+		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
+			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
+				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
+					const int i = J[0] - I[0] - 2;
+					const int j = J[1] - I[1] - 2;
+					const int k = J[2] - I[2] - 2;
+					gx += force[0][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+				}
+			}
+		}
+		float gy = 0.f;
+		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
+			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
+				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
+					const int i = J[0] - I[0] - 2;
+					const int j = J[1] - I[1] - 2;
+					const int k = J[2] - I[2] - 2;
+					gy += force[1][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+				}
+			}
+		}
+		float gz = 0.f;
+		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
+			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
+				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
+					const int i = J[0] - I[0] - 2;
+					const int j = J[1] - I[1] - 2;
+					const int k = J[2] - I[2] - 2;
+					gz += force[2][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+				}
+			}
+		}
+		if (params.do_phi) {
+			for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
+				for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
+					for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
+						const int i = J[0] - I[0];
+						const int j = J[1] - I[1];
+						const int k = J[2] - I[2];
+						phi += pot[i][j][k] * w[0][i - 2] * w[1][j - 2] * w[2][k - 2];
 					}
 				}
 			}
 		}
+		g[XDIM] += gx;
+		g[YDIM] += gy;
+		g[ZDIM] += gz;
 	}
 	__syncwarp();
 }
@@ -690,7 +724,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				active[active_index] = snki;
 			}
 			nactive += total;
-			if( is_active ) {
+			if (is_active) {
 				shmem.x[active_index] = params.x[srci];
 				shmem.y[active_index] = params.y[srci];
 				shmem.z[active_index] = params.z[srci];

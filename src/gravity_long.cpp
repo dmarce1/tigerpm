@@ -124,19 +124,6 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	return std::make_pair((float) phi0, gret);
 }
 
-double cloud4(double x) {
-	double q1 = std::abs(x);
-	double q2 = q1 * q1;
-	double q3 = q2 * q1;
-	if (q1 < 1.0) {
-		return 0.16666667 * (4.0 - 6.0 * q2 + 3.0 * q3);
-	} else if (q1 < 2.0) {
-		return 0.16666667 * (8.0 - 12.0 * q1 + 6.0 * q2 - q3);
-	} else {
-		return 0.0;
-	}
-}
-
 #define CLOUD_W 4
 
 void compute_source() {
@@ -235,8 +222,7 @@ void apply_laplacian(gravity_long_type type) {
 				const double sy = sinc(0.5 * k[1] * dx);
 				const double sz = sinc(0.5 * k[2] * dx);
 				const double s = sx * sy * sz;
-				//	PRINT( "%e\n", cic);
-				Y[index] *= std::pow(s,-4);
+				Y[index] *= std::pow(s,-8);
 			}
 		}
 	}
