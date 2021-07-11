@@ -345,6 +345,7 @@ __device__ void pp_interactions(int nactive) {
 		} else {
 			mid_index = nactive;
 		}
+		__syncwarp();
 		for (int sink_index = tid; sink_index < mid_index; sink_index += warpSize) {
 			float& phi = shmem.phi[sink_index];
 			auto& g = shmem.g[sink_index];
@@ -392,6 +393,7 @@ __device__ void pp_interactions(int nactive) {
 					shmem.phi[sink_index] += phi;
 				}
 			}
+			__syncwarp();
 		}
 	}
 

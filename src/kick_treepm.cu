@@ -404,6 +404,7 @@ __device__ void gravity_short_pp(tree& tr, int* list, int list_size, int nactive
 		} else {
 			mid_index = nactive;
 		}
+		__syncwarp();
 		for (int sink_index = tid; sink_index < mid_index; sink_index += TREEPM_BLOCK_SIZE) {
 			float& phi = shmem.phi[sink_index];
 			auto& g = shmem.g[sink_index];
