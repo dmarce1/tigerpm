@@ -28,11 +28,7 @@ struct fixed4 {
 __managed__ double Npp = 0;
 __managed__ double Npc = 0;
 
-__constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
-		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
-		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
-		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
-
+extern __constant__ float rung_dt[MAX_RUNG] ;
 struct sink_cell {
 	int begin;
 	int end;
@@ -226,112 +222,16 @@ __device__ inline void shared_reduce(T& number) {
 	}
 }
 
-__device__ void greens_function(array<float, 20> &D, float dx, float dy, float dz) {
-	const treepm_params& params = dev_treepm_params;
-	const float& twooversqrtpi = params.twooversqrtpi;
-	const float& inv2rs = params.inv2rs;
-	const float r2 = sqr(dx, dy, dz);
-	const float rinv = rsqrtf(r2);
-	const float r = r2 * rinv;
-	const float r0 = r * inv2rs;
-	float exp0;
-	const float erfc0 = erfcexp(r0, &exp0);
-	const float r02 = r0 * r0;
-	const float c0 = -2.f * r * inv2rs * inv2rs;
-	const float d0 = -erfc0 * rinv;
-	float e0 = twooversqrtpi * exp0 * rinv * inv2rs;
-	const float d1 = fmaf(float(-1) * d0, rinv, e0);
-	e0 *= c0;
-	const float d2 = fmaf(float(-3) * d1, rinv, e0);
-	e0 *= c0;
-	const float d3 = fmaf(float(-5) * d2, rinv, e0);
-	e0 *= c0;
-	const float rinv1 = rinv;
-	const float Drinvpow_0_0 = d0;
-	const float Drinvpow_1_0 = d1;
-	const float Drinvpow_1_1 = d1 * rinv1;
-	const float Drinvpow_2_0 = d2;
-	const float Drinvpow_2_1 = d2 * rinv1;
-	const float Drinvpow_3_0 = d3;
-	array<float, NDIM> dxrinv;
-	dxrinv[0] = dx * rinv;
-	dxrinv[1] = dy * rinv;
-	dxrinv[2] = dz * rinv;
-	const float& x100 = dxrinv[0];
-	const float& x010 = dxrinv[1];
-	const float& x001 = dxrinv[2];
-	const float x002 = x001 * x001;
-	const float x011 = x010 * x001;
-	const float x020 = x010 * x010;
-	const float x101 = x100 * x001;
-	const float x110 = x100 * x010;
-	const float x200 = x100 * x100;
-	const float x003 = x002 * x001;
-	const float x012 = x011 * x001;
-	const float x021 = x011 * x010;
-	const float x030 = x020 * x010;
-	const float x102 = x101 * x001;
-	const float x111 = x110 * x001;
-	const float x120 = x110 * x010;
-	const float x201 = x101 * x100;
-	const float x210 = x110 * x100;
-	const float x300 = x200 * x100;
-	float x_2_1_000 = x002;
-	float x_3_1_001 = x003;
-	float x_3_1_010 = x012;
-	float x_3_1_100 = x102;
-	x_2_1_000 += x020;
-	x_3_1_010 += x030;
-	x_2_1_000 += x200;
-	x_3_1_010 += x210;
-	x_3_1_001 += x021;
-	x_3_1_100 += x120;
-	x_3_1_001 += x201;
-	x_3_1_100 += x300;
-	x_2_1_000 *= Drinvpow_1_1;
-	x_3_1_001 *= Drinvpow_2_1;
-	x_3_1_010 *= Drinvpow_2_1;
-	x_3_1_100 *= Drinvpow_2_1;
-	D[0] = Drinvpow_0_0;
-	D[1] = x100 * Drinvpow_1_0;
-	D[2] = x010 * Drinvpow_1_0;
-	D[3] = x001 * Drinvpow_1_0;
-	D[4] = x_2_1_000;
-	D[5] = x110 * Drinvpow_2_0;
-	D[6] = x101 * Drinvpow_2_0;
-	D[7] = x_2_1_000;
-	D[8] = x011 * Drinvpow_2_0;
-	D[9] = x_2_1_000;
-	D[10] = float(3.00000000e+00) * x_3_1_100;
-	D[11] = x_3_1_010;
-	D[12] = x_3_1_001;
-	D[13] = x_3_1_100;
-	D[14] = x111 * Drinvpow_3_0;
-	D[15] = x_3_1_100;
-	D[16] = float(3.00000000e+00) * x_3_1_010;
-	D[17] = x_3_1_001;
-	D[18] = x_3_1_010;
-	D[19] = float(3.00000000e+00) * x_3_1_001;
-	D[7] = fmaf(x020, Drinvpow_2_0, D[7]);
-	D[4] = fmaf(x200, Drinvpow_2_0, D[4]);
-	D[9] = fmaf(x002, Drinvpow_2_0, D[9]);
-	D[10] = fmaf(x300, Drinvpow_3_0, D[10]);
-	D[11] = fmaf(x210, Drinvpow_3_0, D[11]);
-	D[12] = fmaf(x201, Drinvpow_3_0, D[12]);
-	D[13] = fmaf(x120, Drinvpow_3_0, D[13]);
-	D[15] = fmaf(x102, Drinvpow_3_0, D[15]);
-	D[16] = fmaf(x030, Drinvpow_3_0, D[16]);
-	D[17] = fmaf(x021, Drinvpow_3_0, D[17]);
-	D[18] = fmaf(x012, Drinvpow_3_0, D[18]);
-	D[19] = fmaf(x003, Drinvpow_3_0, D[19]);
-}
-
 inline __device__ void compute_pc_interaction(float dx, float dy, float dz, const multipole& M, float& gx, float& gy, float& gz, float& phi) {
 	const treepm_params& params = dev_treepm_params;
-	array<float, GREENS_SIZE> D;
+	array<float, EXPANSION_SIZE> D;
 	array<float, NDIM + 1> L;
-	greens_function(D, dx, dy, dz);
-	pc_interaction(L, M, D, params.do_phi);
+	L[0] = L[1] = L[2] = L[3] = 0.0;
+	for( int i = 0; i < EXPANSION_SIZE; i++) {
+		D[i] = 0.f;
+	}
+	greens_function(D, dx, dy, dz, params.inv2rs);
+	M2L_kernel(L, M, D, params.do_phi);
 	gx -= L[1];
 	gy -= L[2];
 	gz -= L[3];
@@ -930,7 +830,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 2.0/3.0;
+		params.theta = 0.7;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
@@ -990,7 +890,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 			const auto begin = this_cell.pbegin;
 			const auto dif = count - begin;
 			const int l = chaincells[j].bigbox_index;
-			trees[l].adjust_indexes(dif);
+			trees[l].adjust_src_indexes(dif);
 			if (chaincells[j].box_index >= 0) {
 				const int q = chaincells[j].box_index;
 				for (auto& bucket : buckets[q]) {

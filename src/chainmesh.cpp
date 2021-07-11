@@ -144,6 +144,19 @@ void chainmesh_create() {
 	static int N = get_options().chain_dim;
 	mybox = find_my_box(N);
 	sort(mybox, 0, particles_size());
+#ifndef NDEBUG
+	for (auto i = cells.begin(); i != cells.end(); i++) {
+		for (auto j = cells.begin(); j != cells.end(); j++) {
+			if (i != j) {
+				if (std::min(i->second.pend, j->second.pend) > std::max(i->second.pbegin, j->second.pbegin)) {
+					PRINT("%i %i\n", i->second.pbegin, i->second.pend);
+					PRINT("%i %i\n", j->second.pbegin, j->second.pend);
+					assert(false);
+				}
+			}
+		}
+	}
+#endif
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -157,6 +170,15 @@ static void sort(const range<int> chain_box, int pbegin, int pend) {
 	static int N = get_options().chain_dim;
 	static double Ninv = 1.0 / N;
 	const int vol = chain_box.volume();
+#ifndef NDEBUG
+	for (int i = pbegin; i < pend; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			const auto x = particles_pos(dim, i).to_double();
+			assert(x >= chain_box.begin[dim] * Ninv);
+			assert(x <= chain_box.end[dim] * Ninv);
+		}
+	}
+#endif
 	if (vol == 1) {
 		std::unique_lock<mutex_type> lock(mutex);
 		auto& cell = cells[chain_box.begin];
@@ -166,7 +188,7 @@ static void sort(const range<int> chain_box, int pbegin, int pend) {
 	} else {
 		int long_dim;
 		int long_span = -1;
-		for (int dim = NDIM-1; dim >= 0; dim--) {
+		for (int dim = NDIM - 1; dim >= 0; dim--) {
 			const int span = chain_box.end[dim] - chain_box.begin[dim];
 			if (span > 1) {
 				long_span = span;

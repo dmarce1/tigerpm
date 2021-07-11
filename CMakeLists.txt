@@ -17,6 +17,8 @@ set(tigerpm_source_files
 	src/chainmesh.cpp
     src/cuda.cpp
     src/fft.cpp
+    src/fmmpm.cpp
+    src/fmmpm.cu
     src/gravity_long.cpp
     src/gravity_short.cpp
     src/gravity_short.cu
@@ -47,6 +49,7 @@ set(tigerpm_header_files
 	tigerpm/gravity_short.hpp
 	tigerpm/hpx.hpp
 	tigerpm/fixed.hpp
+	tigerpm/fixedcapvec.hpp
 	tigerpm/fft.hpp
 	tigerpm/initialize.hpp
 	tigerpm/kick_pm.hpp
@@ -55,6 +58,7 @@ set(tigerpm_header_files
 	tigerpm/options.hpp
 	tigerpm/particles.hpp
 	tigerpm/range.hpp
+	tigerpm/stack_vector.hpp
 	tigerpm/test.hpp
 	tigerpm/tigerpm.hpp
 	tigerpm/timer.hpp
