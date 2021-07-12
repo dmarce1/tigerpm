@@ -431,7 +431,7 @@ __device__ void pc_interactions(int nactive) {
 			M2L_kernel(L, M, D, params.do_phi);
 		}
 		for (int P = warpSize / 2; P >= 1; P /= 2) {
-			for (int i = 0; i < EXPANSION_SIZE; i++) {
+			for (int i = 0; i < NDIM + 1; i++) {
 				L[i] += __shfl_xor_sync(0xffffffff, L[i], P);
 			}
 		}
@@ -1024,7 +1024,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.55;
+		params.theta = 0.4;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
