@@ -4,23 +4,17 @@
 #include <tigerpm/particles.hpp>
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/gravity_short.hpp>
-#include <tigerpm/kick_pm.hpp>
-#include <tigerpm/kick_pme.hpp>
-#include <tigerpm/kick_treepm.hpp>
 #include <tigerpm/fmmpm.hpp>
 #include <tigerpm/chainmesh.hpp>
 #include <tigerpm/initialize.hpp>
 
 static void chainmesh_test();
-static void kick_pm_test();
-static void kick_fmmpm_test();
-static void kick_treepm_test();
-static void kick_pme_test();
 static void fft_test();
 static void particle_test();
 static void gravity_long_test();
 static void sort_test();
 static void ic_test();
+static void kick_fmmpm_test();
 
 void run_test(std::string test) {
 	printf("Testing\n");
@@ -34,14 +28,8 @@ void run_test(std::string test) {
 		sort_test();
 	} else if (test == "parts") {
 		particle_test();
-	} else if (test == "kick_pme") {
-		kick_pme_test();
-	} else if (test == "treepm") {
-		kick_treepm_test();
 	} else if (test == "fmmpm") {
 		kick_fmmpm_test();
-	} else if (test == "kick_pm") {
-		kick_pm_test();
 	} else if (test == "gravity_long") {
 		gravity_long_test();
 	} else {
@@ -117,31 +105,6 @@ static void gravity_long_test() {
 	PRINT("%e s to sort, %e s to compute, %e total\n", tm1.read(), tm2.read(), tm1.read() + tm2.read());
 }
 
-static void kick_pm_test() {
-	timer tm1, tm2, tm3, tm4;
-	particles_random_init();
-	PRINT("DOMAIN SORT\n");
-	tm1.start();
-	particles_domain_sort();
-	tm1.stop();
-	tm2.start();
-	PRINT("FOURIER\n");
-	gravity_long_compute();
-	tm2.stop();
-	PRINT("KICK\n");
-	tm3.start();
-	kick_pm();
-	tm3.stop();
-	PRINT("COMPARISON\n");
-#ifdef FORCE_TEST
-	tm4.start();
-	gravity_short_ewald_compare(100);
-	tm4.stop();
-#endif
-	PRINT("%e s to sort, %e s to compute gravity, %e s to kick, %e s on comparison, %e total\n", tm1.read(), tm2.read(),
-			tm3.read(), tm4.read(), tm1.read() + tm2.read() + tm3.read() + tm4.read());
-}
-
 static void chainmesh_test() {
 	timer tm;
 	double total = 0.0;
@@ -178,117 +141,6 @@ static void chainmesh_test() {
 	PRINT("%e s total\n", total);
 
 }
-
-static void kick_pme_test() {
-	timer tm;
-	particles_random_init();
-
-	PRINT("DOMAIN SORT\n");
-	tm.start();
-	particles_domain_sort();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-
-	PRINT("FOURIER\n");
-	tm.start();
-	gravity_long_compute(GRAVITY_LONG_PME);
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-
-	PRINT("SORT\n");
-	tm.start();
-	chainmesh_create();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-	PRINT("\n");
-
-	PRINT("BOUNDARIES\n");
-	tm.start();
-	chainmesh_exchange_begin();
-	chainmesh_exchange_end();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-	PRINT("\n");
-
-	PRINT("KICK\n");
-	tm.start();
-	kick_pme_begin(0, 1.0, 1.0, true);
-	kick_pme_end();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-
-#ifdef FORCE_TEST
-	PRINT("COMPARE\n");
-	tm.start();
-	gravity_short_ewald_compare(100);
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-#endif
-
-}
-
-
-static void kick_treepm_test() {
-	timer tm;
-	//particles_random_init();
-	initialize();
-
-	PRINT("DOMAIN SORT\n");
-	tm.start();
-	particles_domain_sort();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-
-	PRINT("FOURIER\n");
-	tm.start();
-	gravity_long_compute(GRAVITY_LONG_PME);
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-
-	PRINT("SORT\n");
-	tm.start();
-	chainmesh_create();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-	PRINT("\n");
-
-	PRINT("BOUNDARIES\n");
-	tm.start();
-	chainmesh_exchange_begin();
-	chainmesh_exchange_end();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-	PRINT("\n");
-
-	PRINT("KICK\n");
-	tm.start();
-	kick_treepm_begin(0, 1.0, 1.0, true);
-	kick_treepm_end();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-
-#ifdef FORCE_TEST
-	PRINT("COMPARE\n");
-	tm.start();
-	gravity_short_ewald_compare(100);
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-#endif
-
-}
-
 
 static void kick_fmmpm_test() {
 	timer tm;

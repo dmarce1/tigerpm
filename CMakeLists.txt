@@ -25,11 +25,6 @@ set(tigerpm_source_files
     src/gravity_long.cu
     src/hpx.cpp
     src/initialize.cpp
-    src/kick_pm.cpp
-    src/kick_pme.cpp
-    src/kick_pme.cu
-    src/kick_treepm.cpp
-    src/kick_treepm.cu
     src/main.cpp
     src/options.cpp
     src/particles.cpp
@@ -53,9 +48,6 @@ set(tigerpm_header_files
 	tigerpm/fixedcapvec.hpp
 	tigerpm/fft.hpp
 	tigerpm/initialize.hpp
-	tigerpm/kick_pm.hpp
-	tigerpm/kick_pme.hpp
-	tigerpm/kick_treepm.hpp
 	tigerpm/options.hpp
 	tigerpm/particles.hpp
 	tigerpm/range.hpp
