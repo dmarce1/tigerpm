@@ -302,7 +302,7 @@ __device__ void pp_interactions(int nactive) {
 	int i = 0;
 	int N = 0;
 	int part_index;
-	if( list.size() == 0 ) {
+	if (list.size() == 0) {
 		return;
 	}
 	auto these_parts_begin = list[i].get_src_begin();
@@ -400,7 +400,6 @@ __device__ void pp_interactions(int nactive) {
 	}
 
 }
-
 
 __device__ void pc_interactions(int nactive) {
 	const int& tid = threadIdx.x;
@@ -650,6 +649,10 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		bool next;
 		for (int ci = tid; ci < maxi; ci += warpSize) {
 			checkitem check;
+			multi = false;
+			part = false;
+			open = false;
+			next = false;
 			if (ci < checklist.size()) {
 				check = checklist[ci];
 				const bool source_isleaf = (check.get_src_end() - check.get_src_begin()) <= SOURCE_BUCKET_SIZE;
@@ -661,16 +664,14 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
 				const float R2 = sqr(dx, dy, dz);
-				const bool far = R2 > sqr(myradius + source_radius) * theta2inv;
-				multi = far;
-				next = !far && !source_isleaf;
-				part = !far && source_isleaf && iamleaf;
-				open = !far && source_isleaf && !iamleaf;
-			} else {
-				multi = false;
-				part = false;
-				open = false;
-				next = false;
+				const bool veryfar = R2 > sqr(myradius + source_radius + params.rs);
+				const bool far = (R2 > sqr(myradius + source_radius) * theta2inv);
+				if (!veryfar) {
+					multi = far;
+					next = !far && !source_isleaf;
+					part = !far && source_isleaf && iamleaf;
+					open = !far && source_isleaf && !iamleaf;
+				}
 			}
 			int index, total;
 
@@ -807,7 +808,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 					const float dz = distance(sink_z, src_z);
 					const float R2 = sqr(dx, dy, dz);
 					far = R2 > sqr(source_radius) * theta2inv;
-					if( !far ) {
+					if (!far) {
 						break;
 					}
 				}
