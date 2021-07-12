@@ -43,13 +43,11 @@ void gravity_short_ewald_compare(int Nsamples) {
 		sinky[i] = samples[i].x[YDIM];
 		sinkz[i] = samples[i].x[ZDIM];
 	}
-	double l2sum_phi = 0.0;
-	double l2norm_phi = 0.0;
-	double l2sum_force = 0.0;
-	double l2norm_force = 0.0;
 	auto results = do_ewald(sinkx, sinky, sinkz);
 	double lmax_phi = 0.0;
 	double lmax_force = 0.0;
+	double lerr_phi = 0.0;
+	double lerr_force = 0.0;
 	for (int i = 0; i < Nsamples; i++) {
 		double f1 = 0.0, f2 = 0.0;
 		double g1 = 0.0, g2 = 0.0;
@@ -61,21 +59,19 @@ void gravity_short_ewald_compare(int Nsamples) {
 		g2 = sqrt(g2);
 		f1 = samples[i].p;
 		f2 = results.first[i];
-		l2sum_phi += sqr(f1 - f2);
-		lmax_phi = std::max(lmax_phi, std::abs(f1 - f2));
-		l2norm_phi += sqr(f2);
-		l2sum_force += sqr(g1 - g2);
-		lmax_force = std::max(lmax_force, std::abs(g1 - g2));
-		l2norm_force += sqr(g2);
-		printf("%e %e %e | %e %e %e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1);
+		const double gerr = std::log(std::abs(g1/g2));
+		const double ferr = std::log(std::abs(f1/f2));
+		lerr_phi += sqr(ferr) / Nsamples;
+		lerr_force += sqr(gerr) / Nsamples;
+		lmax_phi = std::max(lmax_phi, ferr);
+		lmax_force = std::max(lmax_force, gerr);
+		printf("%.10e %.10e %.10e | %.10e %.10e %.10e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1);
 	}
-	l2sum_force = sqrt(l2sum_force / l2norm_force);
-	lmax_force /= sqrt(l2norm_force) / Nsamples;
-	PRINT("Force RMS Error     = %e\n", l2sum_force);
+	lerr_force = sqrt(lerr_force);
+	lerr_phi = sqrt(lerr_phi);
+	PRINT("Force RMS Error     = %e\n", lerr_force);
 	PRINT("Force Max Error     = %e\n", lmax_force);
-	l2sum_phi = sqrt(l2sum_phi / l2norm_phi);
-	lmax_phi /= sqrt(l2norm_phi) / Nsamples;
-	PRINT("Potential RMS Error = %e\n", l2sum_phi);
+	PRINT("Potential RMS Error = %e\n", lerr_phi);
 	PRINT("Potential Max Error = %e\n", lmax_phi);
 
 #endif

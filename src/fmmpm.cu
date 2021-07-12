@@ -1128,7 +1128,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.3;
+		params.theta = 0.5;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;

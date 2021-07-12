@@ -303,7 +303,8 @@ void fft3d_accumulate_real(const range<int>& this_box, const vector<float>& data
 								}
 								auto fut = hpx::async < fft3d_accumulate_real_action
 										> (hpx_localities()[bi], this_inter, std::move(this_data));
-								futs.push_back(std::move(fut));
+								fut.get();
+//								futs.push_back(std::move(fut));
 							}
 						}
 					}

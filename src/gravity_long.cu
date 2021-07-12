@@ -4,7 +4,7 @@
 #include <tigerpm/particles.hpp>
 #include <tigerpm/util.hpp>
 
-__global__ void compute_source_kernel(float* source, range<int> source_box, fixed32* x, fixed32* y, fixed32* z, int nparts, float N) {
+__global__ void compute_source_kernel(double* source, range<int> source_box, fixed32* x, fixed32* y, fixed32* z, int nparts, float N) {
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	const int& bsz = blockDim.x;
@@ -31,7 +31,7 @@ __global__ void compute_source_kernel(float* source, range<int> source_box, fixe
 				for (J[2] = 0; J[2] < CLOUD_W; J[2]++) {
 					const int i = source_box.index(I[0] + J[0], I[1] + J[1], I[2] + J[2]);
 					const float value = c0 * w[0][J[0]] * w[1][J[1]] * w[2][J[2]];
-					atomicAdd(source + i, value);
+					atomicAdd(source + i, (double) value);
 				}
 			}
 		}
@@ -42,7 +42,7 @@ __global__ void compute_source_kernel(float* source, range<int> source_box, fixe
 static vector<float> phi;
 static range<int> source_box;
 
-void compute_source_cuda(int pbegin, int pend, float* dev_src, cudaStream_t stream, float N) {
+void compute_source_cuda(int pbegin, int pend, double* dev_src, cudaStream_t stream, float N) {
 	size_t sz = sizeof(float) * source_box.volume();
 	sz += NDIM * sizeof(fixed32) * (pend - pbegin);
 	if (sz > cuda_free_mem() * 85 / 100) {
@@ -85,7 +85,7 @@ vector<float> gravity_long_compute_source_local() {
 	}
 	source_box = source_box.pad(PHI_BW);
 	const int vol = source_box.volume();
-	vector<float> source;
+	vector<double> source;
 	source.resize(vol, 0.0f);
 	const float N = get_options().four_dim;
 	source_box = find_my_box(get_options().chain_dim);
@@ -97,16 +97,20 @@ vector<float> gravity_long_compute_source_local() {
 	source_box = source_box.pad(PHI_BW);
 	source.resize(source_box.volume(), 0.0f);
 
-	float* dev_source;
+	double* dev_source;
 	cudaStream_t stream;
 	CUDA_CHECK(cudaStreamCreate(&stream));
-	CUDA_CHECK(cudaMallocAsync(&dev_source, vol * sizeof(float), stream));
-	CUDA_CHECK(cudaMemcpyAsync(dev_source, source.data(), vol * sizeof(float), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMallocAsync(&dev_source, vol * sizeof(double), stream));
+	CUDA_CHECK(cudaMemcpyAsync(dev_source, source.data(), vol * sizeof(double), cudaMemcpyHostToDevice, stream));
 	compute_source_cuda(0, particles_size(), dev_source, stream, N);
-	CUDA_CHECK(cudaMemcpyAsync(source.data(), dev_source, vol * sizeof(float), cudaMemcpyDeviceToHost, stream));
+	CUDA_CHECK(cudaMemcpyAsync(source.data(), dev_source, vol * sizeof(double), cudaMemcpyDeviceToHost, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_source, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
 	CUDA_CHECK(cudaStreamDestroy(stream));
-	return source;
+	vector<float> fsource(source.size());
+	for( int i = 0; i < source.size(); i++) {
+		fsource[i] = source[i];
+	}
+	return fsource;
 }
 
