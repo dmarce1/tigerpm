@@ -649,10 +649,6 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		bool next;
 		for (int ci = tid; ci < maxi; ci += warpSize) {
 			checkitem check;
-			multi = false;
-			part = false;
-			open = false;
-			next = false;
 			if (ci < checklist.size()) {
 				check = checklist[ci];
 				const bool source_isleaf = (check.get_src_end() - check.get_src_begin()) <= SOURCE_BUCKET_SIZE;
@@ -664,14 +660,17 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
 				const float R2 = sqr(dx, dy, dz);
-				const bool veryfar = R2 > sqr(myradius + source_radius + params.rs);
-				const bool far = (R2 > sqr(myradius + source_radius) * theta2inv);
-				if (!veryfar) {
-					multi = far;
-					next = !far && !source_isleaf;
-					part = !far && source_isleaf && iamleaf;
-					open = !far && source_isleaf && !iamleaf;
-				}
+				const bool veryfar = R2 > sqr(myradius + source_radius + params.rcut);
+				const bool far = R2 > sqr(myradius + source_radius) * theta2inv;
+				multi = !veryfar && far;
+				next = !veryfar && !far && !source_isleaf;
+				part = !veryfar && !far && source_isleaf && iamleaf;
+				open = !veryfar && !far && source_isleaf && !iamleaf;
+			} else {
+				multi = false;
+				part = false;
+				open = false;
+				next = false;
 			}
 			int index, total;
 
@@ -926,9 +925,7 @@ __global__ void kick_fmmpm_kernel() {
 	__syncwarp();
 	auto& checklist = (params.lists + bid)->checklist;
 	auto& Lexpansion = (params.lists + bid)->Lexpansion[0];
-	const int cell_begin = size_t(bid) * (size_t) params.nsink_cells / (size_t) gsz;
-	const int cell_end = size_t(bid + 1) * (size_t) params.nsink_cells / (size_t) gsz;
-	for (int cell_index = cell_begin; cell_index < cell_end; cell_index++) {
+	for (int cell_index = bid; cell_index < params.nsink_cells; cell_index += gsz) {
 		if (tid == 0) {
 			checklist.resize(NCELLS);
 		}
