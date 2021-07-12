@@ -129,7 +129,7 @@ struct fmmpm_params {
 		CUDA_CHECK(cudaMalloc(&lists, nblocks * sizeof(list_set)));
 		CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
 		CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
-		CUDA_CHECK(cudaMalloc(&active, nblocks * sizeof(int) * FMM_BUCKET_SIZE));
+		CUDA_CHECK(cudaMalloc(&active, nblocks * sizeof(int) * SINK_BUCKET_SIZE));
 #ifdef FORCE_TEST
 		CUDA_CHECK(cudaMalloc(&gx, source_size * sizeof(float)));
 		CUDA_CHECK(cudaMalloc(&gy, source_size * sizeof(float)));
@@ -205,11 +205,11 @@ static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cuda
 }
 
 struct fmmpm_shmem {
-	array<array<float, NDIM>, FMM_BUCKET_SIZE> g;
-	array<float, FMM_BUCKET_SIZE> phi;
-	array<fixed32, FMM_BUCKET_SIZE> x;
-	array<fixed32, FMM_BUCKET_SIZE> y;
-	array<fixed32, FMM_BUCKET_SIZE> z;
+	array<array<float, NDIM>, SINK_BUCKET_SIZE> g;
+	array<float, SINK_BUCKET_SIZE> phi;
+	array<fixed32, SINK_BUCKET_SIZE> x;
+	array<fixed32, SINK_BUCKET_SIZE> y;
+	array<fixed32, SINK_BUCKET_SIZE> z;
 	array<fixed32, KICK_PP_MAX> srcx;
 	array<fixed32, KICK_PP_MAX> srcy;
 	array<fixed32, KICK_PP_MAX> srcz;
@@ -616,8 +616,8 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	auto& openlist = lists->openlist;
 	auto& nextlist = lists->nextlist;
 	auto& Lexpansion = lists->Lexpansion[depth];
-	auto* active = params.active + bid * FMM_BUCKET_SIZE;
-	const bool iamleaf = mycheck.is_leaf();
+	auto* active = params.active + bid * SINK_BUCKET_SIZE;
+	const bool iamleaf = (mycheck.get_snk_end() - mycheck.get_snk_begin()) <= SINK_BUCKET_SIZE;
 	const float myradius = mycheck.get_radius();
 	const fixed32 sink_x = mycheck.get_x(XDIM);
 	const fixed32 sink_y = mycheck.get_x(YDIM);
@@ -652,7 +652,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			checkitem check;
 			if (ci < checklist.size()) {
 				check = checklist[ci];
-				const bool source_isleaf = check.is_leaf();
+				const bool source_isleaf = (check.get_src_end() - check.get_src_begin()) <= SOURCE_BUCKET_SIZE;
 				const fixed32 src_x = check.get_x(XDIM);
 				const fixed32 src_y = check.get_x(YDIM);
 				const fixed32 src_z = check.get_x(ZDIM);
@@ -727,7 +727,6 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		}
 		__syncwarp();
 		for (int ci = tid; ci < nextlist.size(); ci += warpSize) {
-			assert(!nextlist[ci].is_leaf());
 			const auto children = nextlist[ci].get_children();
 			for (int i = 0; i < NCHILD; i++) {
 				checklist[2 * ci + i] = children[i];
@@ -1027,7 +1026,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.55;
+		params.theta = 0.7;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;

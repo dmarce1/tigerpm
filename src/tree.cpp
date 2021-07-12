@@ -125,14 +125,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 			} else {
 				x[dim] = (t.get_x(dim, i0).to_double() + t.get_x(dim, i1).to_double() + n[dim] * (t.get_radius(i1) - t.get_radius(i0))) * 0.5;
 			}
-			if (x[dim] > box.end[dim]) {
-				PRINT("! %e %e %e %e %e\n", box.begin[dim], x[dim], box.end[dim], t.get_x(dim, i0).to_double(), t.get_x(dim, i1).to_double());
-			}
-			if (x[dim] <= box.begin[dim]) {
-				PRINT("! %e %e %e %e %e\n", box.begin[dim], x[dim], box.end[dim], t.get_x(dim, i0).to_double(), t.get_x(dim, i1).to_double());
-			}
-//			assert(x[dim] <= box.end[dim]);
-//			assert(x[dim] >= box.begin[dim]);
+			x[dim] = std::max(x[dim], box.begin[dim]);
+			x[dim] = std::min(x[dim], box.end[dim]);
 		}
 		multipole m, m1;
 		array<float, NDIM> dx0, dx1;
