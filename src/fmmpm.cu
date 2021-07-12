@@ -302,6 +302,9 @@ __device__ void pp_interactions(int nactive) {
 	int i = 0;
 	int N = 0;
 	int part_index;
+	if( list.size() == 0 ) {
+		return;
+	}
 	auto these_parts_begin = list[i].get_src_begin();
 	auto these_parts_end = list[i].get_src_end();
 	while (i < list.size()) {
@@ -1024,7 +1027,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.4;
+		params.theta = 0.55;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
