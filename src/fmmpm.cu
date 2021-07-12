@@ -12,12 +12,23 @@
 
 #include <algorithm>
 
+__managed__ double pctime = 0.0;
+__managed__ double pptime = 0.0;
+__managed__ double cctime = 0.0;
+__managed__ double Ltime = 0.0;
+__managed__ double chk2time = 0.0;
+__managed__ double chk1time = 0.0;
+__managed__ double acttime = 0.0;
+__managed__ double longtime = 0.0;
+__managed__ double kicktime = 0.0;
+__managed__ double branchtime = 0.0;
+
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define LIST_SIZE  (8*1024)
+#define LIST_SIZE  (4*1024)
 #define STACK_SIZE (32*1024)
 #define MAX_DEPTH 64
 
@@ -70,11 +81,10 @@ struct checkitem {
 
 struct list_set {
 	stack_vector<checkitem, STACK_SIZE, MAX_DEPTH> checklist;
-	fixedcapvec<checkitem, LIST_SIZE> openlist;
+	fixedcapvec<checkitem, LIST_SIZE> leaflist;
 	fixedcapvec<checkitem, LIST_SIZE> nextlist;
 	fixedcapvec<checkitem, LIST_SIZE> multilist;
 	fixedcapvec<checkitem, LIST_SIZE> pplist;
-	fixedcapvec<checkitem, LIST_SIZE> tmplist;
 	array<expansion, MAX_DEPTH> Lexpansion;
 };
 
@@ -409,7 +419,41 @@ __device__ void pc_interactions(int nactive) {
 	const fmmpm_params& params = dev_fmmpm_params;
 	const auto& list = (params.lists + bid)->multilist;
 
-	for (int k = 0; k < nactive; k++) {
+	int kmid;
+	if (nactive % warpSize < warpSize / 8) {
+		kmid = nactive - nactive % warpSize;
+	} else {
+		kmid = nactive;
+	}
+	for (int k = tid; k < kmid; k += warpSize) {
+		float& phi = shmem.phi[k];
+		auto& g = shmem.g[k];
+		const fixed32 sink_x = shmem.x[k];
+		const fixed32 sink_y = shmem.y[k];
+		const fixed32 sink_z = shmem.z[k];
+		array<float, NDIM + 1> L;
+		L[0] = L[1] = L[2] = L[3] = 0.f;
+		for (int i = 0; i < list.size(); i++) {
+			const fixed32 src_x = list[i].get_x(XDIM);
+			const fixed32 src_y = list[i].get_x(YDIM);
+			const fixed32 src_z = list[i].get_x(ZDIM);
+			const float dx = distance(sink_x, src_x);
+			const float dy = distance(sink_y, src_y);
+			const float dz = distance(sink_z, src_z);
+			const auto M = list[i].get_multipole();
+			expansion D;
+			for (int j = 0; j < EXPANSION_SIZE; j++) {
+				D[j] = 0.f;
+			}
+			greens_function(D, dx, dy, dz, params.inv2rs);
+			M2L_kernel(L, M, D, params.do_phi);
+		}
+		g[XDIM] -= L[XDIM + 1];
+		g[YDIM] -= L[YDIM + 1];
+		g[ZDIM] -= L[ZDIM + 1];
+		phi += L[0];
+	}
+	for (int k = kmid; k < nactive; k++) {
 		float& phi = shmem.phi[k];
 		auto& g = shmem.g[k];
 		const fixed32 sink_x = shmem.x[k];
@@ -437,10 +481,12 @@ __device__ void pc_interactions(int nactive) {
 				L[i] += __shfl_xor_sync(0xffffffff, L[i], P);
 			}
 		}
-		g[XDIM] -= L[XDIM + 1];
-		g[YDIM] -= L[YDIM + 1];
-		g[ZDIM] -= L[ZDIM + 1];
-		phi += L[0];
+		if (tid == 0) {
+			g[XDIM] -= L[XDIM + 1];
+			g[YDIM] -= L[YDIM + 1];
+			g[ZDIM] -= L[ZDIM + 1];
+			phi += L[0];
+		}
 	}
 	__syncwarp();
 }
@@ -601,6 +647,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		PRINT("MAX_DEPTH exceeded!\n");
 		__trap();
 	}
+	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
@@ -611,8 +658,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	auto& checklist = lists->checklist;
 	auto& multilist = lists->multilist;
 	auto& pplist = lists->pplist;
-	auto& tmplist = lists->tmplist;
-	auto& openlist = lists->openlist;
+	auto& leaflist = lists->leaflist;
 	auto& nextlist = lists->nextlist;
 	auto& Lexpansion = lists->Lexpansion[depth];
 	auto* active = params.active + bid * SINK_BUCKET_SIZE;
@@ -630,23 +676,23 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
 		Lexpansion[i] = Ltmp[i];
 	}
+	atomicAdd(&Ltime, (double) (clock64() - tm));
+	tm = clock64();
 	if (tid == 0) {
 		multilist.resize(0);
-		tmplist.resize(0);
+		leaflist.resize(0);
 	}
 	__syncwarp();
 	do {
 		__syncwarp();
 		if (tid == 0) {
 			nextlist.resize(0);
-			openlist.resize(0);
 		}
 		__syncwarp();
 		const int maxi = round_up(checklist.size(), warpSize);
 		bool multi;
-		bool part;
-		bool open;
 		bool next;
+		bool leaf;
 		for (int ci = tid; ci < maxi; ci += warpSize) {
 			checkitem check;
 			if (ci < checklist.size()) {
@@ -664,12 +710,10 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				const bool far = R2 > sqr(myradius + source_radius) * theta2inv;
 				multi = !veryfar && far;
 				next = !veryfar && !far && !source_isleaf;
-				part = !veryfar && !far && source_isleaf && iamleaf;
-				open = !veryfar && !far && source_isleaf && !iamleaf;
+				leaf = !veryfar && !far && source_isleaf;
 			} else {
 				multi = false;
-				part = false;
-				open = false;
+				leaf = false;
 				next = false;
 			}
 			int index, total;
@@ -696,28 +740,15 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				nextlist[index] = check;
 			}
 
-			if (iamleaf) {
-				index = part;
-				index = compute_indices(index, total) + tmplist.size();
-				__syncwarp();
-				if (tid == 0) {
-					tmplist.resize(tmplist.size() + total);
-				}
-				__syncwarp();
-				if (part) {
-					tmplist[index] = check;
-				}
-			} else {
-				index = open;
-				index = compute_indices(index, total) + openlist.size();
-				__syncwarp();
-				if (tid == 0) {
-					openlist.resize(openlist.size() + total);
-				}
-				__syncwarp();
-				if (open) {
-					openlist[index] = check;
-				}
+			index = leaf;
+			index = compute_indices(index, total) + leaflist.size();
+			__syncwarp();
+			if (tid == 0) {
+				leaflist.resize(leaflist.size() + total);
+			}
+			__syncwarp();
+			if (leaf) {
+				leaflist[index] = check;
 			}
 		}
 
@@ -733,22 +764,32 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			}
 		}
 
-		const int offset = checklist.size();
-		__syncwarp();
-		if (tid == 0) {
-			checklist.resize(offset + openlist.size());
-		}
-		__syncwarp();
-		for (int ci = tid; ci < openlist.size(); ci += warpSize) {
-			checklist[ci + offset] = openlist[ci];
+		if (!iamleaf) {
+			const int offset = checklist.size();
+			__syncwarp();
+			if (tid == 0) {
+				checklist.resize(offset + leaflist.size());
+			}
+			__syncwarp();
+			for (int ci = tid; ci < leaflist.size(); ci += warpSize) {
+				checklist[ci + offset] = leaflist[ci];
+			}
+			__syncwarp();
+			if( tid == 0 ) {
+				leaflist.resize(0);
+			}
+			__syncwarp();
 		}
 		__syncwarp();
 
 	} while (iamleaf && checklist.size());
-
+	atomicAdd(&chk1time, (double) (clock64() - tm));
+	tm = clock64();
 	cc_interactions(mycheck, Lexpansion);
+	atomicAdd(&cctime, (double) (clock64() - tm));
 
 	if (iamleaf) {
+		tm = clock64();
 		const auto snk_begin = mycheck.get_snk_begin();
 		const auto snk_end = mycheck.get_snk_end();
 		const int nsinks = snk_end - snk_begin;
@@ -776,21 +817,25 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			}
 			__syncwarp();
 		}
+		atomicAdd(&acttime, (double) (clock64() - tm));
+		tm = clock64();
 
 		long_range_interp(nactive);
+		atomicAdd(&longtime, (double) (clock64() - tm));
+		tm = clock64();
 		__syncwarp();
 		if (tid == 0) {
 			pplist.resize(0);
 			multilist.resize(0);
 		}
 		__syncwarp();
-		const int maxi = round_up(tmplist.size(), warpSize);
+		const int maxi = round_up(leaflist.size(), warpSize);
 		for (int i = tid; i < maxi; i += warpSize) {
 			bool pc = false;
 			bool pp = false;
 			checkitem check;
-			if (i < tmplist.size()) {
-				check = tmplist[i];
+			if (i < leaflist.size()) {
+				check = leaflist[i];
 				const int begin = mycheck.get_src_begin();
 				const int end = mycheck.get_src_end();
 				const fixed32 src_x = check.get_x(XDIM);
@@ -837,8 +882,15 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			}
 
 		}
+		atomicAdd(&chk2time, (double) (clock64() - tm));
+		tm = clock64();
+
 		pc_interactions(nactive);
+		atomicAdd(&pctime, (double) (clock64() - tm));
+		tm = clock64();
 		pp_interactions(nactive);
+		atomicAdd(&pptime, (double) (clock64() - tm));
+		tm = clock64();
 
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 			array<float, NDIM>& g = shmem.g[sink_index];
@@ -886,8 +938,10 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			vy = fmaf(g[YDIM], dt, vy);
 			vz = fmaf(g[ZDIM], dt, vz);
 		}
+		atomicAdd(&kicktime, (double) (clock64() - tm));
 
 	} else {
+		tm = clock64();
 		const auto children = mycheck.get_children();
 		__syncwarp();
 		auto& Lnext = (params.lists + bid)->Lexpansion[depth + 1];
@@ -900,7 +954,9 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		X[YDIM] = mycheck.get_x(YDIM);
 		X[ZDIM] = mycheck.get_x(ZDIM);
 		checklist.push_top();
+		atomicAdd(&branchtime, (double) (clock64() - tm));
 		do_kick(children[0], depth + 1, X);
+		tm = clock64();
 		__syncwarp();
 		for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
 			Lnext[i] = Lexpansion[i];
@@ -909,6 +965,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			checklist.pop_top();
 		}
 		__syncwarp();
+		atomicAdd(&branchtime, (double) (clock64() - tm));
 		do_kick(children[1], depth + 1, X);
 	}
 
@@ -1234,4 +1291,17 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		CUDA_CHECK(cudaFree(dev_all_trees));
 		tm.stop();
 	}
+	PRINT("Timings\n");
+	double total_time = pctime + cctime + pptime + Ltime + chk1time + chk2time + acttime + longtime + kicktime + branchtime;
+	PRINT("PC  %e\n", pctime / total_time);
+	PRINT("PP  %e\n", pptime / total_time);
+	PRINT("CC  %e\n", cctime / total_time);
+	PRINT("L   %e\n", Ltime / total_time);
+	PRINT("2   %e\n", chk2time / total_time);
+	PRINT("1   %e\n", chk1time / total_time);
+	PRINT("ACT %e\n", acttime / total_time);
+	PRINT("LNG %e\n", longtime / total_time);
+	PRINT("KCK %e\n", kicktime / total_time);
+	PRINT("BRC %e\n", branchtime / total_time);
+
 }

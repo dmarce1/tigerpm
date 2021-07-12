@@ -14,6 +14,10 @@
 #include <tigerpm/chainmesh.hpp>
 #include <tigerpm/kernels.hpp>
 
+struct multipos {
+	array<fixed32, NDIM> x;
+	multipole m;
+};
 
 struct tree_node {
 	array<fixed32, NDIM> x;
@@ -23,7 +27,7 @@ struct tree_node {
 	int src_end;
 	int snk_begin;
 	int snk_end;
-	multipole multi;
+	multipos multi;
 };
 
 struct sink_bucket {
@@ -32,7 +36,7 @@ struct sink_bucket {
 	int snk_begin;
 	int snk_end;
 	float radius;
-	array<fixed32,NDIM> x;
+	array<fixed32, NDIM> x;
 };
 
 class tree {
@@ -52,10 +56,9 @@ public:
 	tree(const tree& other);
 	tree(tree && other);
 	tree to_device() const;
-	int allocate();
-	CUDA_EXPORT inline
+	int allocate();CUDA_EXPORT inline
 	fixed32 get_x(int dim, int i) const {
-		return nodes[i].x[dim];
+		return nodes[i].multi.x[dim];
 	}
 	CUDA_EXPORT inline int get_pbegin(int i) const {
 		return nodes[i].src_begin;
@@ -70,10 +73,13 @@ public:
 		return nodes[i].snk_end;
 	}
 	CUDA_EXPORT inline multipole get_multipole(int i) const {
+		return nodes[i].multi.m;
+	}
+	CUDA_EXPORT inline multipos get_multipos(int i) const {
 		return nodes[i].multi;
 	}
 	CUDA_EXPORT inline float get_mass(int i) const {
-		return nodes[i].multi[0];
+		return nodes[i].multi.m[0];
 	}
 	CUDA_EXPORT inline
 	float is_leaf(int i) const {
@@ -91,13 +97,13 @@ public:
 		nodes[i] = node;
 	}
 	inline void adjust_src_indexes(int dif) {
-		for( int i = 0; i < sz; i++) {
+		for (int i = 0; i < sz; i++) {
 			nodes[i].src_begin += dif;
 			nodes[i].src_end += dif;
 		}
 	}
 	inline void adjust_snk_indexes(int dif) {
-		for( int i = 0; i < sz; i++) {
+		for (int i = 0; i < sz; i++) {
 			nodes[i].snk_begin += dif;
 			nodes[i].snk_end += dif;
 		}

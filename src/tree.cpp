@@ -76,15 +76,15 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 				m[j] += this_pole[j];
 			}
 		}
-		node.multi = m;
+		node.multi.m = m;
 		double r2max = 0.0;
 		for (int dim = 0; dim < NDIM; dim++) {
-			node.x[dim] = x[dim];
+			node.multi.x[dim] = x[dim];
 		}
 		for (int i = begin; i < end; i++) {
 			double r2 = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
-				node.x[dim] = x[dim];
+				node.multi.x[dim] = x[dim];
 				r2 += sqr(x[dim] - particles_pos(dim, i).to_double());
 			}
 			r2max = std::max(r2max, r2);
@@ -139,9 +139,9 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			m[i] += m1[i];
 		}
-		node.multi = m;
+		node.multi.m = m;
 		for (int dim = 0; dim < NDIM; dim++) {
-			node.x[dim] = x[dim];
+			node.multi.x[dim] = x[dim];
 		}
 		double r20 = 0.0;
 		double r21 = 0.0;

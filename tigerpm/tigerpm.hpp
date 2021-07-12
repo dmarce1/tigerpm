@@ -30,13 +30,13 @@
 #define TREEPM_BLOCK_SIZE 32
 #define TREEPM_OVERSUBSCRIPTION 4
 
-#define SINK_BUCKET_SIZE 64
+#define SINK_BUCKET_SIZE 128
 #define SOURCE_BUCKET_SIZE 64
 
 #define MAX_RUNG 32
 #define NINTERP 6
 #define NCELLS 27
-#define KICK_PP_MAX (8*32)
+#define KICK_PP_MAX (4*32)
 
 
 #define NCHILD 2
