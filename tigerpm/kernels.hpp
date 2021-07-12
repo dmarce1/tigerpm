@@ -10,7 +10,7 @@ using expansion = array<float, EXPANSION_SIZE>;
 using multipole = array<float, MULTIPOLE_SIZE>;
 
 #ifdef __CUDACC__
-__device__ inline void greens_function(array<float,56> &D, float dx, float dy, float dz, float inv2rs) {
+__device__ inline int greens_function(array<float,56> &D, float dx, float dy, float dz, float inv2rs) {
 	const float twooversqrtpi = 1.12837917e+00;
 	const float r2 = sqr(dx, dy, dz);
 	const float rinv = rsqrtf(r2);
@@ -30,7 +30,6 @@ __device__ inline void greens_function(array<float,56> &D, float dx, float dy, f
 	const float d4 = fmaf(float(-7) * d3, rinv, e0);
 	e0 *= c0;
 	const float d5 = fmaf(float(-9) * d4, rinv, e0);
-	e0 *= c0;
 	const float rinv0 = 1.f;
 	const float rinv1 = rinv;
 	const float rinv2 = rinv1 * rinv1;
@@ -354,6 +353,7 @@ __device__ inline void greens_function(array<float,56> &D, float dx, float dy, f
 	D[1] = fmaf(x100, Drinvpow_1_0, D[1]);
 	D[21] = fmaf(float(3.00000000e+00), x_4_1_110, D[21]);
 	D[6] = fmaf(x101, Drinvpow_2_0, D[6]);
+	return 473;
 }
 
 #endif
@@ -1001,6 +1001,7 @@ inline array<float, 35> M2M_kernel(const array<float,35>& Ma, array<float, NDIM>
 	X[0] = -X[0];
 	X[1] = -X[1];
 	X[2] = -X[2];
+	const float x000 = float(1);
 	const float& x100 = X[0];
 	const float& x010 = X[1];
 	const float& x001 = X[2];
@@ -1573,6 +1574,6 @@ inline array<float, 4> L2P_kernel(const array<float, 56>& La, const array<float,
 	Lb[2] = fmaf(float(5.00000000e-01) * x021, La[31], Lb[2]);
 	Lb[3] = fmaf(float(4.16666667e-02) * x004, La[55], Lb[3]);
 	return Lb;
-/* FLOPS = 495*/
+/* FLOPS = 337 + do_phi * 158*/
 }
 

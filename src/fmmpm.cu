@@ -22,13 +22,14 @@ __managed__ double acttime = 0.0;
 __managed__ double longtime = 0.0;
 __managed__ double kicktime = 0.0;
 __managed__ double branchtime = 0.0;
+__managed__ double totalflops = 0;
 
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define LIST_SIZE  (4*1024)
+#define LIST_SIZE  (8*1024)
 #define STACK_SIZE (32*1024)
 #define MAX_DEPTH 64
 
@@ -259,7 +260,8 @@ __device__ inline void shared_reduce_min(T& number) {
 	}
 }
 
-inline __device__ void compute_pp_interaction(float dx, float dy, float dz, float& gx, float& gy, float& gz, float& phi) {
+inline __device__ int compute_pp_interaction(float dx, float dy, float dz, float& gx, float& gy, float& gz, float& phi) {
+	int flops = 0;
 	const fmmpm_params& params = dev_fmmpm_params;
 	const float& twooversqrtpi = params.twooversqrtpi;
 	const float& h2 = params.h2;
@@ -268,17 +270,24 @@ inline __device__ void compute_pp_interaction(float dx, float dy, float dz, floa
 	const float& h3inv = params.h3inv;
 	const float& inv2rs = params.inv2rs;
 	const float rcut2 = sqr(params.rcut);
-	const float r2 = sqr(dx, dy, dz);
 	float rinv, rinv3;
+	const float r2 = sqr(dx, dy, dz);
+	flops += 1;
 	if (r2 < rcut2) {
 		float exp0;
-		rinv = r2 > 0.0f ? rsqrtf(r2) : 0.0f;
+		if (r2 > 0.0f) {
+			rinv = rsqrtf(r2);
+			flops += 4;
+		} else {
+			rinv = 0.f;
+		}
 		const float r = r2 * rinv;
 		const float r0 = r * inv2rs;
 		const float erfc0 = erfcexp(r0, &exp0);
 		if (r2 > h2) {
 			rinv3 = (erfc0 + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv;
 			rinv *= erfc0;
+			flops += 7;
 		} else {
 			const float q2 = r2 * h2inv;
 			float d1 = +15.0f / 8.0f;
@@ -286,6 +295,7 @@ inline __device__ void compute_pp_interaction(float dx, float dy, float dz, floa
 			d1 = fmaf(d1, q2, +35.0f / 8.0f);
 			d1 *= h3inv;
 			rinv3 = ((erfc0 - 1.0f) + twooversqrtpi * r0 * exp0) * rinv * rinv * rinv + d1;
+			flops += 14;
 			if (params.do_phi) {
 				float d0 = -5.0f / 16.0f;
 				d0 = fmaf(d0, q2, 21.0f / 16.0f);
@@ -293,16 +303,20 @@ inline __device__ void compute_pp_interaction(float dx, float dy, float dz, floa
 				d0 = fmaf(d0, q2, 35.0f / 16.0f);
 				d0 *= hinv;
 				rinv = (erfc0 - 1.0f) * rinv + d0;
+				flops += 10;
 			}
 		}
 		gx -= dx * rinv3;
 		gy -= dy * rinv3;
 		gz -= dz * rinv3;
 		phi -= rinv;
+		flops += 42;
 	}
+	return flops;
 }
 
-__device__ void pp_interactions(int nactive) {
+__device__ int pp_interactions(int nactive) {
+	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
@@ -313,7 +327,7 @@ __device__ void pp_interactions(int nactive) {
 	int N = 0;
 	int part_index;
 	if (list.size() == 0) {
-		return;
+		return 0;
 	}
 	auto these_parts_begin = list[i].get_src_begin();
 	auto these_parts_end = list[i].get_src_end();
@@ -372,7 +386,8 @@ __device__ void pp_interactions(int nactive) {
 				const float dx = distance(sink_x, src_x);
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
-				compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
+				flops += 3;
+				flops += compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
 			}
 		}
 		__syncwarp();
@@ -391,7 +406,8 @@ __device__ void pp_interactions(int nactive) {
 				const float dx = distance(sink_x, src_x);
 				const float dy = distance(sink_y, src_y);
 				const float dz = distance(sink_z, src_z);
-				compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
+				flops += 3;
+				flops += compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				shared_reduce_add(g[dim]);
@@ -408,10 +424,11 @@ __device__ void pp_interactions(int nactive) {
 			__syncwarp();
 		}
 	}
-
+	return flops;
 }
 
-__device__ void pc_interactions(int nactive) {
+__device__ int pc_interactions(int nactive) {
+	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
@@ -440,13 +457,14 @@ __device__ void pc_interactions(int nactive) {
 			const float dx = distance(sink_x, src_x);
 			const float dy = distance(sink_y, src_y);
 			const float dz = distance(sink_z, src_z);
+			flops += 3;
 			const auto M = list[i].get_multipole();
 			expansion D;
 			for (int j = 0; j < EXPANSION_SIZE; j++) {
 				D[j] = 0.f;
 			}
-			greens_function(D, dx, dy, dz, params.inv2rs);
-			M2L_kernel(L, M, D, params.do_phi);
+			flops += greens_function(D, dx, dy, dz, params.inv2rs);
+			flops += M2L_kernel(L, M, D, params.do_phi);
 		}
 		g[XDIM] -= L[XDIM + 1];
 		g[YDIM] -= L[YDIM + 1];
@@ -468,13 +486,14 @@ __device__ void pc_interactions(int nactive) {
 			const float dx = distance(sink_x, src_x);
 			const float dy = distance(sink_y, src_y);
 			const float dz = distance(sink_z, src_z);
+			flops += 3;
 			const auto M = list[i].get_multipole();
 			expansion D;
 			for (int j = 0; j < EXPANSION_SIZE; j++) {
 				D[j] = 0.f;
 			}
-			greens_function(D, dx, dy, dz, params.inv2rs);
-			M2L_kernel(L, M, D, params.do_phi);
+			flops += greens_function(D, dx, dy, dz, params.inv2rs);
+			flops += M2L_kernel(L, M, D, params.do_phi);
 		}
 		for (int P = warpSize / 2; P >= 1; P /= 2) {
 			for (int i = 0; i < NDIM + 1; i++) {
@@ -489,9 +508,11 @@ __device__ void pc_interactions(int nactive) {
 		}
 	}
 	__syncwarp();
+	return flops;
 }
 
-__device__ void cc_interactions(checkitem mycheck, expansion& Lexpansion) {
+__device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
+	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
@@ -512,13 +533,14 @@ __device__ void cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 		const float dx = distance(sink_x, src_x);
 		const float dy = distance(sink_y, src_y);
 		const float dz = distance(sink_z, src_z);
+		flops += 3;
 		const auto M = list[i].get_multipole();
 		expansion D;
 		for (int j = 0; j < EXPANSION_SIZE; j++) {
 			D[j] = 0.f;
 		}
-		greens_function(D, dx, dy, dz, params.inv2rs);
-		M2L_kernel(L, M, D, params.do_phi);
+		flops += greens_function(D, dx, dy, dz, params.inv2rs);
+		flops += M2L_kernel(L, M, D, params.do_phi);
 	}
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
@@ -529,9 +551,10 @@ __device__ void cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 		Lexpansion[i] += L[i];
 	}
 	__syncwarp();
+	return flops;
 }
 
-__device__ void long_range_interp(int nactive) {
+__device__ int long_range_interp(int nactive) {
 	const int& tid = threadIdx.x;
 	__shared__ extern int shmem_ptr[];
 	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
@@ -640,6 +663,7 @@ __device__ void long_range_interp(int nactive) {
 		g[ZDIM] += gz;
 	}
 	__syncwarp();
+	return 2497;
 }
 
 __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos) {
@@ -647,6 +671,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		PRINT("MAX_DEPTH exceeded!\n");
 		__trap();
 	}
+	int flops = 0;
 	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -679,6 +704,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	atomicAdd(&Ltime, (double) (clock64() - tm));
 	tm = clock64();
 	if (tid == 0) {
+		flops += 1456 + params.do_phi * 220;
 		multilist.resize(0);
 		leaflist.resize(0);
 	}
@@ -711,6 +737,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				multi = !veryfar && far;
 				next = !veryfar && !far && !source_isleaf;
 				leaf = !veryfar && !far && source_isleaf;
+				flops += 16;
 			} else {
 				multi = false;
 				leaf = false;
@@ -775,7 +802,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				checklist[ci + offset] = leaflist[ci];
 			}
 			__syncwarp();
-			if( tid == 0 ) {
+			if (tid == 0) {
 				leaflist.resize(0);
 			}
 			__syncwarp();
@@ -785,7 +812,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	} while (iamleaf && checklist.size());
 	atomicAdd(&chk1time, (double) (clock64() - tm));
 	tm = clock64();
-	cc_interactions(mycheck, Lexpansion);
+	flops += cc_interactions(mycheck, Lexpansion);
 	atomicAdd(&cctime, (double) (clock64() - tm));
 
 	if (iamleaf) {
@@ -820,7 +847,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		atomicAdd(&acttime, (double) (clock64() - tm));
 		tm = clock64();
 
-		long_range_interp(nactive);
+		flops += long_range_interp(nactive);
 		atomicAdd(&longtime, (double) (clock64() - tm));
 		tm = clock64();
 		__syncwarp();
@@ -852,6 +879,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 					const float dz = distance(sink_z, src_z);
 					const float R2 = sqr(dx, dy, dz);
 					far = R2 > sqr(source_radius) * theta2inv;
+					flops += 11;
 					if (!far) {
 						break;
 					}
@@ -885,10 +913,10 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		atomicAdd(&chk2time, (double) (clock64() - tm));
 		tm = clock64();
 
-		pc_interactions(nactive);
+		flops += pc_interactions(nactive);
 		atomicAdd(&pctime, (double) (clock64() - tm));
 		tm = clock64();
-		pp_interactions(nactive);
+		flops += pp_interactions(nactive);
 		atomicAdd(&pptime, (double) (clock64() - tm));
 		tm = clock64();
 
@@ -923,7 +951,9 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				vx = fmaf(g[XDIM], dt, vx);
 				vy = fmaf(g[YDIM], dt, vy);
 				vz = fmaf(g[ZDIM], dt, vz);
+				flops += 6;
 			}
+			flops += 47 + 337 + params.do_phi * 158;
 			const auto g2 = sqr(g[0], g[1], g[2]);
 			const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
 			dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
@@ -968,6 +998,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		atomicAdd(&branchtime, (double) (clock64() - tm));
 		do_kick(children[1], depth + 1, X);
 	}
+	atomicAdd(&totalflops, flops);
 
 }
 
@@ -1013,6 +1044,19 @@ __global__ void kick_fmmpm_kernel() {
 #define STACK_SIZE (32*1024)
 
 void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call) {
+	pctime = 0.0;
+	pptime = 0.0;
+	cctime = 0.0;
+	Ltime = 0.0;
+	chk2time = 0.0;
+	chk1time = 0.0;
+	acttime = 0.0;
+	longtime = 0.0;
+	kicktime = 0.0;
+	branchtime = 0.0;
+	totalflops = 0.0;
+	timer tmr;
+	tmr.start();
 	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
 //cudaFuncCache pCacheConfig;
 	cudaDeviceSetCacheConfig (cudaFuncCachePreferShared);
@@ -1067,7 +1111,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		PRINT("Unable to set stack size to %i\n", STACK_SIZE);
 		fail = true;
 	}
-	if( fail ) {
+	if (fail) {
 		abort();
 	}
 	if (mem_required > free_mem) {
@@ -1084,7 +1128,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.7;
+		params.theta = 0.3;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
@@ -1294,6 +1338,8 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		CUDA_CHECK(cudaFree(dev_all_trees));
 		tm.stop();
 	}
+	tmr.stop();
+	const double gflops = totalflops / tmr.read() / 1024.0 / 1024.0 / 1024.0;
 	PRINT("Timings\n");
 	double total_time = pctime + cctime + pptime + Ltime + chk1time + chk2time + acttime + longtime + kicktime + branchtime;
 	PRINT("PC  %e\n", pctime / total_time);
@@ -1306,5 +1352,5 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 	PRINT("LNG %e\n", longtime / total_time);
 	PRINT("KCK %e\n", kicktime / total_time);
 	PRINT("BRC %e\n", branchtime / total_time);
-
+	PRINT("GFLOPS = %e\n", gflops);
 }

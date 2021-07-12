@@ -3,6 +3,7 @@
 #include <tigerpm/options.hpp>
 #include <tigerpm/test.hpp>
 #include <tigerpm/fixed.hpp>
+#include <tigerpm/util.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();

@@ -41,7 +41,7 @@
 
 
 #define NCHILD 2
-#define PHI_BW 3
+#define PHI_BW 4
 #define NDIM 3
 
 #define XDIM 0
