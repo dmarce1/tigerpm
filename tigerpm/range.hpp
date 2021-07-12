@@ -146,6 +146,7 @@ struct range {
 		return rc;
 	}
 
+	CUDA_EXPORT
 	inline int index(int xi, int yi, int zi) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];

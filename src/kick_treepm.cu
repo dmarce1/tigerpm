@@ -821,7 +821,7 @@ void kick_treepm(vector<tree> trees, vector<vector<sink_bucket>> buckets, range<
 	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
 	if (mem_required > free_mem) {
 		const auto child_boxes = box.split();
-		PRINT("Splitting\n");
+		PRINT("%s\n", "Splitting\n");
 		kick_treepm(trees, buckets, child_boxes.first, min_rung, scale, t0, first_call);
 		kick_treepm(std::move(trees), std::move(buckets), child_boxes.second, min_rung, scale, t0, first_call);
 	} else {

@@ -124,15 +124,13 @@ std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, N
 	return std::make_pair((float) phi0, gret);
 }
 
-#define CLOUD_W 4
 
 void compute_source() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<compute_source_action>(c));
 	}
-	vector<float> source;
-	vector<std::shared_ptr<spinlock_type>> mutexes;
+	auto source = gravity_long_compute_source_local();
 
 	source_box = find_my_box(get_options().chain_dim);
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -142,7 +140,7 @@ void compute_source() {
 	}
 	source_box = source_box.pad(PHI_BW);
 	source.resize(source_box.volume(), 0.0f);
-	const double N = get_options().four_dim;
+	/*const double N = get_options().four_dim;
 	const int xdim = source_box.end[XDIM] - source_box.begin[XDIM];
 	mutexes.resize(xdim);
 	for (int i = 0; i < xdim; i++) {
@@ -179,7 +177,7 @@ void compute_source() {
 				}
 			}
 		}));
-	}
+	}*/
 
 	hpx::wait_all(futs.begin(), futs.end());
 	fft3d_accumulate_real(source_box, std::move(source));

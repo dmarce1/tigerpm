@@ -26,6 +26,7 @@
 #define FORCE_TEST
 //#define SORT_TEST
 
+#define CLOUD_W 4
 #define USE_QUADRUPOLE
 #define TREEPM_BLOCK_SIZE 32
 #define TREEPM_OVERSUBSCRIPTION 4

@@ -22,6 +22,7 @@ set(tigerpm_source_files
     src/gravity_long.cpp
     src/gravity_short.cpp
     src/gravity_short.cu
+    src/gravity_long.cu
     src/hpx.cpp
     src/initialize.cpp
     src/kick_pm.cpp

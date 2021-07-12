@@ -85,7 +85,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 	opts.four_dim = opts.parts_dim / opts.parts_o_four;
 	opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
-	opts.rs = 1.0 / opts.four_dim;
+	opts.rs = 1.0 / opts.four_dim * opts.four_o_chain / 5.0;
 	opts.GM = 1.0;
 	opts.hsoft = 2.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);

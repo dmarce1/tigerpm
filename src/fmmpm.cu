@@ -1067,6 +1067,9 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		PRINT("Unable to set stack size to %i\n", STACK_SIZE);
 		fail = true;
 	}
+	if( fail ) {
+		abort();
+	}
 	if (mem_required > free_mem) {
 		const auto child_boxes = box.split();
 		PRINT("Splitting\n");
