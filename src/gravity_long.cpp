@@ -4,6 +4,7 @@
 #include <tigerpm/options.hpp>
 #include <tigerpm/particles.hpp>
 #include <tigerpm/util.hpp>
+#include <tigerpm/timer.hpp>
 
 static vector<float> phi;
 static range<int> source_box;
@@ -130,8 +131,6 @@ void compute_source() {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<compute_source_action>(c));
 	}
-	auto source = gravity_long_compute_source_local();
-
 	source_box = find_my_box(get_options().chain_dim);
 	for (int dim = 0; dim < NDIM; dim++) {
 		const static auto ratio = get_options().four_o_chain;
@@ -139,46 +138,11 @@ void compute_source() {
 		source_box.end[dim] *= ratio;
 	}
 	source_box = source_box.pad(PHI_BW);
-	source.resize(source_box.volume(), 0.0f);
-	/*const double N = get_options().four_dim;
-	const int xdim = source_box.end[XDIM] - source_box.begin[XDIM];
-	mutexes.resize(xdim);
-	for (int i = 0; i < xdim; i++) {
-		mutexes[i] = std::make_shared<spinlock_type>();
-	}
-	const int nthreads = hpx::thread::hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,N,&source,&mutexes]() {
-			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
-			const int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
-			for (int i = begin; i < end; i++) {
-				array<double, NDIM> X;
-				array<int, NDIM> I;
-				array<array<double,CLOUD_W>,NDIM> w;
-				X[XDIM] = particles_pos(0, i).to_double();
-				X[YDIM] = particles_pos(1, i).to_double();
-				X[ZDIM] = particles_pos(2, i).to_double();
-				for( int dim = 0; dim < NDIM; dim++) {
-					I[dim] = int(X[dim] * N + PHI_BW - 1) - PHI_BW;
-					for( int i = 0; i < CLOUD_W; i++) {
-						w[dim][i] = cloud4(X[dim] * N - I[dim] - i);
-//						PRINT( "%e\n", X[dim] * N - I[dim] - i);
-					}
-				}
-				array<int, NDIM> J;
-				const double c0 = 4.0 * M_PI * N;
-				for( J[0] = 0; J[0] < CLOUD_W; J[0]++) {
-					std::lock_guard<spinlock_type> lock(*mutexes[I[0] + J[0] - source_box.begin[XDIM]]);
-					for( J[1] = 0; J[1] < CLOUD_W; J[1]++) {
-						for( J[2] = 0; J[2] < CLOUD_W; J[2]++) {
-							source[source_box.index(I[0]+J[0],I[1]+J[1],I[2]+J[2])] += c0 * w[0][J[0]] * w[1][J[1]] * w[2][J[2]];
-						}
-					}
-				}
-			}
-		}));
-	}*/
-
+	timer tm;
+	tm.start();
+	auto source = gravity_long_compute_source_local();
+	tm.stop();
+	PRINT( "sources took %e\n", tm.read());
 	hpx::wait_all(futs.begin(), futs.end());
 	fft3d_accumulate_real(source_box, std::move(source));
 }

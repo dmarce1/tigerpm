@@ -101,7 +101,7 @@ inline float tsc(float x) {
 
 CUDA_EXPORT
 inline float cloud4(float x) {
-	float q1 = std::abs(x);
+	float q1 = fabsf(x);
 	float q2 = q1 * q1;
 	float q3 = q2 * q1;
 	if (q1 < 1.0) {

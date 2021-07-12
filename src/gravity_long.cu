@@ -65,9 +65,10 @@ void compute_source_cuda(int pbegin, int pend, float* dev_src, cudaStream_t stre
 		int occupancy;
 		cudaFuncAttributes attr;
 		CUDA_CHECK(cudaFuncGetAttributes(&attr, compute_source_kernel));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, compute_source_kernel, attr.numRegs, 0));
+		const int num_threads = attr.maxThreadsPerBlock;
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, compute_source_kernel, attr.maxThreadsPerBlock, 0));
 		int num_blocks = cuda_smp_count() * occupancy;
-		compute_source_kernel<<<num_blocks,attr.numRegs, 0, stream>>>(dev_src, source_box, x, y, z, count, N);
+		compute_source_kernel<<<num_blocks,num_threads, 0, stream>>>(dev_src, source_box, x, y, z, count, N);
 		CUDA_CHECK(cudaFreeAsync(x, stream));
 		CUDA_CHECK(cudaFreeAsync(y, stream));
 		CUDA_CHECK(cudaFreeAsync(z, stream));
