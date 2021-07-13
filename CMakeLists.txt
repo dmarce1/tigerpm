@@ -43,6 +43,7 @@ set(tigerpm_header_files
 	tigerpm/containers.hpp
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
+	tigerpm/driver.hpp
 	tigerpm/drift.hpp
 	tigerpm/gravity_long.hpp
 	tigerpm/gravity_short.hpp

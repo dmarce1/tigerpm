@@ -1,4 +1,5 @@
 #include <tigerpm/tigerpm.hpp>
+#include <tigerpm/driver.hpp>
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/options.hpp>
 #include <tigerpm/test.hpp>
@@ -11,6 +12,8 @@ int hpx_main(int argc, char *argv[]) {
 	process_options(argc,argv);
 	if( get_options().test != "" ) {
 		run_test(get_options().test);
+	} else {
+		driver();
 	}
 
 	return hpx::finalize();

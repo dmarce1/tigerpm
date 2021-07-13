@@ -148,6 +148,12 @@ static float zeldovich_end(int dim) {
 	}
 	const auto Y = fft3d_read_real(box);
 	const float D1 = growth_factor(omega_m, a0) / growth_factor(omega_m, 1.0);
+	const double Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
+	const double f1 = std::pow(Om, 5.f / 9.f);
+	const double H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
+	const double H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
+	double prefac1 = f1 * H * a0 * a0;
+
 	if (dim == 0) {
 		particles_resize(box.volume());
 	}
@@ -166,6 +172,8 @@ static float zeldovich_end(int dim) {
 					x += 1.0;
 				}
 				particles_pos(dim, index) = x;
+				particles_vel(dim, index) = prefac1 * dx;
+				particles_rung(index) = 0;
 			}
 		}
 	}

@@ -1,5 +1,6 @@
 #include <tigerpm/drift.hpp>
 #include <tigerpm/fmmpm.hpp>
+#include <tigerpm/initialize.hpp>
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/particles.hpp>
 
@@ -33,5 +34,12 @@ kick_return kick_step(int minrung, double scale, double dt, bool first_call) {
 	chainmesh_exchange_end();
 	kick_return kr = kick_fmmpm_begin(minrung, scale, dt, first_call);
 	kick_fmmpm_end();
+	return kr;
+}
+
+void driver() {
+	initialize();
+	double a0 = 1.0 / (1.0 + get_options().z0);
+	double tau_max = cosmos_age(a0);
 
 }
