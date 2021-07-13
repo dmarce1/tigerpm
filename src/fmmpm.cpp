@@ -7,8 +7,8 @@
 HPX_PLAIN_ACTION(kick_fmmpm_begin);
 HPX_PLAIN_ACTION(kick_fmmpm_end);
 
-void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
-	vector<hpx::future<void>> futs;
+kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
+	vector<hpx::future<kick_return>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<kick_fmmpm_begin_action>(c, min_rung, scale, t0, first_call));
 	}
@@ -18,7 +18,7 @@ void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
 	const auto bigbox = box.pad(CHAIN_BW);
 	const auto vol = box.volume();
 	const auto bigvol = bigbox.volume();
-		timer tm;
+	timer tm;
 	tm.start();
 	array<int, NDIM> i;
 	std::vector<hpx::future<void>> futs1;
@@ -42,12 +42,12 @@ void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
 	for (i[0] = bigbox.begin[0]; i[0] < bigbox.end[0]; i[0]++) {
 		for (i[1] = bigbox.begin[1]; i[1] < bigbox.end[1]; i[1]++) {
 			for (i[2] = bigbox.begin[2]; i[2] < bigbox.end[2]; i[2]++) {
-				if( !box.contains(i)) {
+				if (!box.contains(i)) {
 					auto j = i;
-					for( int dim = 0; dim < NDIM; dim++) {
-						if( j[dim] < 0 ) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						if (j[dim] < 0) {
 							j[dim] += N;
-						} else if( j[dim] >= N) {
+						} else if (j[dim] >= N) {
 							j[dim] -= N;
 						}
 					}
@@ -59,10 +59,13 @@ void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
 	PRINT("Trees took %e s\n", tm.read());
 	tm.reset();
 
-	kick_fmmpm(trees, box, min_rung, scale, t0, first_call);
-
-	hpx::wait_all(futs.begin(), futs.end());
-
+	kick_return kr = kick_fmmpm(trees, box, min_rung, scale, t0, first_call);
+	for (auto& f : futs) {
+		auto this_kr = f.get();
+		kr.max_rung = std::max(kr.max_rung, this_kr.max_rung);
+		kr.flops += this_kr.flops;
+	}
+	return kr;
 }
 
 void kick_fmmpm_end() {
@@ -72,8 +75,6 @@ void kick_fmmpm_end() {
 	}
 
 	particles_resize(particles_local_size());
-
-
 
 	hpx::wait_all(futs.begin(), futs.end());
 

@@ -10,8 +10,18 @@
 
 #include <tigerpm/tree.hpp>
 
-void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call);
-void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call);
+struct kick_return {
+	int max_rung;
+	double flops;
+	template<class Arc>
+	void serialize(Arc& a, unsigned) {
+		a & max_rung;
+		a & flops;
+	}
+};
+
+kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call, kick_return* = nullptr);
+kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call);
 void kick_fmmpm_end();
 
 #endif /* FMMPM_HPP_ */

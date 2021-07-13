@@ -12,6 +12,7 @@
 
 #include <algorithm>
 
+/*
 __managed__ double pctime = 0.0;
 __managed__ double pptime = 0.0;
 __managed__ double cctime = 0.0;
@@ -22,7 +23,7 @@ __managed__ double acttime = 0.0;
 __managed__ double longtime = 0.0;
 __managed__ double kicktime = 0.0;
 __managed__ double branchtime = 0.0;
-__managed__ double totalflops = 0;
+__managed__ double totalflops = 0;*/
 
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
@@ -98,6 +99,7 @@ struct fmmpm_params {
 	float* velz;
 	float* phi;
 	char* rung;
+	kick_return* kreturn;
 	list_set* lists;
 	tree* tree_neighbors;
 	int* active;
@@ -253,10 +255,16 @@ __device__ inline void shared_reduce_add(T& number) {
 	}
 }
 
-template<class T>
-__device__ inline void shared_reduce_min(T& number) {
+__device__ inline void shared_reduce_min(float& number) {
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		number = fminf(number, __shfl_xor_sync(0xffffffff, number, P));
+	}
+}
+
+
+__device__ inline void shared_reduce_max(int& number) {
+	for (int P = warpSize / 2; P >= 1; P /= 2) {
+		number = max(number, __shfl_xor_sync(0xffffffff, number, P));
 	}
 }
 
@@ -638,7 +646,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		__trap();
 	}
 	int flops = 0;
-	auto tm = clock64();
+//	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
@@ -667,8 +675,8 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 	for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
 		Lexpansion[i] = Ltmp[i];
 	}
-	atomicAdd(&Ltime, (double) (clock64() - tm));
-	tm = clock64();
+//	atomicAdd(&Ltime, (double) (clock64() - tm));
+//	tm = clock64();
 	if (tid == 0) {
 		flops += 1456 + params.do_phi * 220;
 		multilist.resize(0);
@@ -776,13 +784,13 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		__syncwarp();
 
 	} while (iamleaf && checklist.size());
-	atomicAdd(&chk1time, (double) (clock64() - tm));
-	tm = clock64();
+//	atomicAdd(&chk1time, (double) (clock64() - tm));
+//	tm = clock64();
 	flops += cc_interactions(mycheck, Lexpansion);
-	atomicAdd(&cctime, (double) (clock64() - tm));
+//	atomicAdd(&cctime, (double) (clock64() - tm));
 
 	if (iamleaf) {
-		tm = clock64();
+//		tm = clock64();
 		const auto snk_begin = mycheck.get_snk_begin();
 		const auto snk_end = mycheck.get_snk_end();
 		const int nsinks = snk_end - snk_begin;
@@ -810,12 +818,12 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			}
 			__syncwarp();
 		}
-		atomicAdd(&acttime, (double) (clock64() - tm));
-		tm = clock64();
+//		atomicAdd(&acttime, (double) (clock64() - tm));
+//		tm = clock64();
 
 		flops += long_range_interp(nactive);
-		atomicAdd(&longtime, (double) (clock64() - tm));
-		tm = clock64();
+//		atomicAdd(&longtime, (double) (clock64() - tm));
+//		tm = clock64();
 		__syncwarp();
 		if (tid == 0) {
 			pplist.resize(0);
@@ -876,16 +884,16 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			}
 
 		}
-		atomicAdd(&chk2time, (double) (clock64() - tm));
-		tm = clock64();
+//		atomicAdd(&chk2time, (double) (clock64() - tm));
+//		tm = clock64();
 
 		flops += pc_interactions(nactive);
-		atomicAdd(&pctime, (double) (clock64() - tm));
-		tm = clock64();
+//		atomicAdd(&pctime, (double) (clock64() - tm));
+//		tm = clock64();
 		flops += pp_interactions(nactive);
-		atomicAdd(&pptime, (double) (clock64() - tm));
-		tm = clock64();
-
+//		atomicAdd(&pptime, (double) (clock64() - tm));
+//		tm = clock64();
+		int max_rung = -1;
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 			array<float, NDIM>& g = shmem.g[sink_index];
 			float& phi = shmem.phi[sink_index];
@@ -924,6 +932,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
 			dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
 			rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
+			max_rung = max(rung, max_rung);
 			if (rung < 0 || rung >= MAX_RUNG) {
 				PRINT("Rung out of range %i\n", rung);
 			}
@@ -934,10 +943,15 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			vy = fmaf(g[YDIM], dt, vy);
 			vz = fmaf(g[ZDIM], dt, vz);
 		}
-		atomicAdd(&kicktime, (double) (clock64() - tm));
-
+		shared_reduce_max(max_rung);
+		shared_reduce_add(flops);
+		if( tid == 0 ) {
+			atomicMax(&params.kreturn->max_rung, max_rung);
+			atomicAdd(&params.kreturn->flops, flops);
+		}
+//		atomicAdd(&kicktime, (double) (clock64() - tm));
 	} else {
-		tm = clock64();
+//		tm = clock64();
 		const auto children = mycheck.get_children();
 		__syncwarp();
 		auto& Lnext = (params.lists + bid)->Lexpansion[depth + 1];
@@ -950,9 +964,9 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		X[YDIM] = mycheck.get_x(YDIM);
 		X[ZDIM] = mycheck.get_x(ZDIM);
 		checklist.push_top();
-		atomicAdd(&branchtime, (double) (clock64() - tm));
+//		atomicAdd(&branchtime, (double) (clock64() - tm));
 		do_kick(children[0], depth + 1, X);
-		tm = clock64();
+//		tm = clock64();
 		__syncwarp();
 		for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
 			Lnext[i] = Lexpansion[i];
@@ -961,10 +975,14 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			checklist.pop_top();
 		}
 		__syncwarp();
-		atomicAdd(&branchtime, (double) (clock64() - tm));
+//		atomicAdd(&branchtime, (double) (clock64() - tm));
 		do_kick(children[1], depth + 1, X);
+		shared_reduce_add(flops);
+		if( tid == 0 ) {
+			atomicAdd(&params.kreturn->flops, flops);
+		}
 	}
-	atomicAdd(&totalflops, flops);
+//	atomicAdd(&totalflops, flops);
 
 }
 
@@ -1009,18 +1027,29 @@ __global__ void kick_fmmpm_kernel() {
 
 #define STACK_SIZE (32*1024)
 
-void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call) {
-	pctime = 0.0;
-	pptime = 0.0;
-	cctime = 0.0;
-	Ltime = 0.0;
-	chk2time = 0.0;
-	chk1time = 0.0;
-	acttime = 0.0;
-	longtime = 0.0;
-	kicktime = 0.0;
-	branchtime = 0.0;
-	totalflops = 0.0;
+kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call, kick_return* kreturn) {
+	bool root;
+	if (kreturn == nullptr) {
+		kick_return host;
+		host.max_rung = -1;
+		host.flops = 0;
+		CUDA_CHECK(cudaMalloc(&kreturn, sizeof(kick_return)));
+		CUDA_CHECK(cudaMemcpy(kreturn, &host, sizeof(kick_return), cudaMemcpyHostToDevice));
+/*		pctime = 0.0;
+		pptime = 0.0;
+		cctime = 0.0;
+		Ltime = 0.0;
+		chk2time = 0.0;
+		chk1time = 0.0;
+		acttime = 0.0;
+		longtime = 0.0;
+		kicktime = 0.0;
+		branchtime = 0.0;
+		totalflops = 0.0;*/
+		root = true;
+	} else {
+		root = false;
+	}
 	timer tmr;
 	tmr.start();
 	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
@@ -1066,7 +1095,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_fmmpm_kernel,WARP_SIZE, sizeof(fmmpm_shmem)));
 	PRINT("Occupancy = %i\n", occupancy);
 	int num_blocks = occupancy * cuda_smp_count();
-	PRINT( "%e cells per block\n", (double) box.volume() / num_blocks);
+	PRINT("%e cells per block\n", (double ) box.volume() / num_blocks);
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + sizeof(fmmpm_params);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
 	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
@@ -1084,8 +1113,8 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 	if (mem_required > free_mem) {
 		const auto child_boxes = box.split();
 		PRINT("Splitting\n");
-		kick_fmmpm(trees, child_boxes.first, min_rung, scale, t0, first_call);
-		kick_fmmpm(std::move(trees), child_boxes.second, min_rung, scale, t0, first_call);
+		kick_fmmpm(trees, child_boxes.first, min_rung, scale, t0, first_call, kreturn);
+		kick_fmmpm(std::move(trees), child_boxes.second, min_rung, scale, t0, first_call, kreturn);
 	} else {
 		cuda_set_device();
 		PRINT("Data transfer\n");
@@ -1095,8 +1124,8 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.333333333333
-				;
+		params.kreturn = kreturn;
+		params.theta = 0.333333333333;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
@@ -1307,7 +1336,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 	}
 	tmr.stop();
-	const double gflops = totalflops / tmr.read() / 1024.0 / 1024.0 / 1024.0;
+	/*	const double gflops = totalflops / tmr.read() / 1024.0 / 1024.0 / 1024.0;
 	PRINT("Timings\n");
 	double total_time = pctime + cctime + pptime + Ltime + chk1time + chk2time + acttime + longtime + kicktime + branchtime;
 	PRINT("PC  %e\n", pctime / total_time);
@@ -1320,5 +1349,12 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 	PRINT("LNG %e\n", longtime / total_time);
 	PRINT("KCK %e\n", kicktime / total_time);
 	PRINT("BRC %e\n", branchtime / total_time);
-	PRINT("GFLOPS = %e\n", gflops);
+	PRINT("GFLOPS = %e\n", gflops);*/
+
+	kick_return host;
+	if (root) {
+		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
+		CUDA_CHECK(cudaFree(kreturn));
+	}
+	return host;
 }

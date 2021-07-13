@@ -13,6 +13,7 @@
 #include <tigerpm/tigerpm.hpp>
 #include <tigerpm/hpx.hpp>
 #include <tigerpm/options.hpp>
+#include <tigerpm/util.hpp>
 
 options global_opts;
 
@@ -97,10 +98,13 @@ bool process_options(int argc, char *argv[]) {
 	opts.z0 = 49.0;
 	double H = constants::H0 * opts.code_to_s;
 	const size_t nparts = pow(opts.parts_dim, NDIM);
-	opts.omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma
-			* (1 + opts.Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
-			* std::pow(constants::c, -3) * std::pow(2.73 * opts.Theta, 4) * std::pow(opts.hubble, -2);
-	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
+	const double Neff = 3.086;
+	const double Theta = 1.0;
+	opts.GM = opts.omega_m * 3.0 * sqr(H * get_options().hubble) / (8.0 * M_PI) / nparts;
+	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma
+			* (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
+			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
+	opts.omega_r = omega_r;
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';

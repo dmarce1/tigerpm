@@ -25,13 +25,13 @@ double cosmos_age(double a0) {
 	return t;
 }
 
-void step(int minrung, double scale, double dt, bool first_call) {
+kick_return kick_step(int minrung, double scale, double dt, bool first_call) {
 	particles_domain_sort();
 	gravity_long_compute(GRAVITY_LONG_PME);
 	chainmesh_create();
 	chainmesh_exchange_begin();
 	chainmesh_exchange_end();
-	kick_fmmpm_begin(minrung, scale, dt, first_call);
+	kick_return kr = kick_fmmpm_begin(minrung, scale, dt, first_call);
 	kick_fmmpm_end();
 
 }
