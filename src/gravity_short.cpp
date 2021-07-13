@@ -65,7 +65,7 @@ void gravity_short_ewald_compare(int Nsamples) {
 		lerr_force += sqr(gerr) / Nsamples;
 		lmax_phi = std::max(lmax_phi, ferr);
 		lmax_force = std::max(lmax_force, gerr);
-		printf("%.10e %.10e %.10e | %.10e %.10e %.10e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1);
+		printf("%.10e %.10e %.10e | %.10e %.10e %.10e |%.10e %.10e %.10e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1, f1, f2, f1/f2);
 	}
 	lerr_force = sqrt(lerr_force);
 	lerr_phi = sqrt(lerr_phi);

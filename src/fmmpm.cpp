@@ -15,7 +15,7 @@ void kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
 
 	vector<tree> trees;
 	const auto box = chainmesh_interior_box();
-	const auto bigbox = box.pad(1);
+	const auto bigbox = box.pad(CHAIN_BW);
 	const auto vol = box.volume();
 	const auto bigvol = bigbox.volume();
 		timer tm;

@@ -13,7 +13,7 @@ static range<int> real_mybox;
 static array<range<int>, NDIM> cmplx_mybox;
 static vector<std::shared_ptr<spinlock_type>> mutexes;
 
-static vector<float> R;
+static vector<double> R;
 static vector<cmplx> Y;
 static vector<cmplx> ym;
 static vector<cmplx> Y1;
@@ -154,9 +154,9 @@ void finish_force_real() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-vector<float> fft3d_read_real(const range<int>& this_box) {
+vector<double> fft3d_read_real(const range<int>& this_box) {
 	vector<hpx::future<void>> futs;
-	vector<float> data(this_box.volume());
+	vector<double> data(this_box.volume());
 	if (real_mybox.contains(this_box)) {
 		array<int, NDIM> i;
 		for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
@@ -179,7 +179,7 @@ vector<float> fft3d_read_real(const range<int>& this_box) {
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
 								auto fut = hpx::async < fft3d_read_real_action > (hpx_localities()[ri], this_inter);
-								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<float>> fut) {
+								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<double>> fut) {
 									auto this_data = fut.get();
 									array<int, NDIM> i;
 									for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
@@ -257,7 +257,7 @@ vector<cmplx> fft3d_read_complex(const range<int>& this_box) {
 	return std::move(data);
 }
 
-void fft3d_accumulate_real(const range<int>& this_box, const vector<float>& data) {
+void fft3d_accumulate_real(const range<int>& this_box, const vector<double>& data) {
 	vector<hpx::future<void>> futs;
 	if (real_mybox.contains(this_box)) {
 		array<int, NDIM> i;
@@ -283,7 +283,7 @@ void fft3d_accumulate_real(const range<int>& this_box, const vector<float>& data
 							vector<range<int>> inters;
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
-								vector<float> this_data;
+								vector<double> this_data;
 								this_data.resize(this_inter.volume());
 								array<int, NDIM> i;
 								for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
@@ -431,18 +431,18 @@ static void fft3d_phase1() {
 	Y.resize(cmplx_mybox[ZDIM].volume());
 	for (i[0] = real_mybox.begin[0]; i[0] != real_mybox.end[0]; i[0]++) {
 		futs.push_back(hpx::async([](array<int,NDIM> j) {
-			fftwf_plan p;
-			fftwf_complex out[N / 2 + 1];
-			float in[N];
+			fftw_plan p;
+			fftw_complex out[N / 2 + 1];
+			double in[N];
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftwf_plan_dft_r2c_1d(N, in, out, 0);
+			p = fftw_plan_dft_r2c_1d(N, in, out, 0);
 			lock.unlock();
 			auto i = j;
 			for (i[1] = real_mybox.begin[1]; i[1] != real_mybox.end[1]; i[1]++) {
 				for (i[2] = 0; i[2] != N; i[2]++) {
 					in[i[2]] = R[real_mybox.index(i)];
 				}
-				fftwf_execute(p);
+				fftw_execute(p);
 				for (i[2] = 0; i[2] < N / 2 + 1; i[2]++) {
 					const int l = cmplx_mybox[ZDIM].index(i);
 					Y[l].real() = out[i[2]][0];
@@ -450,7 +450,7 @@ static void fft3d_phase1() {
 				}
 			}
 			lock.lock();
-			fftwf_destroy_plan(p);
+			fftw_destroy_plan(p);
 			lock.unlock();
 		}, i));
 	}
@@ -466,14 +466,14 @@ static void fft3d_phase2(int dim, bool inv) {
 	}
 	Y = std::move(Y1);
 	array<int, NDIM> i;
-	const float norm = inv ? 1.0f / N : 1.0;
+	const double norm = inv ? 1.0f / N : 1.0;
 	for (i[0] = cmplx_mybox[dim].begin[0]; i[0] != cmplx_mybox[dim].end[0]; i[0]++) {
 		futs.push_back(hpx::async([dim,inv,norm](array<int,NDIM> j) {
-			fftwf_complex out[N];
-			fftwf_complex in[N];
-			fftwf_plan p;
+			fftw_complex out[N];
+			fftw_complex in[N];
+			fftw_plan p;
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftwf_plan_dft_1d(N, in, out, inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
+			p = fftw_plan_dft_1d(N, in, out, inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
 			lock.unlock();
 			auto i = j;
 			for (i[1] = cmplx_mybox[dim].begin[1]; i[1] != cmplx_mybox[dim].end[1]; i[1]++) {
@@ -486,7 +486,7 @@ static void fft3d_phase2(int dim, bool inv) {
 					in[i[2]][0] = Y[l].real();
 					in[i[2]][1] = Y[l].imag();
 				}
-				fftwf_execute(p);
+				fftw_execute(p);
 				for (i[2] = 0; i[2] < N; i[2]++) {
 					const int l = cmplx_mybox[dim].index(i);
 					Y[l].real() = out[i[2]][0] * norm;
@@ -494,7 +494,7 @@ static void fft3d_phase2(int dim, bool inv) {
 				}
 			}
 			lock.lock();
-			fftwf_destroy_plan(p);
+			fftw_destroy_plan(p);
 			lock.unlock();
 		}, i));
 	}
@@ -510,14 +510,14 @@ static void fft3d_phase3() {
 	array<int, NDIM> i;
 	Y = std::move(Y1);
 	R.resize(real_mybox.volume());
-	const float Ninv = 1.0 / N;
+	const double Ninv = 1.0 / N;
 	for (i[0] = cmplx_mybox[ZDIM].begin[0]; i[0] != cmplx_mybox[ZDIM].end[0]; i[0]++) {
 		futs.push_back(hpx::async([Ninv](array<int,NDIM> j) {
-			fftwf_plan p;
-			fftwf_complex in[N / 2 + 1];
-			float out[N];
+			fftw_plan p;
+			fftw_complex in[N / 2 + 1];
+			double out[N];
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftwf_plan_dft_c2r_1d(N, in, out, 0);
+			p = fftw_plan_dft_c2r_1d(N, in, out, 0);
 			lock.unlock();
 			auto i = j;
 			for (i[1] = cmplx_mybox[ZDIM].begin[1]; i[1] !=cmplx_mybox[ZDIM].end[1]; i[1]++) {
@@ -526,13 +526,13 @@ static void fft3d_phase3() {
 					in[i[2]][0] = Y[l].real();
 					in[i[2]][1] = Y[l].imag();
 				}
-				fftwf_execute(p);
+				fftw_execute(p);
 				for (i[2] = 0; i[2] != N; i[2]++) {
 					R[real_mybox.index(i)] = out[i[2]] * Ninv;
 				}
 			}
 			lock.lock();
-			fftwf_destroy_plan(p);
+			fftw_destroy_plan(p);
 			lock.unlock();
 		}, i));
 	}
@@ -564,7 +564,7 @@ static void transpose(int dim1, int dim2) {
 	Y1.resize(cmplx_mybox[dim1].volume());
 	for (int bi = 0; bi < cmplx_boxes[dim2].size(); bi++) {
 		const auto tinter = cmplx_boxes[dim2][bi].intersection(tbox);
-		vector<float> data;
+		vector<double> data;
 		if (!tinter.empty()) {
 			vector<range<int>> tinters;
 			split_box(tinter, tinters);
@@ -622,7 +622,7 @@ static void shift(bool inv) {
 	Y1.resize(cmplx_mybox[dim2].volume());
 	for (int bi = 0; bi < cmplx_boxes[dim1].size(); bi++) {
 		const auto tinter = cmplx_boxes[dim1][bi].intersection(tbox);
-		vector<float> data;
+		vector<double> data;
 		if (!tinter.empty()) {
 			vector<range<int>> tinters;
 			split_box(tinter, tinters);

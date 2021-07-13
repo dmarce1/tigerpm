@@ -570,97 +570,63 @@ __device__ int long_range_interp(int nactive) {
 		array<int, NDIM> I;
 		array<int, NDIM> J;
 		array<float, NDIM> X;
-		array<array<float, 4>, NDIM> w;
 		X[XDIM] = sink_x.to_float();
 		X[YDIM] = sink_y.to_float();
 		X[ZDIM] = sink_z.to_float();
-		array<array<array<array<float, 4>, 4>, 4>, NDIM> force;
-		array<array<array<float, 8>, 8>, 8> pot;
+		array<array<float, NINTERP>, NINTERP> w;
+		array<array<float, NINTERP>, NINTERP> dw;
 		for (int dim = 0; dim < NDIM; dim++) {
 			X[dim] *= params.Nfour;
 			I[dim] = min(int(X[dim]), params.phi_box.end[dim] - PHI_BW);
-			I[dim] -= 3;
-		}
-		for (J[0] = I[0]; J[0] < I[0] + 8; J[0]++) {
-			for (J[1] = I[1]; J[1] < I[1] + 8; J[1]++) {
-				for (J[2] = I[2]; J[2] < I[2] + 8; J[2]++) {
-					const int l = params.phi_box.index(J);
-					pot[J[0] - I[0]][J[1] - I[1]][J[2] - I[2]] = params.phi[l];
-				}
-			}
-		}
-		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
-			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
-				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
-					const int i = J[0] - I[0] - 2;
-					const int j = J[1] - I[1] - 2;
-					const int k = J[2] - I[2] - 2;
-					const int ip = i + 2;
-					const int jp = j + 2;
-					const int kp = k + 2;
-					force[0][i][j][k] = -((2.f / 3.f) * (pot[ip + 1][jp][kp] - pot[ip - 1][jp][kp]) - (1.f / 12.f) * (pot[ip + 2][jp][kp] - pot[ip - 2][jp][kp]))
-							* params.Nfour;
-					force[1][i][j][k] = -((2.f / 3.f) * (pot[ip][jp + 1][kp] - pot[ip][jp - 1][kp]) - (1.f / 12.f) * (pot[ip][jp + 2][kp] - pot[ip][jp - 2][kp]))
-							* params.Nfour;
-					force[2][i][j][k] = -((2.f / 3.f) * (pot[ip][jp][kp + 1] - pot[ip][jp][kp - 1]) - (1.f / 12.f) * (pot[ip][jp][kp + 2] - pot[ip][jp][kp - 2]))
-							* params.Nfour;
-				}
-			}
+			X[dim] -= float(I[dim]);
+			I[dim] -= 2;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			for (int i = 0; i < 4; i++) {
-				const float x = X[dim] - (I[dim] + 2 + i);
-				w[dim][i] = cloud4(x);
-			}
+			float x1 = X[dim];
+			float x2 = X[dim] * x1;
+			float x3 = x1 * x2;
+			float x4 = x2 * x2;
+			float x5 = x3 * x2;
+			w[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+			w[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+			w[dim][2] = 1.0f - (5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+			w[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+			w[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+			w[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
+			x5 = 5.0f * x4;
+			x4 = 4.0f * x3;
+			x3 = 3.0f * x2;
+			x2 = 2.0f * x1;
+			x1 = 1.0f;
+			dw[dim][0] = (1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (3.f / 8.f) * x3 + (13.f / 24.f) * x4 - (5.f / 24.f) * x5;
+			dw[dim][1] = -(2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (13.f / 8.f) * x3 - (8.f / 3.f) * x4 + (25.f / 24.f) * x5;
+			dw[dim][2] = -(5.f / 4.f) * x2 - (35.f / 12.f) * x3 + (21.f / 4.f) * x4 - (25.f / 12.f) * x5;
+			dw[dim][3] = (2.f / 3.f) * x1 + (2.f / 3.f) * x2 + (11.f / 4.f) * x3 - (31.f / 6.f) * x4 + (25.f / 12.f) * x5;
+			dw[dim][4] = -(1.f / 12.f) * x1 - (1.f / 24.f) * x2 - (11.f / 8.f) * x3 + (61.f / 24.f) * x4 - (25.f / 24.f) * x5;
+			dw[dim][5] = (7.f / 24.f) * x3 - (0.5f) * x4 + (5.f / 24.f) * x5;
 		}
-		float gx = 0.f;
-		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
-			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
-				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
-					const int i = J[0] - I[0] - 2;
-					const int j = J[1] - I[1] - 2;
-					const int k = J[2] - I[2] - 2;
-					gx += force[0][i][j][k] * w[0][i] * w[1][j] * w[2][k];
-				}
-			}
-		}
-		float gy = 0.f;
-		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
-			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
-				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
-					const int i = J[0] - I[0] - 2;
-					const int j = J[1] - I[1] - 2;
-					const int k = J[2] - I[2] - 2;
-					gy += force[1][i][j][k] * w[0][i] * w[1][j] * w[2][k];
-				}
-			}
-		}
-		float gz = 0.f;
-		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
-			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
-				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
-					const int i = J[0] - I[0] - 2;
-					const int j = J[1] - I[1] - 2;
-					const int k = J[2] - I[2] - 2;
-					gz += force[2][i][j][k] * w[0][i] * w[1][j] * w[2][k];
-				}
-			}
-		}
-		if (params.do_phi) {
-			for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
-				for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
-					for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
-						const int i = J[0] - I[0];
-						const int j = J[1] - I[1];
-						const int k = J[2] - I[2];
-						phi += pot[i][j][k] * w[0][i - 2] * w[1][j - 2] * w[2][k - 2];
+		for (J[0] = I[0]; J[0] < I[0] + NINTERP; J[0]++) {
+			for (J[1] = I[1]; J[1] < I[1] + NINTERP; J[1]++) {
+				for (J[2] = I[2]; J[2] < I[2] + NINTERP; J[2]++) {
+					const int l = params.phi_box.index(J);
+					const int i0 = J[0] - I[0];
+					const int i1 = J[1] - I[1];
+					const int i2 = J[2] - I[2];
+					const float phi0 = params.phi[l];
+					const float phi1 = phi0 * params.Nfour;
+					double w0 = dw[0][i0] * w[1][i1] * w[2][i2];
+					g[0] -= w0 * phi1;
+					w0 = w[0][i0] * dw[1][i1] * w[2][i2];
+					g[1] -= w0 * phi1;
+					w0 = w[0][i0] * w[1][i1] * dw[2][i2];
+					g[2] -= w0 * phi1;
+					if (params.do_phi) {
+						w0 = w[0][i0] * w[1][i1] * w[2][i2];
+						phi += w0 * phi0;
 					}
 				}
 			}
 		}
-		g[XDIM] += gx;
-		g[YDIM] += gy;
-		g[ZDIM] += gz;
 	}
 	__syncwarp();
 	return 2497;
@@ -1065,7 +1031,7 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 	size_t nsources = 0;
 	size_t nsinks = 0;
 	array<int, NDIM> i;
-	const auto bigbox = box.pad(1);
+	const auto bigbox = box.pad(CHAIN_BW);
 	const size_t bigvol = bigbox.volume();
 	const size_t vol = box.volume();
 	int tree_size = 0;
@@ -1099,7 +1065,8 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 	int occupancy;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_fmmpm_kernel,WARP_SIZE, sizeof(fmmpm_shmem)));
 	PRINT("Occupancy = %i\n", occupancy);
-	int num_blocks = 4 * occupancy * cuda_smp_count();
+	int num_blocks = occupancy * cuda_smp_count();
+	PRINT( "%e cells per block\n", (double) box.volume() / num_blocks);
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + sizeof(fmmpm_params);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
 	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
@@ -1128,11 +1095,12 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.start();
-		params.theta = 0.5;
+		params.theta = 0.333333333333
+				;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
-		params.rcut = 1.0 / get_options().chain_dim;
+		params.rcut = (double) CHAIN_BW / get_options().chain_dim;
 		params.hsoft = get_options().hsoft;
 		params.phi0 = std::pow(get_options().parts_dim, NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
 		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
@@ -1258,9 +1226,9 @@ void kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, 
 					const int l = box.index(i);
 					array<int, NDIM> j;
 					int p = 0;
-					for (j[0] = i[0] - 1; j[0] <= i[0] + 1; j[0]++) {
-						for (j[1] = i[1] - 1; j[1] <= i[1] + 1; j[1]++) {
-							for (j[2] = i[2] - 1; j[2] <= i[2] + 1; j[2]++) {
+					for (j[0] = i[0] - CHAIN_BW; j[0] <= i[0] + CHAIN_BW; j[0]++) {
+						for (j[1] = i[1] - CHAIN_BW; j[1] <= i[1] + CHAIN_BW; j[1]++) {
+							for (j[2] = i[2] - CHAIN_BW; j[2] <= i[2] + CHAIN_BW; j[2]++) {
 								const int k = bigbox.index(j);
 								std::memcpy(&dev_tree_neighbors[p + NCELLS * l], &dev_trees[k], sizeof(tree));
 								p++;

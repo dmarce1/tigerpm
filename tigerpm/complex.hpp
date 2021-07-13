@@ -16,12 +16,12 @@ class complex {
 public:
 	complex() = default;
 
-	complex(float a) {
+	complex(T a) {
 		x = a;
 		y = T(0.0);
 	}
 
-	complex(float a, float b) {
+	complex(T a, T b) {
 		x = a;
 		y = b;
 	}
@@ -49,21 +49,21 @@ public:
 		return *this * other.conj() / other.norm();
 	}
 
-	complex operator/(float other) const {
+	complex operator/(T other) const {
 		complex b;
 		b.x = x / other;
 		b.y = y / other;
 		return b;
 	}
 
-	complex operator*(float other) const {
+	complex operator*(T other) const {
 		complex b;
 		b.x = x * other;
 		b.y = y * other;
 		return b;
 	}
 
-	complex& operator*=(float other) {
+	complex& operator*=(T other) {
 		x *= other;
 		y *= other;
 		return *this;
@@ -90,27 +90,27 @@ public:
 		return a;
 	}
 
-	float real() const {
+	T real() const {
 		return x;
 	}
 
-	float imag() const {
+	T imag() const {
 		return y;
 	}
 
-	float& real() {
+	T& real() {
 		return x;
 	}
 
-	float& imag() {
+	T& imag() {
 		return y;
 	}
 
-	float norm() const {
+	T norm() const {
 		return ((*this) * conj()).real();
 	}
 
-	float abs() const {
+	T abs() const {
 		return sqrtf(norm());
 	}
 
@@ -133,6 +133,6 @@ inline void swap(complex<T>& a, complex<T>& b) {
 	std::swap(a.imag(), b.imag());
 }
 
-using cmplx = complex<float>;
+using cmplx = complex<double>;
 
 #endif /* COMPLEX_HPP_ */

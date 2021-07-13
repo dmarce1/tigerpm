@@ -31,7 +31,6 @@ static __constant__ float c5 = float(1.33335581E-03);
 static __constant__ float c6 = float(1.54035304E-04);
 static __constant__ float c1inv = float(1.44269504E+00);
 
-
 __device__ inline float erfcexp(float x, float *e) {
 	/*const float p(0.47047f);
 	 const float a1(0.3480242f);
@@ -108,16 +107,11 @@ inline float tsc(float x) {
 	}
 }
 
-CUDA_EXPORT
-inline float cloud4(float x) {
-	float q1 = fabsf(x);
-	float q2 = q1 * q1;
-	float q3 = q2 * q1;
-	if (q1 < 1.0) {
-		return 0.16666667 * (4.0 - 6.0 * q2 + 3.0 * q3);
-	} else if (q1 < 2.0) {
-		return 0.16666667 * (8.0 - 12.0 * q1 + 6.0 * q2 - q3);
-	} else {
-		return 0.0;
+template<class T>
+inline void constrain_range(T& a) {
+	if( a >= T(1) ) {
+		a -= T(1);
+	} else if (a < T(0) ) {
+		a += T(1);
 	}
 }

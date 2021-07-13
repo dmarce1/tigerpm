@@ -20,7 +20,6 @@ static void set_options(const options& opts);
 
 HPX_PLAIN_ACTION(set_options);
 
-
 const options& get_options() {
 	return global_opts;
 }
@@ -28,7 +27,7 @@ const options& get_options() {
 static void set_options(const options& opts) {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < set_options_action > (c, opts));
+		futs.push_back(hpx::async<set_options_action>(c, opts));
 	}
 	global_opts = opts;
 	hpx::wait_all(futs.begin(), futs.end());
@@ -46,12 +45,12 @@ bool process_options(int argc, char *argv[]) {
 
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
-	("config_file", po::value<std::string>(&(opts.config_file))->default_value(""), "configuration file") //
+	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file") //
 	("box_size", po::value<double>(&(opts.box_size))->default_value(1), "size of the computational domain in mpc") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(130), "nparts^(1/3)") //
-	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(5), "fourier dim over chain dim") //
-	("parts_o_four", po::value<int>(&(opts.parts_o_four))->default_value(2), "parts dim over four dim") //
-	("test", po::value<std::string>(&(opts.test))->default_value(""), "test problem") //
+	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(3), "fourier dim over chain dim") //
+	("parts_o_four", po::value<int>(&(opts.parts_o_four))->default_value(3), "parts dim over four dim") //
+	("test", po::value < std::string > (&(opts.test))->default_value(""), "test problem") //
 			;
 
 	po::variables_map vm;
@@ -79,23 +78,29 @@ bool process_options(int argc, char *argv[]) {
 		po::notify(vm);
 	}
 	opts.parts_o_chain = opts.parts_o_four * opts.four_o_chain;
-	if( opts.parts_dim % opts.parts_o_chain != 0 ) {
-		PRINT( "Parts dim must be a multiple of %i\n", opts.parts_o_chain);
+	if (opts.parts_dim % opts.parts_o_chain != 0) {
+		PRINT("Parts dim must be a multiple of %i\n", opts.parts_o_chain);
 		abort();
 	}
 	opts.four_dim = opts.parts_dim / opts.parts_o_four;
 	opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
-	opts.rs = 1.0 / opts.four_dim * opts.four_o_chain / 5.0;
+	opts.rs = (double) CHAIN_BW / opts.four_dim * opts.four_o_chain / 5.0;
 	opts.GM = 1.0;
 	opts.hsoft = 2.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);
 	opts.hubble = 0.7;
 	opts.sigma8 = 0.84;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
+	opts.code_to_s = opts.code_to_cm / constants::c;
+	opts.code_to_g = 1.989e33;
 	opts.omega_m = 0.3;
-	opts.z0 = 2.0;
-
-
+	opts.z0 = 49.0;
+	double H = constants::H0 * opts.code_to_s;
+	const size_t nparts = pow(opts.parts_dim, NDIM);
+	opts.omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma
+			* (1 + opts.Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
+			* std::pow(constants::c, -3) * std::pow(2.73 * opts.Theta, 4) * std::pow(opts.hubble, -2);
+	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';

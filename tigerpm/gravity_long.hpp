@@ -23,6 +23,6 @@ vector<float> gravity_long_get_phi(const range<int>&);
 range<int> gravity_long_get_phi_box();
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
 std::pair<float, array<float, NDIM>> gravity_long_force_at(const array<double, NDIM>& pos);
-vector<float> gravity_long_compute_source_local();
+vector<double> gravity_long_compute_source_local();
 
 #endif /* GRAVITY_LONG_HPP_ */

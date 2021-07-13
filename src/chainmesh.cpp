@@ -71,7 +71,7 @@ void chainmesh_exchange_begin() {
 		for (si[0] = -N; si[0] <= +N; si[0] += N) {
 			for (si[1] = -N; si[1] <= +N; si[1] += N) {
 				for (si[2] = -N; si[2] <= +N; si[2] += N) {
-					const auto inter = box.pad(1).shift(si).intersection(mybox);
+					const auto inter = box.pad(CHAIN_BW).shift(si).intersection(mybox);
 					const auto vol = inter.volume();
 					if (vol != 0 && vol != myvol) {
 						array<int, NDIM> i;

@@ -6,7 +6,7 @@
 #include <tigerpm/util.hpp>
 #include <tigerpm/timer.hpp>
 
-static vector<float> phi;
+static vector<double> phi;
 static range<int> source_box;
 
 void compute_source();
@@ -184,7 +184,7 @@ void apply_laplacian(gravity_long_type type) {
 				const double sy = sinc(0.5 * k[1] * dx);
 				const double sz = sinc(0.5 * k[2] * dx);
 				const double s = sx * sy * sz;
-				Y[index] *= std::pow(s,-8);
+				Y[index] *= std::pow(s,-3);
 			}
 		}
 	}

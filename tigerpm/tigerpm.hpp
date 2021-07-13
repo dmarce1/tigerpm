@@ -26,7 +26,7 @@
 #define FORCE_TEST
 //#define SORT_TEST
 
-#define CLOUD_W 4
+#define CLOUD_W 3
 #define USE_QUADRUPOLE
 #define TREEPM_BLOCK_SIZE 32
 #define TREEPM_OVERSUBSCRIPTION 4
@@ -36,7 +36,8 @@
 
 #define MAX_RUNG 32
 #define NINTERP 6
-#define NCELLS 27
+#define CHAIN_BW 2
+#define NCELLS ((2*CHAIN_BW+1)*(2*CHAIN_BW+1)*(2*CHAIN_BW+1))
 #define KICK_PP_MAX (4*32)
 
 
@@ -48,7 +49,6 @@
 #define YDIM 1
 #define ZDIM 2
 
-#define CHAIN_BW 1
 
 
 #define MAX_PARTS_PER_MSG (4*1024*1024)
@@ -76,7 +76,11 @@ inline void print(const char* fmt, Args ...args) {
 #include <tigerpm/containers.hpp>
 
 namespace constants {
-	const double mpc_to_cm = 3.086e+24;
+	constexpr double mpc_to_cm = 3.086e+24;
+	constexpr double c = 2.99792458e10;
+	constexpr double H0 = 1e7 / mpc_to_cm;
+	constexpr double G = 6.67384e-8;
+	constexpr double sigma_T = 6.6524587158e-25;
 }
 
 #endif /* TIGERFMM_HPP_ */

@@ -16,6 +16,8 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 set(tigerpm_source_files
 	src/chainmesh.cpp
     src/cuda.cpp
+    src/driver.cpp
+    src/drift.cpp
     src/fft.cpp
     src/fmmpm.cpp
     src/fmmpm.cu
@@ -41,6 +43,7 @@ set(tigerpm_header_files
 	tigerpm/containers.hpp
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
+	tigerpm/drift.hpp
 	tigerpm/gravity_long.hpp
 	tigerpm/gravity_short.hpp
 	tigerpm/hpx.hpp
@@ -65,7 +68,7 @@ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 add_hpx_executable(
   tigerpm
   DEPENDENCIES
-    Boost::boost cudart fftw3f gsl gslcblas
+    Boost::boost cudart fftw3 gsl gslcblas
   SOURCES
     ${tigerpm_source_files}
   HEADERS
@@ -84,29 +87,3 @@ set_source_files_properties(src/kick_treepm.cu PROPERTIES COMPILE_FLAGS "--maxrr
                         
 set_property(TARGET tigerpm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 
-
-
-
-#add_library(hpx_lite 
-#	hpx_lite/src/hpx.cpp
-#	hpx_lite/src/id_type.cpp
-#	hpx_lite/src/thread.cpp
-#	hpx_lite/src/future.cpp
-#	hpx_lite/src/mutex.cpp
-#	hpx_lite/src/serialize.cpp
-#)
-
-
-#add_executable(
-#  tigerpm_lite
-#  ${tigerpm_source_files}
-#  ${tigerpm_header_files}
-# )
-
-#target_link_libraries(tigerpm_lite PUBLIC  boost_program_options cudart fftw3f gsl gslcblas hpx_lite hwloc)
-#target_include_directories(tigerpm_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
-#target_include_directories(hpx_lite PUBLIC  ${PROJECT_SOURCE_DIR}/hpx_lite)
-#target_compile_options(tigerpm_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-#                        --use_fast_math --maxrregcount 128;
-#                        >)
-#set_property(TARGET tigerpm_lite PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})

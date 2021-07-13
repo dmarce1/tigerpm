@@ -15,12 +15,15 @@ struct options {
 	double eta;
 	double sigma8;
 	double code_to_cm;
+	double code_to_s;
+	double code_to_g;
 	double hubble;
 	double GM;
 	double hsoft;
 	double box_size;
 	double rs;
 	double omega_m;
+	double omega_r;
 	double z0;
 
 	std::string config_file;
