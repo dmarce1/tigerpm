@@ -20,11 +20,11 @@
 
 #define SELF_PHI float(-35.0/16.0)
 
-//#define CHECK_BOUNDS
+#define CHECK_BOUNDS
 #define FORCE_TEST
 //#define SORT_TEST
 
-#define CLOUD_W 3
+#define CLOUD_W 4
 #define USE_QUADRUPOLE
 #define TREEPM_BLOCK_SIZE 32
 #define TREEPM_OVERSUBSCRIPTION 4
@@ -39,7 +39,7 @@
 #define KICK_PP_MAX (4*32)
 
 #define NCHILD 2
-#define PHI_BW 4
+#define PHI_BW 3
 #define NDIM 3
 
 #define XDIM 0

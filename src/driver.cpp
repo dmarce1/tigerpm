@@ -3,6 +3,7 @@
 #include <tigerpm/initialize.hpp>
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/particles.hpp>
+#include <tigerpm/timer.hpp>
 
 using rung_type = std::int8_t;
 using time_type = std::uint64_t;
@@ -65,7 +66,12 @@ void driver() {
 	double esum0;
 	double time = 0.0;
 	int iter = 0;
+	double pot;
+	size_t nparts = std::pow(get_options().parts_dim, NDIM);
+	timer tm;
 	while (tau < tau_max) {
+		tm.reset();
+		tm.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
 		double theta;
@@ -78,26 +84,35 @@ void driver() {
 			theta = 2.0 / 3.0;
 		}
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
+		if (full_eval) {
+			kr.pot /= nparts;
+			pot = kr.pot;
+		}
 		double dt = t0 / (1 << kr.max_rung);
 		const double dadt1 = cosmos_dadtau(a);
 		a += dadt1 * 0.5 * dt;
 		drift_return dr = drift(a, dt);
 		const double dadt2 = cosmos_dadtau(a);
 		a += (dadt2 - 0.5 * dadt1) * dt;
+		dr.kin /= nparts;
 		cosmicK += dr.kin * dadt2 * dt;
-		const double esum = a * (kr.pot + dr.kin) + cosmicK;
+		const double esum = a * (pot + dr.kin) + cosmicK;
 		if (tau == 0.0) {
 			esum0 = esum;
 		}
 		const double eerr = (esum - esum0) / dr.kin;
-		if( iter == 0 ) {
-			PRINT( "%12s %12s %12s %12s %12s\n", "time", "dt", "pot err", "max rung", "nactive");
-		}
-		PRINT( "%12e %12e %12e %12i %12i\n", time/tau_max, dt/tau_max, eerr, kr.max_rung, kr.nactive);
-
 		itime = inc(itime, kr.max_rung);
-		time += dt;
+		tau += dt;
+		tm.stop();
+		if (full_eval) {
+			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "step", "z", "time", "dt", "pot", "kin", "cosmicK", "error", "min rung",
+					"max rung", "nactive", "cpu time");
+		}
+		PRINT("%12i %12.4e %12.4e %12.4e %12.4e %12.4e %12.4e %12.4e %12i %12i %12i %12.4e \n", iter, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr,
+				minrung, kr.max_rung, kr.nactive, tm.read());
 		iter++;
+		kr.fnorm = std::sqrt(kr.fnorm);
+		//	PRINT( "%e %e %e\n", kr.fx / kr.fnorm, kr.fy / kr.fnorm, kr.fz / kr.fnorm);
 	}
 
 }

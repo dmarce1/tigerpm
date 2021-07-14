@@ -87,7 +87,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
 	opts.rs = (double) CHAIN_BW / opts.four_dim * opts.four_o_chain / 5.0;
 
-	opts.hsoft = 2.0 / 25.0 / opts.parts_dim;
+	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);
 	opts.hubble = 0.7;
 	opts.sigma8 = 0.84;
@@ -95,7 +95,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.code_to_s = opts.code_to_cm / constants::c;
 	opts.code_to_g = 1.989e33;
 	opts.omega_m = 0.3;
-	opts.z0 = 2.0;
+	opts.z0 = 49.0;
 	double H = constants::H0 * opts.code_to_s;
 	const size_t nparts = pow(opts.parts_dim, NDIM);
 	const double Neff = 3.086;

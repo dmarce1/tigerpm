@@ -941,7 +941,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				const auto g2 = sqr(g[0], g[1], g[2]);
 				const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
 				dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
-				rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
+				rung = max(max((int)(ceilf(log2f(params.t0) - log2f(dt))), rung - 1), params.min_rung);
 				max_rung = max(rung, max_rung);
 				if (rung < 0 || rung >= MAX_RUNG) {
 					PRINT("Rung out of range %i\n", rung);
