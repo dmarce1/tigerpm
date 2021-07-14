@@ -28,7 +28,7 @@ struct indices_equal {
 };
 
 using cell_map_type = std::unordered_map<array<int,NDIM>, chaincell, indices_hash, indices_equal>;
-using part_map_type = std::unordered_map<array<int,NDIM>, std::vector<particle>, indices_hash, indices_equal>;
+using part_map_type = std::unordered_map<array<int,NDIM>, std::vector<particle_pos>, indices_hash, indices_equal>;
 
 static cell_map_type cells;
 static part_map_type bnd_parts;
@@ -36,7 +36,7 @@ static mutex_type mutex;
 static range<int> mybox;
 
 static void sort(const range<int> chain_box, int pbegin, int pend);
-static void transmit_chain_particles(array<int, NDIM>, vector<particle>);
+static void transmit_chain_particles(array<int, NDIM>, vector<particle_pos>);
 
 HPX_PLAIN_ACTION(chainmesh_create);
 HPX_PLAIN_ACTION(chainmesh_exchange_begin);
@@ -50,7 +50,7 @@ chaincell chainmesh_get(const array<int, NDIM>& i) {
 	return cells[i];
 }
 
-static void transmit_chain_particles(array<int, NDIM> celli, vector<particle> parts) {
+static void transmit_chain_particles(array<int, NDIM> celli, vector<particle_pos> parts) {
 	std::lock_guard<mutex_type> lock(mutex);
 	bnd_parts[celli] = std::move(parts);
 }
@@ -81,13 +81,13 @@ void chainmesh_exchange_begin() {
 								for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
 									these_futs.push_back(hpx::async([i,si,&futs,rank,&this_mutex]() {
 										assert(cells.find(i) != cells.end());
-										vector<particle> parts;
+										vector<particle_pos> parts;
 										const auto& cell = cells[i];
 										parts.reserve(cell.pend - cell.pbegin);
 										for (int k = cell.pbegin; k != cell.pend; k++) {
 											assert(k >= 0);
 											assert(k < particles_local_size());
-											parts.push_back(particles_get_particle(k));
+											parts.push_back(particles_get_particle_pos(k));
 										}
 										auto j = i;
 										for (int dim = 0; dim < NDIM; dim++) {
@@ -120,14 +120,14 @@ void chainmesh_exchange_end() {
 		cells[i->first].pbegin = count;
 		count += i->second.size();
 		cells[i->first].pend = count;
-		particles_resize(count);
+		particles_resize_pos(count);
 	}
 	for (auto i = bnd_parts.begin(); i != bnd_parts.end(); i++) {
 		auto celli = i->first;
-		auto func = [celli](std::vector<particle> parts) {
+		auto func = [celli](std::vector<particle_pos> parts) {
 			const auto cell = cells[celli];
 			for( int i = cell.pbegin; i != cell.pend; i++) {
-				particles_set_particle(parts[i - cell.pbegin], i);
+				particles_set_particle_pos(parts[i - cell.pbegin], i);
 			}
 		};
 		futs.push_back(hpx::async(func, std::move(i->second)));

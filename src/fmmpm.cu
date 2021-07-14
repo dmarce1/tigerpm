@@ -19,6 +19,7 @@ __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (
 
 #define LIST_SIZE  (8*1024)
 #define STACK_SIZE (32*1024)
+#define CUDA_STACK_SIZE (64*1024)
 #define MAX_DEPTH 64
 
 struct checkitem {
@@ -321,7 +322,7 @@ inline __device__ int compute_pp_interaction(float dx, float dy, float dz, float
 	return flops;
 }
 
-__device__ int pp_interactions(int nactive) {
+__device__ __noinline__ int pp_interactions(int nactive) {
 	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -433,7 +434,7 @@ __device__ int pp_interactions(int nactive) {
 	return flops;
 }
 
-__device__ int pc_interactions(int nactive) {
+__device__ __noinline__ int pc_interactions(int nactive) {
 	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -517,7 +518,7 @@ __device__ int pc_interactions(int nactive) {
 	return flops;
 }
 
-__device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
+__device__ __noinline__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -561,7 +562,7 @@ __device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 }
 
 
-__device__ int long_range_interp(int nactive) {
+__device__ __noinline__ int long_range_interp(int nactive) {
 	const int& tid = threadIdx.x;
 	__shared__ extern int shmem_ptr[];
 	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
@@ -672,7 +673,7 @@ __device__ int long_range_interp(int nactive) {
 	__syncwarp();
 	return 0;
 }
-__device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos) {
+__device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed32, NDIM> Lpos) {
 	if (depth >= MAX_DEPTH) {
 		PRINT("MAX_DEPTH exceeded!\n");
 		__trap();
@@ -929,6 +930,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		float fy = 0.f;
 		float fz = 0.f;
 		float fnorm = 0.f;
+//		PRINT( "%li\n", (size_t) &stack - stack);
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 			array<float, NDIM>& g = shmem.g[sink_index];
 			float& phi = shmem.phi[sink_index];
@@ -1024,7 +1026,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			}
 			__syncwarp();
 			checklist.push_top();
-			do_kick(children[0], depth + 1, X);
+			do_kick(stack, children[0], depth + 1, X);
 			__syncwarp();
 			for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
 				Lnext[i] = Lexpansion[i];
@@ -1033,14 +1035,14 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 				checklist.pop_top();
 			}
 			__syncwarp();
-			do_kick(children[1], depth + 1, X);
+			do_kick(stack, children[1], depth + 1, X);
 		} else {
 			auto& Lnext = (params.lists + bid)->Lexpansion[depth + 1];
 			for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
 				Lnext[i] = Lexpansion[i];
 			}
 			__syncwarp();
-			do_kick(children[left_active ? 0 : 1], depth + 1, X);
+			do_kick(stack, children[left_active ? 0 : 1], depth + 1, X);
 			__syncwarp();
 		}
 		shared_reduce_add(flops);
@@ -1093,8 +1095,9 @@ __global__ void kick_fmmpm_kernel() {
 		__syncwarp();
 		array<fixed32, NDIM> Lpos;
 		Lpos[XDIM] = Lpos[YDIM] = Lpos[ZDIM] = 0.f;
+		size_t stack;
 		if (mycheck.get_nactive()) {
-			do_kick(mycheck, 0, Lpos);
+			do_kick((size_t)(&stack),mycheck, 0, Lpos);
 		}
 	}
 	__syncwarp();
@@ -1104,7 +1107,6 @@ __global__ void kick_fmmpm_kernel() {
 
 }
 
-#define STACK_SIZE (32*1024)
 
 kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, double theta, bool first_call, bool full_eval,
 		kick_return* kreturn) {
@@ -1184,12 +1186,12 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + sizeof(fmmpm_params);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
 //	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
-	size_t value = STACK_SIZE;
+	size_t value = CUDA_STACK_SIZE;
 	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
 	bool fail = false;
-	if (value != STACK_SIZE) {
-		PRINT("Unable to set stack size to %i\n", STACK_SIZE);
+	if (value != CUDA_STACK_SIZE) {
+		PRINT("Unable to set stack size to %i\n", CUDA_STACK_SIZE);
 		fail = true;
 	}
 	if (fail) {
@@ -1253,7 +1255,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 					entry.cell = chainmesh_get(i);
 					if (box.contains(i)) {
 						const int q = box.index(i);
-						cell_sizes.push_back(std::make_pair(n++, trees[bigbox.index(i)].size()));
+						cell_sizes.push_back(std::make_pair(n++, trees[bigbox.index(i)].get_nactive(0)));
 						entry.box_index = q;
 					} else {
 						entry.box_index = -1;

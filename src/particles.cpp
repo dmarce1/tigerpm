@@ -329,6 +329,16 @@ void particles_resize(size_t new_size) {
 #endif
 }
 
+void particles_resize_pos(size_t new_size) {
+	if (new_size > std::numeric_limits<int>::max()) {
+		PRINT("Error - particle pos set size exceeds %li\n", std::numeric_limits<int>::max());
+		abort();
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		X[dim].resize(new_size);
+	}
+}
+
 static std::unordered_map<int, int> get_particles_per_rank() {
 	vector<hpx::future<std::unordered_map<int, int>>>futs;
 	for (auto c : hpx_children()) {

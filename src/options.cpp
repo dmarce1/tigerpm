@@ -48,10 +48,11 @@ bool process_options(int argc, char *argv[]) {
 	("help", "produce help message")                                                                 //
 	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file") //
 	("box_size", po::value<double>(&(opts.box_size))->default_value(1), "size of the computational domain in mpc") //
+	("z0", po::value<double>(&(opts.z0))->default_value(49), "") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(130), "nparts^(1/3)") //
-	("check_num", po::value<int>(&(opts.check_num))->default_value(-1), "fourier dim over chain dim") //
-	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "fourier dim over chain dim") //
-	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(3), "fourier dim over chain dim") //
+	("check_num", po::value<int>(&(opts.check_num))->default_value(-1), "") //
+	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "") //
+	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(3), "") //
 	("parts_o_four", po::value<int>(&(opts.parts_o_four))->default_value(3), "parts dim over four dim") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "test problem") //
 			;
@@ -97,7 +98,6 @@ bool process_options(int argc, char *argv[]) {
 	opts.code_to_s = opts.code_to_cm / constants::c;
 	opts.code_to_g = 1.989e33;
 	opts.omega_m = 0.3;
-	opts.z0 = 49.0;
 	double H = constants::H0 * opts.code_to_s;
 	const size_t nparts = pow(opts.parts_dim, NDIM);
 	const double Neff = 3.086;

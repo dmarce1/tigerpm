@@ -39,6 +39,7 @@ public:
 	int cap;
 	bool device;
 	void resize(int new_size);
+	CUDA_EXPORT
 	size_t size() const {
 		return sz;
 	}

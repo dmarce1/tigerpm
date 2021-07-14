@@ -44,8 +44,17 @@ struct particle {
 	}
 };
 
+struct particle_pos {
+	array<fixed32, NDIM> x;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & x;
+	}
+};
+
 int particles_size();
 void particles_resize(size_t new_size);
+void particles_resize_pos(size_t new_size);
 void particles_random_init();
 void particles_domain_sort();
 range<int> particles_get_local_box();
@@ -107,6 +116,14 @@ inline particle particles_get_particle(int index) {
 	return p;
 }
 
+inline particle_pos particles_get_particle_pos(int index) {
+	particle_pos p;
+	for (int dim = 0; dim < NDIM; dim++) {
+		p.x[dim] = particles_pos(dim, index);
+	}
+	return p;
+}
+
 inline void particles_set_particle(const particle& p, int index) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		particles_pos(dim, index) = p.x[dim];
@@ -119,6 +136,12 @@ inline void particles_set_particle(const particle& p, int index) {
 #ifdef FORCE_TEST
 	particles_pot(index) = p.p;
 #endif
+}
+
+inline void particles_set_particle_pos(const particle_pos& p, int index) {
+	for (int dim = 0; dim < NDIM; dim++) {
+		particles_pos(dim, index) = p.x[dim];
+	}
 }
 
 #endif /* PARTICLES_HPP_ */
