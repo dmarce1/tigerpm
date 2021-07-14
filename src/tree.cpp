@@ -4,7 +4,7 @@
 
 #define MAX_DEPTH 50
 
-static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>& box, int begin, int end, int depth, bool sunk = false) {
+static int sort(tree& t, const range<double>& box, int begin, int end, int depth, bool sunk = false) {
 	tree_node node;
 	for (int dim = 0; dim < NDIM; dim++) {
 		if (box.end[dim] < 0.0) {
@@ -103,8 +103,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		const int mid = particles_sort(begin, end, child_boxes.first.end[long_dim], long_dim);
 		//	PRINT( "%i %i %i\n", begin, mid, end);
 		bool this_sunk = end - begin <= SINK_BUCKET_SIZE;
-		node.children[0] = sort(t, sink_buckets, child_boxes.first, begin, mid, depth + 1, this_sunk);
-		node.children[1] = sort(t, sink_buckets, child_boxes.second, mid, end, depth + 1, this_sunk);
+		node.children[0] = sort(t, child_boxes.first, begin, mid, depth + 1, this_sunk);
+		node.children[1] = sort(t, child_boxes.second, mid, end, depth + 1, this_sunk);
 		const int i0 = node.children[0];
 		const int i1 = node.children[1];
 		float mass = t.get_mass(i0) + t.get_mass(i1);
@@ -164,52 +164,6 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 		const auto r2_max = std::max(std::max(std::max(r2_bbb, r2_bbe), std::max(r2_beb, r2_bee)), std::max(std::max(r2_ebb, r2_ebe), std::max(r2_eeb, r2_eee)));
 		node.radius = std::min(std::max(std::sqrt(r20) + t.get_radius(i0), std::sqrt(r21) + t.get_radius(i1)), std::sqrt(r2_max) + get_options().hsoft);
 	}
-	if (end - begin <= SINK_BUCKET_SIZE && !sunk) {
-		sink_bucket bucket;
-		array<double, NDIM> x;
-		array<double, NDIM> xmin;
-		array<double, NDIM> xmax;
-		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = 0.0;
-			xmin[dim] = 1.0;
-			xmax[dim] = 0.0;
-		}
-		for (int i = begin; i < end; i++) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				const auto x = particles_pos(dim, i).to_double();
-				xmax[dim] = std::max(xmax[dim], x);
-				xmin[dim] = std::min(xmin[dim], x);
-			}
-		}
-		if (end - begin) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				x[dim] = (xmax[dim] + xmin[dim]) * 0.5;
-			}
-		} else {
-			for (int dim = 0; dim < NDIM; dim++) {
-				x[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
-			}
-		}
-		for (int i = begin; i < end; i++) {
-			array<float, NDIM> dx;
-			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = particles_pos(dim, i).to_double() - x[dim];
-			}
-		}
-		double r2max = 0.0;
-		for (int i = begin; i < end; i++) {
-			double r2 = 0.0;
-			for (int dim = 0; dim < NDIM; dim++) {
-				bucket.x[dim] = x[dim];
-				r2 += sqr(x[dim] - particles_pos(dim, i).to_double());
-			}
-			r2max = std::max(r2max, r2);
-		}
-		bucket.radius = std::sqrt(r2max) + get_options().hsoft;
-		bucket.snk_begin = bucket.src_begin = node.src_begin;
-		bucket.snk_end = bucket.src_end = node.src_end;
-		sink_buckets.push_back(bucket);
-	}
 	node.snk_begin = node.src_begin;
 	node.snk_end = node.src_end;
 //	PRINT("%e\n", node.radius);
@@ -217,9 +171,8 @@ static int sort(tree& t, vector<sink_bucket>& sink_buckets, const range<double>&
 	return index;
 }
 
-std::pair<tree, vector<sink_bucket>> tree_create(const array<int, NDIM>& cell_index, chaincell cell) {
+tree tree_create(const array<int, NDIM>& cell_index, chaincell cell) {
 	tree new_tree;
-	vector<sink_bucket> sink_buckets;
 	range<double> box;
 	const double Nchain = get_options().chain_dim;
 	const double Ninv = 1.0 / Nchain;
@@ -243,8 +196,8 @@ std::pair<tree, vector<sink_bucket>> tree_create(const array<int, NDIM>& cell_in
 			PRINT("%i %i %e %e -----\n", i, cell_index[dim], box.begin[dim], box.end[dim]);
 		}
 	}
-	sort(new_tree, sink_buckets, box, cell.pbegin, cell.pend, 0);
-	return std::make_pair(std::move(new_tree), std::move(sink_buckets));
+	sort(new_tree, box, cell.pbegin, cell.pend, 0);
+	return new_tree;
 }
 
 tree::tree() {

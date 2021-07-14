@@ -30,14 +30,6 @@ struct tree_node {
 	multipos multi;
 };
 
-struct sink_bucket {
-	int src_begin;
-	int src_end;
-	int snk_begin;
-	int snk_end;
-	float radius;
-	array<fixed32, NDIM> x;
-};
 
 class tree {
 public:
@@ -111,6 +103,6 @@ public:
 }
 ;
 
-std::pair<tree, vector<sink_bucket>> tree_create(const array<int, NDIM>& cell_index, chaincell cell);
+tree tree_create(const array<int, NDIM>& cell_index, chaincell cell);
 
 #endif /* TREE_HPP_ */

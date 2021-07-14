@@ -30,7 +30,7 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_c
 					const auto cell = chainmesh_get(i);
 					const auto rc = tree_create(i,cell);
 					const auto index = bigbox.index(i);
-					trees[index] = std::move(rc.first);
+					trees[index] = std::move(rc);
 				};
 				futs1.push_back(hpx::async(func));
 			}

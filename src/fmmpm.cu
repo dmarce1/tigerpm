@@ -996,7 +996,6 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 __global__ void kick_fmmpm_kernel() {
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
-	const int& gsz = gridDim.x;
 	const auto& params = dev_fmmpm_params;
 	if (tid == 0) {
 		new (params.lists + bid) list_set();
@@ -1144,7 +1143,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		PRINT("%e\n", tm.read());
 		tm.start();
 		params.kreturn = kreturn;
-		params.theta = 0.7;
+		params.theta = 0.5;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
@@ -1386,7 +1385,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	if (root) {
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
-		PRINT( "GLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 );
+		PRINT( "GLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read() );
 	}
 	return host;
 }
