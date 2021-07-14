@@ -18,6 +18,7 @@ struct kick_return {
 	double fy;
 	double fz;
 	double fnorm;
+	size_t nactive;
 	template<class Arc>
 	void serialize(Arc& a, unsigned) {
 		a & max_rung;
@@ -27,11 +28,13 @@ struct kick_return {
 		a & fy;
 		a & fz;
 		a & fnorm;
+		a & nactive;
 	}
 };
 
-kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call, kick_return* = nullptr);
-kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call);
+kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, double theta, bool first_call, bool full_eval, kick_return* =
+		nullptr);
+kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta, bool first_call, bool full_eval);
 void kick_fmmpm_end();
 
 #endif /* FMMPM_HPP_ */

@@ -7,10 +7,10 @@
 HPX_PLAIN_ACTION(kick_fmmpm_begin);
 HPX_PLAIN_ACTION(kick_fmmpm_end);
 
-kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_call) {
+kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 	vector<hpx::future<kick_return>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<kick_fmmpm_begin_action>(c, min_rung, scale, t0, first_call));
+		futs.push_back(hpx::async<kick_fmmpm_begin_action>(c, min_rung, scale, t0, theta, first_call, full_eval));
 	}
 
 	vector<tree> trees;
@@ -23,13 +23,15 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_c
 	array<int, NDIM> i;
 	std::vector<hpx::future<void>> futs1;
 	trees.resize(bigvol);
+	std::atomic<size_t> nactive(0);
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
 		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
 			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
-				const auto func = [i,bigbox,box,&trees, min_rung]() {
+				const auto func = [i,bigbox,box,&trees, min_rung,&nactive]() {
 					const auto cell = chainmesh_get(i);
 					const auto rc = tree_create(i,cell, min_rung);
 					const auto index = bigbox.index(i);
+					nactive += rc.get_nactive(0);
 					trees[index] = std::move(rc);
 				};
 				futs1.push_back(hpx::async(func));
@@ -59,7 +61,8 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_c
 	PRINT("Trees took %e s\n", tm.read());
 	tm.reset();
 
-	kick_return kr = kick_fmmpm(trees, box, min_rung, scale, t0, first_call);
+	kick_return kr = kick_fmmpm(trees, box, min_rung, scale, t0, theta, first_call, full_eval);
+	kr.nactive = size_t(nactive);
 	for (auto& f : futs) {
 		auto this_kr = f.get();
 		kr.max_rung = std::max(kr.max_rung, this_kr.max_rung);
@@ -69,6 +72,7 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_c
 		kr.fy += this_kr.fy;
 		kr.fz += this_kr.fz;
 		kr.fnorm += this_kr.fnorm;
+		kr.nactive = this_kr.nactive;
 	}
 	return kr;
 }

@@ -1074,7 +1074,8 @@ __global__ void kick_fmmpm_kernel() {
 
 #define STACK_SIZE (32*1024)
 
-kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, bool first_call, kick_return* kreturn) {
+kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double scale, double t0, double theta, bool first_call, bool full_eval,
+		kick_return* kreturn) {
 	bool root;
 	if (kreturn == nullptr) {
 		kick_return host;
@@ -1161,8 +1162,8 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	if (mem_required > free_mem) {
 		const auto child_boxes = box.split();
 		PRINT("Splitting\n");
-		kick_fmmpm(trees, child_boxes.first, min_rung, scale, t0, first_call, kreturn);
-		kick_fmmpm(std::move(trees), child_boxes.second, min_rung, scale, t0, first_call, kreturn);
+		kick_fmmpm(trees, child_boxes.first, min_rung, scale, t0, theta, first_call, full_eval, kreturn);
+		kick_fmmpm(std::move(trees), child_boxes.second, min_rung, scale, t0, theta, first_call, full_eval, kreturn);
 	} else {
 		cuda_set_device();
 		PRINT("Data transfer\n");
@@ -1173,10 +1174,10 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		PRINT("%e\n", tm.read());
 		tm.start();
 		params.kreturn = kreturn;
-		params.theta = 0.5;
+		params.theta = theta;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
-		params.do_phi = true;
+		params.do_phi = full_eval;
 		params.rcut = (double) CHAIN_BW / get_options().chain_dim;
 		params.hsoft = get_options().hsoft;
 		params.phi0 = std::pow(get_options().parts_dim, NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
