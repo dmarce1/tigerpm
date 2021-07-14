@@ -63,8 +63,8 @@ void driver() {
 	double t0 = tau_max / 100.0;
 	time_type itime = 0;
 	double esum0;
-	double time = 0.0;
 	int iter = 0;
+	double pot;
 	while (tau < tau_max) {
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
@@ -78,25 +78,32 @@ void driver() {
 			theta = 2.0 / 3.0;
 		}
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
+		if (full_eval) {
+			pot = kr.pot * 0.5 / a;
+		}
 		double dt = t0 / (1 << kr.max_rung);
 		const double dadt1 = cosmos_dadtau(a);
-		a += dadt1 * 0.5 * dt;
-		drift_return dr = drift(a, dt);
+		const double a1 = a;
+		a += dadt1 * dt;
 		const double dadt2 = cosmos_dadtau(a);
-		a += (dadt2 - 0.5 * dadt1) * dt;
-		cosmicK += dr.kin * dadt2 * dt;
-		const double esum = a * (kr.pot + dr.kin) + cosmicK;
+		a += 0.5 * (dadt2 - dadt1) * dt;
+		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
+		drift_return dr = drift(a2, dt);
+		cosmicK += dr.kin * (a - a1);
+		const double esum = (a * (pot + dr.kin) + cosmicK) ;
 		if (tau == 0.0) {
 			esum0 = esum;
 		}
-		const double eerr = (esum - esum0) / dr.kin;
-		if( iter == 0 ) {
-			PRINT( "%12s %12s %12s %12s %12s\n", "time", "dt", "pot err", "max rung", "nactive");
+		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
+		if (full_eval) {
+			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "Z", "time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung",
+					"nactive");
 		}
-		PRINT( "%12e %12e %12e %12i %12i\n", time/tau_max, dt/tau_max, eerr, kr.max_rung, kr.nactive);
+		PRINT("%12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i\n", z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung,
+				kr.max_rung, kr.nactive);
 
 		itime = inc(itime, kr.max_rung);
-		time += dt;
+		tau += dt;
 		iter++;
 	}
 

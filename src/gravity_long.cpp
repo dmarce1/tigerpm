@@ -184,7 +184,7 @@ void apply_laplacian(gravity_long_type type) {
 				const double sy = sinc(0.5 * k[1] * dx);
 				const double sz = sinc(0.5 * k[2] * dx);
 				const double s = sx * sy * sz;
-				Y[index] *= std::pow(s,-3);
+				Y[index] *= std::pow(s,-8);
 			}
 		}
 	}

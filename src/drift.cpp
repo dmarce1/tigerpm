@@ -22,6 +22,7 @@ drift_return drift(double scale, double dt) {
 	for (int proc = 0; proc < nthreads; proc++) {
 		const auto func = [&mutex, &dr, dt, scale, proc, nthreads]() {
 			const double factor = dt / scale;
+			const double a2inv = 1.0 / sqr(scale);
 			double kin = 0.0;
 			double momx = 0.0;
 			double momy = 0.0;
@@ -35,7 +36,7 @@ drift_return drift(double scale, double dt) {
 				const float vx = particles_vel(XDIM,i);
 				const float vy = particles_vel(YDIM,i);
 				const float vz = particles_vel(ZDIM,i);
-				kin += 0.5 * sqr(vx,vy,vz);
+				kin += 0.5 * sqr(vx,vy,vz) * a2inv;
 				momx += vx;
 				momy += vy;
 				momz += vz;

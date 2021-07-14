@@ -100,7 +100,7 @@ static void zeldovich_begin(int dim) {
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int, NDIM> I;
-	const int seed = 4321 * hpx_size() + hpx_rank() + 42;
+	const int seed = 4321 * hpx_rank() + 42;
 	gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
 	gsl_rng_set(rndgen, seed);
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
