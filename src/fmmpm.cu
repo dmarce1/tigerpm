@@ -12,19 +12,6 @@
 
 #include <algorithm>
 
-/*
- __managed__ double pctime = 0.0;
- __managed__ double pptime = 0.0;
- __managed__ double cctime = 0.0;
- __managed__ double Ltime = 0.0;
- __managed__ double chk2time = 0.0;
- __managed__ double chk1time = 0.0;
- __managed__ double acttime = 0.0;
- __managed__ double longtime = 0.0;
- __managed__ double kicktime = 0.0;
- __managed__ double branchtime = 0.0;
- __managed__ double totalflops = 0;*/
-
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
@@ -811,7 +798,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			const int snki = snk_begin + i;
 			bool is_active;
 			if (i < nsinks) {
-				is_active = (params.rung[snki] >= params.min_rung);
+				is_active = params.do_phi || (params.rung[snki] >= params.min_rung);
 			} else {
 				is_active = false;
 			}
@@ -905,6 +892,11 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 //		atomicAdd(&pptime, (double) (clock64() - tm));
 //		tm = clock64();
 		int max_rung = -1;
+		float pot = 0.0f;
+		float fx = 0.f;
+		float fy = 0.f;
+		float fz = 0.f;
+		float fnorm = 0.f;
 		for (int sink_index = tid; sink_index < nactive; sink_index += warpSize) {
 			array<float, NDIM>& g = shmem.g[sink_index];
 			float& phi = shmem.phi[sink_index];
@@ -921,44 +913,66 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 			g[YDIM] *= params.GM;
 			g[ZDIM] *= params.GM;
 			phi *= params.GM;
+			pot += phi;
+			fx += g[XDIM];
+			fy += g[YDIM];
+			fz += g[ZDIM];
+			fnorm += sqr(g[XDIM], g[YDIM], g[ZDIM]);
 #ifdef FORCE_TEST
 			params.gx[snki] = g[XDIM];
 			params.gy[snki] = g[YDIM];
 			params.gz[snki] = g[ZDIM];
 			params.pot[snki] = phi;
 #endif
-			auto& vx = params.velx[snki];
-			auto& vy = params.vely[snki];
-			auto& vz = params.velz[snki];
-			auto& rung = params.rung[snki];
-			auto dt = 0.5f * rung_dt[rung] * params.t0;
-			if (!params.first_call) {
+			flops += 9;
+			if (params.rung[snki] >= params.min_rung) {
+				auto& vx = params.velx[snki];
+				auto& vy = params.vely[snki];
+				auto& vz = params.velz[snki];
+				auto& rung = params.rung[snki];
+				auto dt = 0.5f * rung_dt[rung] * params.t0;
+				if (!params.first_call) {
+					vx = fmaf(g[XDIM], dt, vx);
+					vy = fmaf(g[YDIM], dt, vy);
+					vz = fmaf(g[ZDIM], dt, vz);
+					flops += 6;
+				}
+				flops += 39 + 337 + params.do_phi * 158;
+				const auto g2 = sqr(g[0], g[1], g[2]);
+				const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
+				dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
+				rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
+				max_rung = max(rung, max_rung);
+				if (rung < 0 || rung >= MAX_RUNG) {
+					PRINT("Rung out of range %i\n", rung);
+				}
+				assert(rung >= 0);
+				assert(rung < MAX_RUNG);
+				dt = 0.5f * rung_dt[rung] * params.t0;
 				vx = fmaf(g[XDIM], dt, vx);
 				vy = fmaf(g[YDIM], dt, vy);
 				vz = fmaf(g[ZDIM], dt, vz);
-				flops += 6;
 			}
-			flops += 47 + 337 + params.do_phi * 158;
-			const auto g2 = sqr(g[0], g[1], g[2]);
-			const auto factor = params.eta * sqrtf(params.scale * params.hsoft);
-			dt = fminf(factor * rsqrt(sqrtf(g2)), params.t0);
-			rung = fmaxf(ceilf(log2f(params.t0) - log2f(dt)), rung - 1);
-			max_rung = max(rung, max_rung);
-			if (rung < 0 || rung >= MAX_RUNG) {
-				PRINT("Rung out of range %i\n", rung);
-			}
-			assert(rung >= 0);
-			assert(rung < MAX_RUNG);
-			dt = 0.5f * rung_dt[rung] * params.t0;
-			vx = fmaf(g[XDIM], dt, vx);
-			vy = fmaf(g[YDIM], dt, vy);
-			vz = fmaf(g[ZDIM], dt, vz);
 		}
 		shared_reduce_max(max_rung);
 		shared_reduce_add(flops);
+		if (params.do_phi) {
+			shared_reduce_add(pot);
+			shared_reduce_add(fx);
+			shared_reduce_add(fy);
+			shared_reduce_add(fz);
+			shared_reduce_add(fnorm);
+		}
 		if (tid == 0) {
 			atomicMax(&params.kreturn->max_rung, max_rung);
 			atomicAdd(&params.kreturn->flops, flops);
+			if (params.do_phi) {
+				atomicAdd(&params.kreturn->pot, pot);
+				atomicAdd(&params.kreturn->fx, fy);
+				atomicAdd(&params.kreturn->fy, fy);
+				atomicAdd(&params.kreturn->fz, fz);
+				atomicAdd(&params.kreturn->fnorm, fnorm);
+			}
 		}
 //		atomicAdd(&kicktime, (double) (clock64() - tm));
 	} else {
@@ -1066,6 +1080,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		kick_return host;
 		host.max_rung = -1;
 		host.flops = 0;
+		host.pot = 0.0;
 		CUDA_CHECK(cudaMalloc(&kreturn, sizeof(kick_return)));
 		CUDA_CHECK(cudaMemcpy(kreturn, &host, sizeof(kick_return), cudaMemcpyHostToDevice));
 		/*		pctime = 0.0;

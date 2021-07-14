@@ -64,6 +64,11 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_c
 		auto this_kr = f.get();
 		kr.max_rung = std::max(kr.max_rung, this_kr.max_rung);
 		kr.flops += this_kr.flops;
+		kr.pot += this_kr.pot;
+		kr.fx += this_kr.fx;
+		kr.fy += this_kr.fy;
+		kr.fz += this_kr.fz;
+		kr.fnorm += this_kr.fnorm;
 	}
 	return kr;
 }

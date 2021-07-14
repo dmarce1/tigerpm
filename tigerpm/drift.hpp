@@ -11,5 +11,21 @@
 #include <tigerpm/tigerpm.hpp>
 
 
+struct drift_return {
+	double kin;
+	double momx;
+	double momy;
+	double momz;
+	template<class Arc>
+	void serialize(Arc&& a, unsigned) {
+		a & kin;
+		a & momx;
+		a & momy;
+		a & momz;
+	}
+};
+
+drift_return drift(double scale, double dt);
+
 
 #endif /* DRIFT_HPP_ */
