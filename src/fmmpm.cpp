@@ -26,9 +26,9 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, bool first_c
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
 		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
 			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
-				const auto func = [i,bigbox,box,&trees]() {
+				const auto func = [i,bigbox,box,&trees, min_rung]() {
 					const auto cell = chainmesh_get(i);
-					const auto rc = tree_create(i,cell);
+					const auto rc = tree_create(i,cell, min_rung);
 					const auto index = bigbox.index(i);
 					trees[index] = std::move(rc);
 				};

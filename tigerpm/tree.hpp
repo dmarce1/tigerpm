@@ -27,6 +27,7 @@ struct tree_node {
 	int src_end;
 	int snk_begin;
 	int snk_end;
+	int nactive;
 	multipos multi;
 };
 
@@ -51,6 +52,9 @@ public:
 	int allocate();CUDA_EXPORT inline
 	fixed32 get_x(int dim, int i) const {
 		return nodes[i].multi.x[dim];
+	}
+	CUDA_EXPORT inline int get_nactive(int i) const {
+		return nodes[i].nactive;
 	}
 	CUDA_EXPORT inline int get_pbegin(int i) const {
 		return nodes[i].src_begin;
@@ -103,6 +107,6 @@ public:
 }
 ;
 
-tree tree_create(const array<int, NDIM>& cell_index, chaincell cell);
+tree tree_create(const array<int, NDIM>& cell_index, chaincell cell, int min_rung);
 
 #endif /* TREE_HPP_ */

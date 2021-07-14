@@ -39,6 +39,10 @@ struct checkitem {
 	tree* tr;
 
 	CUDA_EXPORT inline
+	int get_nactive() const {
+		return tr->get_nactive(index);
+	}
+	CUDA_EXPORT inline
 	bool is_leaf() const {
 		return tr->is_leaf(index);
 	}
@@ -961,29 +965,38 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 //		tm = clock64();
 		const auto children = mycheck.get_children();
 		__syncwarp();
-		auto& Lnext = (params.lists + bid)->Lexpansion[depth + 1];
-		for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
-			Lnext[i] = Lexpansion[i];
-		}
-		__syncwarp();
 		array<fixed32, NDIM> X;
+		const int left_active = children[0].get_nactive();
+		const int right_active = children[1].get_nactive();
 		X[XDIM] = mycheck.get_x(XDIM);
 		X[YDIM] = mycheck.get_x(YDIM);
 		X[ZDIM] = mycheck.get_x(ZDIM);
-		checklist.push_top();
-//		atomicAdd(&branchtime, (double) (clock64() - tm));
-		do_kick(children[0], depth + 1, X);
-//		tm = clock64();
-		__syncwarp();
-		for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
-			Lnext[i] = Lexpansion[i];
+		auto& Lnext = (params.lists + bid)->Lexpansion[depth + 1];
+		if (left_active && right_active) {
+			for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
+				Lnext[i] = Lexpansion[i];
+			}
+			__syncwarp();
+			checklist.push_top();
+			do_kick(children[0], depth + 1, X);
+			__syncwarp();
+			for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
+				Lnext[i] = Lexpansion[i];
+			}
+			if (tid == 0) {
+				checklist.pop_top();
+			}
+			__syncwarp();
+			do_kick(children[1], depth + 1, X);
+		} else {
+			auto& Lnext = (params.lists + bid)->Lexpansion[depth + 1];
+			for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
+				Lnext[i] = Lexpansion[i];
+			}
+			__syncwarp();
+			do_kick(children[left_active ? 0 : 1], depth + 1, X);
+			__syncwarp();
 		}
-		if (tid == 0) {
-			checklist.pop_top();
-		}
-		__syncwarp();
-//		atomicAdd(&branchtime, (double) (clock64() - tm));
-		do_kick(children[1], depth + 1, X);
 		shared_reduce_add(flops);
 		if (tid == 0) {
 			atomicAdd(&params.kreturn->flops, flops);
@@ -1034,7 +1047,9 @@ __global__ void kick_fmmpm_kernel() {
 		__syncwarp();
 		array<fixed32, NDIM> Lpos;
 		Lpos[XDIM] = Lpos[YDIM] = Lpos[ZDIM] = 0.f;
-		do_kick(mycheck, 0, Lpos);
+		if (mycheck.get_nactive()) {
+			do_kick(mycheck, 0, Lpos);
+		}
 	}
 	__syncwarp();
 	if (tid == 0) {
@@ -1385,7 +1400,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	if (root) {
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
-		PRINT( "GLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read() );
+		PRINT("GLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
 	}
 	return host;
 }

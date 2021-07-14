@@ -4,7 +4,7 @@
 
 #define MAX_DEPTH 50
 
-static int sort(tree& t, const range<double>& box, int begin, int end, int depth, bool sunk = false) {
+static int sort(tree& t, const range<double>& box, int begin, int end, int depth, int min_rung) {
 	tree_node node;
 	for (int dim = 0; dim < NDIM; dim++) {
 		if (box.end[dim] < 0.0) {
@@ -34,15 +34,16 @@ static int sort(tree& t, const range<double>& box, int begin, int end, int depth
 			xmin[dim] = 1.0;
 			xmax[dim] = 0.0;
 		}
+		int nactive = 0;
+		for (int i = begin; i < end; i++) {
+			if( particles_rung(i) >= min_rung) {
+				nactive++;
+			}
+		}
+		node.nactive = nactive;
 		for (int i = begin; i < end; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const auto x = particles_pos(dim, i).to_double();
-//				if( x > box.end[dim] ) {
-//					PRINT( "%e %e\n", x, box.end[dim]);
-//				}
-				if (x > box.end[dim]) {
-					PRINT("%e %e\n", x, box.end[dim]);
-				}
 				assert(x <= box.end[dim]);
 				assert(x >= box.begin[dim]);
 				xmax[dim] = std::max(xmax[dim], x);
@@ -102,9 +103,8 @@ static int sort(tree& t, const range<double>& box, int begin, int end, int depth
 		}
 		const int mid = particles_sort(begin, end, child_boxes.first.end[long_dim], long_dim);
 		//	PRINT( "%i %i %i\n", begin, mid, end);
-		bool this_sunk = end - begin <= SINK_BUCKET_SIZE;
-		node.children[0] = sort(t, child_boxes.first, begin, mid, depth + 1, this_sunk);
-		node.children[1] = sort(t, child_boxes.second, mid, end, depth + 1, this_sunk);
+		node.children[0] = sort(t, child_boxes.first, begin, mid, depth + 1, min_rung);
+		node.children[1] = sort(t, child_boxes.second, mid, end, depth + 1, min_rung);
 		const int i0 = node.children[0];
 		const int i1 = node.children[1];
 		float mass = t.get_mass(i0) + t.get_mass(i1);
@@ -163,6 +163,7 @@ static int sort(tree& t, const range<double>& box, int begin, int end, int depth
 		const auto r2_eee = sqr(box.end[0] - x[0], box.end[1] - x[1], box.end[2] - x[2]);
 		const auto r2_max = std::max(std::max(std::max(r2_bbb, r2_bbe), std::max(r2_beb, r2_bee)), std::max(std::max(r2_ebb, r2_ebe), std::max(r2_eeb, r2_eee)));
 		node.radius = std::min(std::max(std::sqrt(r20) + t.get_radius(i0), std::sqrt(r21) + t.get_radius(i1)), std::sqrt(r2_max) + get_options().hsoft);
+		node.nactive = t.get_nactive(i0) + t.get_nactive(i1);
 	}
 	node.snk_begin = node.src_begin;
 	node.snk_end = node.src_end;
@@ -171,7 +172,7 @@ static int sort(tree& t, const range<double>& box, int begin, int end, int depth
 	return index;
 }
 
-tree tree_create(const array<int, NDIM>& cell_index, chaincell cell) {
+tree tree_create(const array<int, NDIM>& cell_index, chaincell cell, int min_rung) {
 	tree new_tree;
 	range<double> box;
 	const double Nchain = get_options().chain_dim;
@@ -196,7 +197,7 @@ tree tree_create(const array<int, NDIM>& cell_index, chaincell cell) {
 			PRINT("%i %i %e %e -----\n", i, cell_index[dim], box.begin[dim], box.end[dim]);
 		}
 	}
-	sort(new_tree, box, cell.pbegin, cell.pend, 0);
+	sort(new_tree, box, cell.pbegin, cell.pend, 0, min_rung);
 	return new_tree;
 }
 
