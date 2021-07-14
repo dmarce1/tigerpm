@@ -13,17 +13,17 @@
 #include <algorithm>
 
 /*
-__managed__ double pctime = 0.0;
-__managed__ double pptime = 0.0;
-__managed__ double cctime = 0.0;
-__managed__ double Ltime = 0.0;
-__managed__ double chk2time = 0.0;
-__managed__ double chk1time = 0.0;
-__managed__ double acttime = 0.0;
-__managed__ double longtime = 0.0;
-__managed__ double kicktime = 0.0;
-__managed__ double branchtime = 0.0;
-__managed__ double totalflops = 0;*/
+ __managed__ double pctime = 0.0;
+ __managed__ double pptime = 0.0;
+ __managed__ double cctime = 0.0;
+ __managed__ double Ltime = 0.0;
+ __managed__ double chk2time = 0.0;
+ __managed__ double chk1time = 0.0;
+ __managed__ double acttime = 0.0;
+ __managed__ double longtime = 0.0;
+ __managed__ double kicktime = 0.0;
+ __managed__ double branchtime = 0.0;
+ __managed__ double totalflops = 0;*/
 
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
@@ -103,6 +103,7 @@ struct fmmpm_params {
 	list_set* lists;
 	tree* tree_neighbors;
 	int* active;
+	int* cell_indices;
 	int min_rung;
 	bool do_phi;
 	float rs;
@@ -120,6 +121,7 @@ struct fmmpm_params {
 	float h2inv;
 	float h3inv;
 	float theta;
+	int* current_index;
 	int nsink_cells;
 	bool first_call;
 	int Nfour;
@@ -133,6 +135,10 @@ struct fmmpm_params {
 	void allocate(size_t source_size, size_t sink_size, size_t cell_count, size_t big_cell_count, size_t phi_cell_count, int nblocks) {
 		CUDA_CHECK(cudaMalloc(&tree_neighbors, cell_count * NCELLS * sizeof(tree)));
 		nsink_cells = cell_count;
+		CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
+		int zero = 0;
+		CUDA_CHECK(cudaMemcpy(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice));
+		CUDA_CHECK(cudaMalloc(&cell_indices, cell_count * sizeof(int)));
 		CUDA_CHECK(cudaMalloc(&x, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&y, source_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&z, source_size * sizeof(fixed32)));
@@ -151,6 +157,8 @@ struct fmmpm_params {
 #endif
 	}
 	void free() {
+		CUDA_CHECK(cudaFree(current_index));
+		CUDA_CHECK(cudaFree(cell_indices));
 		CUDA_CHECK(cudaFree(x));
 		CUDA_CHECK(cudaFree(y));
 		CUDA_CHECK(cudaFree(z));
@@ -260,7 +268,6 @@ __device__ inline void shared_reduce_min(float& number) {
 		number = fminf(number, __shfl_xor_sync(0xffffffff, number, P));
 	}
 }
-
 
 __device__ inline void shared_reduce_max(int& number) {
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
@@ -945,7 +952,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 		}
 		shared_reduce_max(max_rung);
 		shared_reduce_add(flops);
-		if( tid == 0 ) {
+		if (tid == 0) {
 			atomicMax(&params.kreturn->max_rung, max_rung);
 			atomicAdd(&params.kreturn->flops, flops);
 		}
@@ -978,7 +985,7 @@ __device__ void do_kick(checkitem mycheck, int depth, array<fixed32, NDIM> Lpos)
 //		atomicAdd(&branchtime, (double) (clock64() - tm));
 		do_kick(children[1], depth + 1, X);
 		shared_reduce_add(flops);
-		if( tid == 0 ) {
+		if (tid == 0) {
 			atomicAdd(&params.kreturn->flops, flops);
 		}
 	}
@@ -997,7 +1004,19 @@ __global__ void kick_fmmpm_kernel() {
 	__syncwarp();
 	auto& checklist = (params.lists + bid)->checklist;
 	auto& Lexpansion = (params.lists + bid)->Lexpansion[0];
-	for (int cell_index = bid; cell_index < params.nsink_cells; cell_index += gsz) {
+
+	const auto inc = [tid,&params]() {
+		int j;
+		if( tid == 0 ) {
+			j = atomicAdd(params.current_index, 1);
+		}
+		j = __shfl_sync(0xFFFFFFFF,j,0);
+		return j;
+	};
+
+	for (int j = inc(); j < params.nsink_cells; j = inc()) {
+		//PRINT("%i %i\n", j, params.nsink_cells);
+		const int cell_index = params.cell_indices[j];
 		if (tid == 0) {
 			checklist.resize(NCELLS);
 		}
@@ -1035,17 +1054,17 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		host.flops = 0;
 		CUDA_CHECK(cudaMalloc(&kreturn, sizeof(kick_return)));
 		CUDA_CHECK(cudaMemcpy(kreturn, &host, sizeof(kick_return), cudaMemcpyHostToDevice));
-/*		pctime = 0.0;
-		pptime = 0.0;
-		cctime = 0.0;
-		Ltime = 0.0;
-		chk2time = 0.0;
-		chk1time = 0.0;
-		acttime = 0.0;
-		longtime = 0.0;
-		kicktime = 0.0;
-		branchtime = 0.0;
-		totalflops = 0.0;*/
+		/*		pctime = 0.0;
+		 pptime = 0.0;
+		 cctime = 0.0;
+		 Ltime = 0.0;
+		 chk2time = 0.0;
+		 chk1time = 0.0;
+		 acttime = 0.0;
+		 longtime = 0.0;
+		 kicktime = 0.0;
+		 branchtime = 0.0;
+		 totalflops = 0.0;*/
 		root = true;
 	} else {
 		root = false;
@@ -1125,7 +1144,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		PRINT("%e\n", tm.read());
 		tm.start();
 		params.kreturn = kreturn;
-		params.theta = 0.333333333333;
+		params.theta = 0.7;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
 		params.do_phi = true;
@@ -1158,6 +1177,8 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 			chaincell cell;
 		};
 		vector<cell_data> chaincells;
+		vector<std::pair<size_t, size_t>> cell_sizes;
+		int n = 0;
 		for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
 			for (i[1] = bigbox.begin[1]; i[1] != bigbox.end[1]; i[1]++) {
 				for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
@@ -1166,6 +1187,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 					entry.cell = chainmesh_get(i);
 					if (box.contains(i)) {
 						const int q = box.index(i);
+						cell_sizes.push_back(std::make_pair(n++, trees[bigbox.index(i)].size()));
 						entry.box_index = q;
 					} else {
 						entry.box_index = -1;
@@ -1177,6 +1199,15 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		std::sort(chaincells.begin(), chaincells.end(), [](cell_data a, cell_data b) {
 			return a.cell.pbegin < b.cell.pbegin;
 		});
+		std::sort(cell_sizes.begin(), cell_sizes.end(), [](std::pair<size_t,size_t> a, std::pair<size_t,size_t> b) {
+			return a.second > b.second;
+		});
+		vector<int> cell_indices;
+		for (int j = 0; j < cell_sizes.size(); j++) {
+			//	PRINT("%i %i\n", cell_sizes[j].first, cell_sizes[j].second);
+			cell_indices.push_back(cell_sizes[j].first);
+		}
+		CUDA_CHECK(cudaMemcpyAsync(params.cell_indices, cell_indices.data(), sizeof(int) * cell_indices.size(), cudaMemcpyHostToDevice, stream));
 		size_t count = 0;
 		vector<cpymem> copies;
 		for (int j = 0; j < chaincells.size(); j++) {
@@ -1337,24 +1368,25 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	tmr.stop();
 	/*	const double gflops = totalflops / tmr.read() / 1024.0 / 1024.0 / 1024.0;
-	PRINT("Timings\n");
-	double total_time = pctime + cctime + pptime + Ltime + chk1time + chk2time + acttime + longtime + kicktime + branchtime;
-	PRINT("PC  %e\n", pctime / total_time);
-	PRINT("PP  %e\n", pptime / total_time);
-	PRINT("CC  %e\n", cctime / total_time);
-	PRINT("L   %e\n", Ltime / total_time);
-	PRINT("2   %e\n", chk2time / total_time);
-	PRINT("1   %e\n", chk1time / total_time);
-	PRINT("ACT %e\n", acttime / total_time);
-	PRINT("LNG %e\n", longtime / total_time);
-	PRINT("KCK %e\n", kicktime / total_time);
-	PRINT("BRC %e\n", branchtime / total_time);
-	PRINT("GFLOPS = %e\n", gflops);*/
+	 PRINT("Timings\n");
+	 double total_time = pctime + cctime + pptime + Ltime + chk1time + chk2time + acttime + longtime + kicktime + branchtime;
+	 PRINT("PC  %e\n", pctime / total_time);
+	 PRINT("PP  %e\n", pptime / total_time);
+	 PRINT("CC  %e\n", cctime / total_time);
+	 PRINT("L   %e\n", Ltime / total_time);
+	 PRINT("2   %e\n", chk2time / total_time);
+	 PRINT("1   %e\n", chk1time / total_time);
+	 PRINT("ACT %e\n", acttime / total_time);
+	 PRINT("LNG %e\n", longtime / total_time);
+	 PRINT("KCK %e\n", kicktime / total_time);
+	 PRINT("BRC %e\n", branchtime / total_time);
+	 PRINT("GFLOPS = %e\n", gflops);*/
 
 	kick_return host;
 	if (root) {
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
+		PRINT( "GLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 );
 	}
 	return host;
 }

@@ -95,7 +95,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.code_to_s = opts.code_to_cm / constants::c;
 	opts.code_to_g = 1.989e33;
 	opts.omega_m = 0.3;
-	opts.z0 = 49.0;
+	opts.z0 = 2.0;
 	double H = constants::H0 * opts.code_to_s;
 	const size_t nparts = pow(opts.parts_dim, NDIM);
 	const double Neff = 3.086;
