@@ -9,7 +9,7 @@ drift_return drift(double scale, double dt) {
 
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {
-		rfuts.push_back(hpx::async<drift_action>(c, scale, dt));
+		rfuts.push_back(hpx::async<drift_action>(c,scale, dt));
 	}
 	drift_return dr;
 	dr.kin = 0.0;
@@ -22,7 +22,6 @@ drift_return drift(double scale, double dt) {
 	for (int proc = 0; proc < nthreads; proc++) {
 		const auto func = [&mutex, &dr, dt, scale, proc, nthreads]() {
 			const double factor = dt / scale;
-			const double a2inv = 1.0 / scale / scale;
 			double kin = 0.0;
 			double momx = 0.0;
 			double momy = 0.0;
@@ -36,7 +35,7 @@ drift_return drift(double scale, double dt) {
 				const float vx = particles_vel(XDIM,i);
 				const float vy = particles_vel(YDIM,i);
 				const float vz = particles_vel(ZDIM,i);
-				kin += 0.5 * sqr(vx,vy,vz) * a2inv;
+				kin += 0.5 * sqr(vx,vy,vz);
 				momx += vx;
 				momy += vy;
 				momz += vz;
@@ -60,7 +59,7 @@ drift_return drift(double scale, double dt) {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 
-	for (auto& fut : rfuts) {
+	for( auto& fut : rfuts ) {
 		auto this_dr = fut.get();
 		dr.kin += this_dr.kin;
 		dr.momx += this_dr.momx;

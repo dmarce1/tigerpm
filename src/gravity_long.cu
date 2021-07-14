@@ -19,9 +19,9 @@ __global__ void compute_source_kernel(double* source, range<int> source_box, fix
 		X[YDIM] = y[i].to_float();
 		X[ZDIM] = z[i].to_float();
 		for (int dim = 0; dim < NDIM; dim++) {
-			I[dim] = int(X[dim] * N + PHI_BW - 1) - PHI_BW;
+			I[dim] = int(X[dim] * N + PHI_BW - 1 + 0.5) - PHI_BW;
 			for (int i = 0; i < CLOUD_W; i++) {
-				w[dim][i] = cloud4(X[dim] * N - I[dim] - i);
+				w[dim][i] = tsc(X[dim] * N - I[dim] - i);
 			}
 	//		PRINT( "%e\n", w[0][0]+w[0][1]+w[0][2]);
 		}
