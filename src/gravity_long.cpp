@@ -37,13 +37,13 @@ vector<float> gravity_long_get_phi(const range<int>& this_box) {
 void gravity_long_compute(gravity_long_type type) {
 	const double N = get_options().four_dim;
 	fft3d_init(N);
-	PRINT("Computing source\n");
+//	PRINT("Computing source\n");
 	compute_source();
 	fft3d_execute();
-	PRINT("Apply LaPlacian\n");
+//	PRINT("Apply LaPlacian\n");
 	apply_laplacian(type);
 	fft3d_inv_execute();
-	PRINT("get phi\n");
+//	PRINT("get phi\n");
 	get_phi();
 	fft3d_destroy();
 }
@@ -142,7 +142,7 @@ void compute_source() {
 	tm.start();
 	auto source = gravity_long_compute_source_local();
 	tm.stop();
-	PRINT( "sources took %e\n", tm.read());
+//	PRINT( "sources took %e\n", tm.read());
 	hpx::wait_all(futs.begin(), futs.end());
 	fft3d_accumulate_real(source_box, std::move(source));
 }

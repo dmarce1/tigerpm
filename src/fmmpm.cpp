@@ -58,7 +58,7 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 			}
 		}
 	}
-	PRINT("Trees took %e s\n", tm.read());
+//	PRINT("Trees took %e s\n", tm.read());
 	tm.reset();
 
 	kick_return kr = kick_fmmpm(trees, box, min_rung, scale, t0, theta, first_call, full_eval);

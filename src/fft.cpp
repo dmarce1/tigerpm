@@ -30,63 +30,63 @@ static void finish_force_real();
 static vector<cmplx> transpose_read(const range<int>&, int dim1, int dim2);
 static vector<cmplx> shift_read(const range<int>&, bool);
 
-HPX_PLAIN_ACTION (fft3d_accumulate_real);
-HPX_PLAIN_ACTION (fft3d_accumulate_complex);
-HPX_PLAIN_ACTION (fft3d_init);
-HPX_PLAIN_ACTION (fft3d_execute);
-HPX_PLAIN_ACTION (fft3d_phase1);
-HPX_PLAIN_ACTION (fft3d_phase2);
-HPX_PLAIN_ACTION (fft3d_phase3);
-HPX_PLAIN_ACTION (fft3d_read_real);
-HPX_PLAIN_ACTION (fft3d_read_complex);
-HPX_PLAIN_ACTION (fft3d_force_real);
-HPX_PLAIN_ACTION (fft3d_destroy);
-HPX_PLAIN_ACTION (transpose_read);
-HPX_PLAIN_ACTION (transpose);
-HPX_PLAIN_ACTION (shift);
-HPX_PLAIN_ACTION (shift_read);
-HPX_PLAIN_ACTION (update);
-HPX_PLAIN_ACTION (finish_force_real);
+HPX_PLAIN_ACTION(fft3d_accumulate_real);
+HPX_PLAIN_ACTION(fft3d_accumulate_complex);
+HPX_PLAIN_ACTION(fft3d_init);
+HPX_PLAIN_ACTION(fft3d_execute);
+HPX_PLAIN_ACTION(fft3d_phase1);
+HPX_PLAIN_ACTION(fft3d_phase2);
+HPX_PLAIN_ACTION(fft3d_phase3);
+HPX_PLAIN_ACTION(fft3d_read_real);
+HPX_PLAIN_ACTION(fft3d_read_complex);
+HPX_PLAIN_ACTION(fft3d_force_real);
+HPX_PLAIN_ACTION(fft3d_destroy);
+HPX_PLAIN_ACTION(transpose_read);
+HPX_PLAIN_ACTION(transpose);
+HPX_PLAIN_ACTION(shift);
+HPX_PLAIN_ACTION(shift_read);
+HPX_PLAIN_ACTION(update);
+HPX_PLAIN_ACTION(finish_force_real);
 
 void fft3d_execute() {
-	PRINT("FFT z\n");
+//	PRINT("FFT z\n");
 	fft3d_phase1();
-	PRINT("Transpose y-z\n");
+//	PRINT("Transpose y-z\n");
 	transpose(1, 2);
-	PRINT("FFT y\n");
+//	PRINT("FFT y\n");
 	fft3d_phase2(1, false);
-	PRINT("Shifting\n");
+//	PRINT("Shifting\n");
 	shift(false);
-	PRINT("FFT x\n");
+//	PRINT("FFT x\n");
 	fft3d_phase2(0, false);
-	PRINT("Transpose z-x\n");
+//	PRINT("Transpose z-x\n");
 	transpose(2, 0);
 	update();
-	PRINT("done\n");
+//	PRINT("done\n");
 
 }
 
 void fft3d_inv_execute() {
-	PRINT("Transpose z-x\n");
+//	PRINT("Transpose z-x\n");
 	transpose(0, 2);
-	PRINT("inv FFT x\n");
+	//PRINT("inv FFT x\n");
 	fft3d_phase2(0, true);
-	PRINT("Shifting\n");
+//	PRINT("Shifting\n");
 	shift(true);
-	PRINT("inv FFT y\n");
+//	PRINT("inv FFT y\n");
 	fft3d_phase2(1, true);
-	PRINT("Transpose y-z\n");
+//	PRINT("Transpose y-z\n");
 	transpose(2, 1);
-	PRINT("inv FFT z\n");
+	//PRINT("inv FFT z\n");
 	fft3d_phase3();
-	PRINT("done\n");
+	//PRINT("done\n");
 
 }
 
 void fft3d_force_real() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_force_real_action > (c));
+		futs.push_back(hpx::async<fft3d_force_real_action>(c));
 	}
 
 	const auto& box = cmplx_mybox[ZDIM];
@@ -137,7 +137,7 @@ vector<cmplx>& fft3d_complex_vector() {
 void finish_force_real() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < finish_force_real_action > (c));
+		futs.push_back(hpx::async<finish_force_real_action>(c));
 	}
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int, NDIM> i;
@@ -178,7 +178,7 @@ vector<double> fft3d_read_real(const range<int>& this_box) {
 							vector<range<int>> inters;
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
-								auto fut = hpx::async < fft3d_read_real_action > (hpx_localities()[ri], this_inter);
+								auto fut = hpx::async<fft3d_read_real_action>(hpx_localities()[ri], this_inter);
 								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<double>> fut) {
 									auto this_data = fut.get();
 									array<int, NDIM> i;
@@ -230,7 +230,7 @@ vector<cmplx> fft3d_read_complex(const range<int>& this_box) {
 							vector<range<int>> inters;
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
-								auto fut = hpx::async < fft3d_read_complex_action > (hpx_localities()[ri], this_inter);
+								auto fut = hpx::async<fft3d_read_complex_action>(hpx_localities()[ri], this_inter);
 								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<cmplx>> fut) {
 									auto this_data = fut.get();
 									array<int, NDIM> i;
@@ -291,7 +291,7 @@ void fft3d_accumulate_real(const range<int>& this_box, const vector<double>& dat
 										for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
 											const int k = this_inter.index(i);
 											auto j = i;
-											for( int dim = 0; dim < NDIM; dim++) {
+											for (int dim = 0; dim < NDIM; dim++) {
 												j[dim] -= si[dim];
 											}
 											const int l = this_box.index(j);
@@ -301,8 +301,7 @@ void fft3d_accumulate_real(const range<int>& this_box, const vector<double>& dat
 										}
 									}
 								}
-								auto fut = hpx::async < fft3d_accumulate_real_action
-										> (hpx_localities()[bi], this_inter, std::move(this_data));
+								auto fut = hpx::async<fft3d_accumulate_real_action>(hpx_localities()[bi], this_inter, std::move(this_data));
 								fut.get();
 //								futs.push_back(std::move(fut));
 							}
@@ -348,15 +347,14 @@ void fft3d_accumulate_complex(const range<int>& this_box, const vector<cmplx>& d
 									for (i[1] = this_inter.begin[1]; i[1] != this_inter.end[1]; i[1]++) {
 										for (i[2] = this_inter.begin[2]; i[2] != this_inter.end[2]; i[2]++) {
 											auto j = i;
-											for( int dim = 0; dim < NDIM; dim++) {
+											for (int dim = 0; dim < NDIM; dim++) {
 												j[dim] -= si[dim];
 											}
 											this_data[this_inter.index(i)] = data[this_box.index(j)];
 										}
 									}
 								}
-								auto fut = hpx::async < fft3d_accumulate_complex_action
-										> (hpx_localities()[bi], this_inter, std::move(this_data));
+								auto fut = hpx::async<fft3d_accumulate_complex_action>(hpx_localities()[bi], this_inter, std::move(this_data));
 								futs.push_back(std::move(fut));
 							}
 						}
@@ -372,7 +370,7 @@ void fft3d_accumulate_complex(const range<int>& this_box, const vector<cmplx>& d
 void fft3d_init(int N_) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_init_action > (c, N_));
+		futs.push_back(hpx::async<fft3d_init_action>(c, N_));
 	}
 	N = N_;
 	range<int> box;
@@ -394,7 +392,7 @@ void fft3d_init(int N_) {
 		find_boxes(box, cmplx_boxes[dim], 0, hpx_size());
 		cmplx_mybox[dim] = cmplx_boxes[dim][hpx_rank()];
 	}
-	Y.resize(cmplx_mybox[ZDIM].volume(), cmplx(0.0,0.0));
+	Y.resize(cmplx_mybox[ZDIM].volume(), cmplx(0.0, 0.0));
 	mutexes.resize(N * N);
 	for (int i = 0; i < N * N; i++) {
 		mutexes[i] = std::make_shared<spinlock_type>();
@@ -405,8 +403,12 @@ void fft3d_init(int N_) {
 void fft3d_destroy() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_destroy_action > (c));
+		futs.push_back(hpx::async<fft3d_destroy_action>(c));
 	}
+	R = decltype(R)();
+	Y = decltype(Y)();
+	Y1 = decltype(Y1)();
+	ym = decltype(ym)();
 
 	hpx::wait_all(futs.begin(), futs.end());
 
@@ -415,7 +417,7 @@ void fft3d_destroy() {
 static void update() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < update_action > (c));
+		futs.push_back(hpx::async<update_action>(c));
 	}
 	Y = std::move(Y1);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -425,7 +427,7 @@ static void fft3d_phase1() {
 	static mutex_type mtx;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_phase1_action > (c));
+		futs.push_back(hpx::async<fft3d_phase1_action>(c));
 	}
 	array<int, NDIM> i;
 	Y.resize(cmplx_mybox[ZDIM].volume());
@@ -462,7 +464,7 @@ static void fft3d_phase2(int dim, bool inv) {
 	static mutex_type mtx;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_phase2_action > (c, dim, inv));
+		futs.push_back(hpx::async<fft3d_phase2_action>(c, dim, inv));
 	}
 	Y = std::move(Y1);
 	array<int, NDIM> i;
@@ -505,7 +507,7 @@ static void fft3d_phase3() {
 	static mutex_type mtx;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_phase3_action > (c));
+		futs.push_back(hpx::async<fft3d_phase3_action>(c));
 	}
 	array<int, NDIM> i;
 	Y = std::move(Y1);
@@ -558,7 +560,7 @@ static void find_boxes(range<int> box, vector<range<int>>& boxes, int begin, int
 static void transpose(int dim1, int dim2) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < transpose_action > (c, dim1, dim2));
+		futs.push_back(hpx::async<transpose_action>(c, dim1, dim2));
 	}
 	range<int> tbox = cmplx_mybox[dim1].transpose(dim1, dim2);
 	Y1.resize(cmplx_mybox[dim1].volume());
@@ -570,7 +572,7 @@ static void transpose(int dim1, int dim2) {
 			split_box(tinter, tinters);
 			for (auto this_tinter : tinters) {
 				auto inter = this_tinter.transpose(dim1, dim2);
-				auto fut = hpx::async < transpose_read_action > (hpx_localities()[bi], this_tinter, dim1, dim2);
+				auto fut = hpx::async<transpose_read_action>(hpx_localities()[bi], this_tinter, dim1, dim2);
 				futs.push_back(fut.then([inter,dim1](hpx::future<vector<cmplx>> fut) {
 					auto data = fut.get();
 					array<int, NDIM> i;
@@ -614,7 +616,7 @@ static vector<cmplx> transpose_read(const range<int>& this_box, int dim1, int di
 static void shift(bool inv) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < shift_action > (c, inv));
+		futs.push_back(hpx::async<shift_action>(c, inv));
 	}
 	const int dim2 = inv ? YDIM : XDIM;
 	const int dim1 = inv ? XDIM : YDIM;
@@ -628,7 +630,7 @@ static void shift(bool inv) {
 			split_box(tinter, tinters);
 			for (auto this_tinter : tinters) {
 				auto inter = inv ? this_tinter.shift_down() : this_tinter.shift_up();
-				auto fut = hpx::async < shift_read_action > (hpx_localities()[bi], this_tinter, inv);
+				auto fut = hpx::async<shift_read_action>(hpx_localities()[bi], this_tinter, inv);
 				futs.push_back(fut.then([inter,dim2](hpx::future<vector<cmplx>> fut) {
 					auto data = fut.get();
 					array<int, NDIM> i;

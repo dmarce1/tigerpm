@@ -142,7 +142,7 @@ static void domain_sort_begin() {
 		find_domains(root_domain);
 	}
 	const auto mybox = particles_get_local_box();
-	PRINT("Domain sort begin on %i\n", hpx_rank());
+//	PRINT("Domain sort begin on %i\n", hpx_rank());
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,mybox,&send_mutex]() {
@@ -160,7 +160,7 @@ static void domain_sort_begin() {
 					entry.push_back(particles_get_particle(i));
 					my_free_indices.push_back(i);
 					if (entry.size() == MAX_PARTS_PER_MSG) {
-						PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), rank);
+//						PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), rank);
 						auto data = std::move(entry);
 						auto fut = hpx::async < transmit_particles_action > (hpx_localities()[rank], std::move(data));
 						futs.push_back(std::move(fut));
@@ -170,7 +170,7 @@ static void domain_sort_begin() {
 			for (auto i = sends.begin(); i != sends.end(); i++) {
 				if (i->second.size()) {
 					auto& entry = i->second;
-					PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), i->first);
+//					PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), i->first);
 					futs.push_back(hpx::async<transmit_particles_action>(hpx_localities()[i->first], std::move(entry)));
 
 				}
@@ -212,12 +212,12 @@ static void domain_sort_end() {
 		}
 	}
 	int free_index = 0;
-	PRINT("Received %i vectors on %i\n", recv_parts.size(), hpx_rank());
+//	PRINT("Received %i vectors on %i\n", recv_parts.size(), hpx_rank());
 	for (int i = 0; i < recv_parts.size(); i++) {
 		const int sz = recv_parts[i].size();
 		futs.push_back(hpx::async([i,free_index]() {
 			auto& parts = recv_parts[i];
-			PRINT( "Adding %i parts on %i\n", parts.size(), hpx_rank());
+//			PRINT( "Adding %i parts on %i\n", parts.size(), hpx_rank());
 			for( int j = 0; j < parts.size(); j++) {
 				particles_set_particle(parts[j],free_indices[j+free_index]);
 			}

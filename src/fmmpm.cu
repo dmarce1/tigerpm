@@ -210,7 +210,7 @@ static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cuda
 		}
 		compressed.push_back(copy);
 	}
-	PRINT("Compressed from %i to %i copies\n", copies.size(), compressed.size());
+//	PRINT("Compressed from %i to %i copies\n", copies.size(), compressed.size());
 	for (int i = 0; i < compressed.size(); i++) {
 		CUDA_CHECK(cudaMemcpyAsync(compressed[i].dest, compressed[i].src, compressed[i].size, direction, stream));
 	}
@@ -1101,7 +1101,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	timer tmr;
 	tmr.start();
-	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
+//	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
 //cudaFuncCache pCacheConfig;
 	cudaDeviceSetCacheConfig (cudaFuncCachePreferShared);
 //	cudaDeviceGetCacheConfig(&pCacheConfig);
@@ -1113,7 +1113,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	const size_t bigvol = bigbox.volume();
 	const size_t vol = box.volume();
 	int tree_size = 0;
-	print("%i\n", bigvol);
+//	print("%i\n", bigvol);
 	for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
 		for (i[1] = bigbox.begin[1]; i[1] != bigbox.end[1]; i[1]++) {
 			for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
@@ -1127,7 +1127,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 			}
 		}
 	}
-	PRINT("tree size = %e GB\n", tree_size / 1024 / 1024 / 1024.0);
+//	PRINT("tree size = %e GB\n", tree_size / 1024 / 1024 / 1024.0);
 	auto phibox = box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		phibox.begin[dim] *= get_options().four_o_chain;
@@ -1142,12 +1142,12 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	int occupancy;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_fmmpm_kernel,WARP_SIZE, sizeof(fmmpm_shmem)));
-	PRINT("Occupancy = %i\n", occupancy);
+//	PRINT("Occupancy = %i\n", occupancy);
 	int num_blocks = occupancy * cuda_smp_count();
-	PRINT("%e cells per block\n", (double ) box.volume() / num_blocks);
+//	PRINT("%e cells per block\n", (double ) box.volume() / num_blocks);
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + sizeof(fmmpm_params);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
-	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
+//	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
 	size_t value = STACK_SIZE;
 	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
@@ -1161,17 +1161,17 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	if (mem_required > free_mem) {
 		const auto child_boxes = box.split();
-		PRINT("Splitting\n");
+//		PRINT("Splitting\n");
 		kick_fmmpm(trees, child_boxes.first, min_rung, scale, t0, theta, first_call, full_eval, kreturn);
 		kick_fmmpm(std::move(trees), child_boxes.second, min_rung, scale, t0, theta, first_call, full_eval, kreturn);
 	} else {
 		cuda_set_device();
-		PRINT("Data transfer\n");
+	//	PRINT("Data transfer\n");
 		tm.start();
 		fmmpm_params params;
 		params.allocate(nsources, nsinks, vol, bigvol, phibox.volume(), num_blocks);
 		tm.stop();
-		PRINT("%e\n", tm.read());
+//		PRINT("%e\n", tm.read());
 		tm.start();
 		params.kreturn = kreturn;
 		params.theta = theta;
@@ -1181,7 +1181,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		params.rcut = (double) CHAIN_BW / get_options().chain_dim;
 		params.hsoft = get_options().hsoft;
 		params.phi0 = std::pow(get_options().parts_dim, NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
-		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
+//		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
 		params.GM = get_options().GM;
 		params.Nfour = get_options().four_dim;
 		params.phi_box = phibox;
@@ -1332,20 +1332,20 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-		PRINT("Transfer time %e\n", tm.read());
+//		PRINT("Transfer time %e\n", tm.read());
 		tm.reset();
 		tm.start();
-		PRINT("Launching kernel\n");
+//		PRINT("Launching kernel\n");
 		CUDA_CHECK(cudaMemcpyToSymbol(dev_fmmpm_params, &params, sizeof(fmmpm_params)));
 		kick_fmmpm_kernel<<<num_blocks,WARP_SIZE,sizeof(fmmpm_shmem),stream>>>();
 
 		count = 0;
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-		PRINT("%e\n", tm.read());
+//		PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
-		PRINT("Transfer back\n");
+//		PRINT("Transfer back\n");
 		copies.resize(0);
 		count = 0;
 		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
@@ -1416,7 +1416,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	if (root) {
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
-		PRINT("GLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
+//		PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
 	}
 	return host;
 }

@@ -167,7 +167,6 @@ static int sort(tree& t, const range<double>& box, int begin, int end, int depth
 	}
 	node.snk_begin = node.src_begin;
 	node.snk_end = node.src_end;
-//	PRINT("%e\n", node.radius);
 	t.set(node, index);
 	return index;
 }

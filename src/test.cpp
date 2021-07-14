@@ -146,54 +146,56 @@ static void kick_fmmpm_test() {
 	timer tm;
 //	particles_random_init();
 	initialize();
+	for (int pass = 0; pass < 2; pass++) {
+		PRINT("DOMAIN SORT\n");
+		tm.start();
+		particles_domain_sort();
+		tm.stop();
+		PRINT("%e s\n", tm.read());
+		tm.reset();
 
-	PRINT("DOMAIN SORT\n");
-	tm.start();
-	particles_domain_sort();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
+		PRINT("FOURIER\n");
+		tm.start();
+		gravity_long_compute(GRAVITY_LONG_PME);
+		tm.stop();
+		PRINT("%e s\n", tm.read());
+		tm.reset();
 
-	PRINT("FOURIER\n");
-	tm.start();
-	gravity_long_compute(GRAVITY_LONG_PME);
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
+		PRINT("SORT\n");
+		tm.start();
+		chainmesh_create();
+		tm.stop();
+		PRINT("%e s\n", tm.read());
+		tm.reset();
+		PRINT("\n");
 
-	PRINT("SORT\n");
-	tm.start();
-	chainmesh_create();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-	PRINT("\n");
+		PRINT("BOUNDARIES\n");
+		tm.start();
+		chainmesh_exchange_begin();
+		chainmesh_exchange_end();
+		tm.stop();
+		PRINT("%e s\n", tm.read());
+		tm.reset();
+		PRINT("\n");
 
-	PRINT("BOUNDARIES\n");
-	tm.start();
-	chainmesh_exchange_begin();
-	chainmesh_exchange_end();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
-	PRINT("\n");
-
-	PRINT("KICK\n");
-	tm.start();
-	kick_fmmpm_begin(0, 1.0, 1.0, 0.7, true, true);
-	kick_fmmpm_end();
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
+		PRINT("KICK\n");
+		tm.start();
+		kick_fmmpm_begin(0, 1.0, 1.0, 0.7, true, true);
+		kick_fmmpm_end();
+		tm.stop();
+		PRINT("%e s\n", tm.read());
+		tm.reset();
 
 #ifdef FORCE_TEST
-	PRINT("COMPARE\n");
-	tm.start();
-	gravity_short_ewald_compare(100);
-	tm.stop();
-	PRINT("%e s\n", tm.read());
-	tm.reset();
+		PRINT("COMPARE\n");
+		tm.start();
+		gravity_short_ewald_compare(100);
+		tm.stop();
+		PRINT("%e s\n", tm.read());
+		tm.reset();
 #endif
+
+	}
 
 }
 

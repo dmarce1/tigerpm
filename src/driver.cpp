@@ -91,9 +91,9 @@ void driver() {
 		}
 		const double eerr = (esum - esum0) / dr.kin;
 		if( iter == 0 ) {
-			PRINT( "%12s %12s %12s %12s\n", "time", "dt", "pot err", "nactive");
+			PRINT( "%12s %12s %12s %12s %12s\n", "time", "dt", "pot err", "max rung", "nactive");
 		}
-		PRINT( "%12e %12e %12e %12i\n", time/tau_max, dt/tau_max, eerr);
+		PRINT( "%12e %12e %12e %12i %12i\n", time/tau_max, dt/tau_max, eerr, kr.max_rung, kr.nactive);
 
 		itime = inc(itime, kr.max_rung);
 		time += dt;
