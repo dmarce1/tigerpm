@@ -43,6 +43,7 @@ void gravity_short_ewald_compare(int Nsamples) {
 		sinky[i] = samples[i].x[YDIM];
 		sinkz[i] = samples[i].x[ZDIM];
 	}
+	const double gm = get_options().GM;
 	auto results = do_ewald(sinkx, sinky, sinkz);
 	double lmax_phi = 0.0;
 	double lmax_force = 0.0;
@@ -53,12 +54,12 @@ void gravity_short_ewald_compare(int Nsamples) {
 		double g1 = 0.0, g2 = 0.0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			g1 += sqr(samples[i].g[dim]);
-			g2 += sqr(results.second[dim][i]);
+			g2 += sqr(gm * results.second[dim][i]);
 		}
 		g1 = sqrt(g1);
 		g2 = sqrt(g2);
 		f1 = samples[i].p;
-		f2 = results.first[i];
+		f2 = gm * results.first[i];
 		const double gerr = std::log(std::abs(g1/g2));
 		const double ferr = std::log(std::abs(f1/f2));
 		lerr_phi += sqr(ferr) / Nsamples;
