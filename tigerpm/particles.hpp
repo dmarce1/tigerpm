@@ -56,6 +56,8 @@ vector<particle> particles_sample(int);
 void particles_sphere_init(float radius);
 vector<int> particles_mesh_count();
 int particles_sort(int begin, int end, double xmid, int xdim);
+void particles_load(FILE* fp);
+void particles_save(FILE* fp);
 
 inline array<int, NDIM> particles_mesh_loc(int index) {
 	static const double N = get_options().chain_dim;

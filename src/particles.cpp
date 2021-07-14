@@ -72,6 +72,33 @@ range<int> particles_get_local_box() {
 	return find_my_box(get_options().chain_dim);
 }
 
+void particles_load(FILE* fp) {
+	int size;
+	FREAD(&size, sizeof(int), 1, fp);
+	particles_resize(size);
+	FREAD(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
+	FREAD(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
+	FREAD(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
+	FREAD(&particles_vel(XDIM, 0), sizeof(float), particles_size(), fp);
+	FREAD(&particles_vel(YDIM, 0), sizeof(float), particles_size(), fp);
+	FREAD(&particles_vel(ZDIM, 0), sizeof(float), particles_size(), fp);
+	FREAD(&particles_rung(0), sizeof(char), particles_size(), fp);
+
+}
+
+void particles_save(FILE* fp) {
+	int size = particles_size();
+	fwrite(&size, sizeof(int), 1, fp);
+	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fwrite(&particles_vel(XDIM, 0), sizeof(float), particles_size(), fp);
+	fwrite(&particles_vel(YDIM, 0), sizeof(float), particles_size(), fp);
+	fwrite(&particles_vel(ZDIM, 0), sizeof(float), particles_size(), fp);
+	fwrite(&particles_rung(0), sizeof(char), particles_size(), fp);
+
+}
+
 void particles_sphere_init(float radius) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -125,7 +152,7 @@ void particles_random_init() {
 				}
 			}
 			gsl_rng_free(rndgen);
-			}));
+		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 
@@ -161,26 +188,26 @@ static void domain_sort_begin() {
 					my_free_indices.push_back(i);
 					if (entry.size() == MAX_PARTS_PER_MSG) {
 //						PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), rank);
-						auto data = std::move(entry);
-						auto fut = hpx::async < transmit_particles_action > (hpx_localities()[rank], std::move(data));
-						futs.push_back(std::move(fut));
-					}
-				}
+				auto data = std::move(entry);
+				auto fut = hpx::async < transmit_particles_action > (hpx_localities()[rank], std::move(data));
+				futs.push_back(std::move(fut));
 			}
-			for (auto i = sends.begin(); i != sends.end(); i++) {
-				if (i->second.size()) {
-					auto& entry = i->second;
+		}
+	}
+	for (auto i = sends.begin(); i != sends.end(); i++) {
+		if (i->second.size()) {
+			auto& entry = i->second;
 //					PRINT("Sending %i particles from %i to %i\n", entry.size(), hpx_rank(), i->first);
-					futs.push_back(hpx::async<transmit_particles_action>(hpx_localities()[i->first], std::move(entry)));
+			futs.push_back(hpx::async<transmit_particles_action>(hpx_localities()[i->first], std::move(entry)));
 
-				}
-			}
-			std::unique_lock<mutex_type> lock(send_mutex);
-			free_indices.insert(free_indices.end(),my_free_indices.begin(), my_free_indices.end());
-			my_free_indices = std::vector<int>();
-			lock.unlock();
-			hpx::wait_all(futs.begin(), futs.end());
-		}));
+		}
+	}
+	std::unique_lock<mutex_type> lock(send_mutex);
+	free_indices.insert(free_indices.end(),my_free_indices.begin(), my_free_indices.end());
+	my_free_indices = std::vector<int>();
+	lock.unlock();
+	hpx::wait_all(futs.begin(), futs.end());
+}));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
@@ -218,11 +245,11 @@ static void domain_sort_end() {
 		futs.push_back(hpx::async([i,free_index]() {
 			auto& parts = recv_parts[i];
 //			PRINT( "Adding %i parts on %i\n", parts.size(), hpx_rank());
-			for( int j = 0; j < parts.size(); j++) {
-				particles_set_particle(parts[j],free_indices[j+free_index]);
-			}
-			parts = vector<particle>();
-		}));
+				for( int j = 0; j < parts.size(); j++) {
+					particles_set_particle(parts[j],free_indices[j+free_index]);
+				}
+				parts = vector<particle>();
+			}));
 		free_index += sz;
 	}
 

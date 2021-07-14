@@ -3,6 +3,7 @@
 #include <tigerpm/initialize.hpp>
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/particles.hpp>
+#include <tigerpm/timer.hpp>
 
 using rung_type = std::int8_t;
 using time_type = std::uint64_t;
@@ -53,19 +54,76 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	return kr;
 }
 
-void driver() {
-	initialize();
-	double a0 = 1.0 / (1.0 + get_options().z0);
-	double tau_max = cosmos_age(a0);
-	double tau = 0.0;
-	double a = a0;
-	double cosmicK = 0.0;
-	double t0 = tau_max / 100.0;
-	time_type itime = 0;
+struct driver_params {
+	double a;
+	double tau;
+	double tau_max;
+	double cosmicK;
 	double esum0;
-	int iter = 0;
+	int iter;
+	time_type itime;
+};
+
+void write_checkpoint(driver_params params) {
+	PRINT("Writing checkpoint\n");
+	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string(".dat");
+	FILE* fp = fopen(fname.c_str(), "wb");
+	if (fp == nullptr) {
+		PRINT("Unable to open %s for writing.\n", fname.c_str());
+		abort();
+	}
+	fwrite(&params, sizeof(driver_params), 1, fp);
+	particles_save(fp);
+
+	fclose(fp);
+}
+
+void read_checkpoint(driver_params& params, int checknum) {
+	PRINT("Reading checkpoint\n");
+	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string(".dat");
+	FILE* fp = fopen(fname.c_str(), "rb");
+	if (fp == nullptr) {
+		PRINT("Unable to open %s for reading.\n", fname.c_str());
+		abort();
+	}
+	FREAD(&params, sizeof(driver_params), 1, fp);
+	particles_load(fp);
+
+	fclose(fp);
+}
+
+void driver() {
+	driver_params params;
+	double a0 = 1.0 / (1.0 + get_options().z0);
+	if (get_options().check_num >= 0) {
+		read_checkpoint(params, get_options().check_num);
+	} else {
+		initialize();
+		params.tau_max = cosmos_age(a0);
+		params.tau = 0.0;
+		params.a = a0;
+		params.cosmicK = 0.0;
+		params.itime = 0;
+		params.iter = 0;
+	}
+	auto& a = params.a;
+	auto& tau = params.tau;
+	auto& tau_max = params.tau_max;
+	auto& cosmicK = params.cosmicK;
+	auto& esum0 = params.esum0;
+	auto& itime = params.itime;
+	auto& iter = params.iter;
+	double t0 = tau_max / 100.0;
 	double pot;
+	timer tmr;
+	tmr.start();
 	while (tau < tau_max) {
+		tmr.stop();
+		if (tmr.read() > get_options().check_freq) {
+			write_checkpoint(params);
+			tmr.reset();
+		}
+		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
 		double theta;
@@ -90,17 +148,17 @@ void driver() {
 		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
 		drift_return dr = drift(a2, dt);
 		cosmicK += dr.kin * (a - a1);
-		const double esum = (a * (pot + dr.kin) + cosmicK) ;
+		const double esum = (a * (pot + dr.kin) + cosmicK);
 		if (tau == 0.0) {
 			esum0 = esum;
 		}
 		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
 		if (full_eval) {
-			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "Z", "time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung",
+			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "Z", "time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung",
 					"nactive");
 		}
-		PRINT("%12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i\n", z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung,
-				kr.max_rung, kr.nactive);
+		PRINT("%12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i\n", iter, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr,
+				minrung, kr.max_rung, kr.nactive);
 
 		itime = inc(itime, kr.max_rung);
 		tau += dt;

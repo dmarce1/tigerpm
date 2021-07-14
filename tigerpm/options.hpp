@@ -11,6 +11,8 @@ struct options {
 	int parts_o_four;
 	int parts_o_chain;
 	int four_o_chain;
+	int check_num;
+	int check_freq;
 
 	double eta;
 	double sigma8;
@@ -31,6 +33,8 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & check_num;
+		arc & check_freq;
 		arc & sigma8;
 		arc & hsoft;
 		arc & eta;

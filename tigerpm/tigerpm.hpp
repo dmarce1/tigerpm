@@ -20,7 +20,7 @@
 
 #define SELF_PHI float(-35.0/16.0)
 
-//#define CHECK_BOUNDS
+#define CHECK_BOUNDS
 #define FORCE_TEST
 //#define SORT_TEST
 
@@ -76,5 +76,18 @@ constexpr double H0 = 1e7 / mpc_to_cm;
 constexpr double G = 6.67384e-8;
 constexpr double sigma = 5.67051e-5;
 }
+
+#define FREAD(a,b,c,d) __safe_fread(a,b,c,d,__LINE__,__FILE__)
+
+static void __safe_fread(void* src, size_t size, size_t count, FILE* fp, int line, const char* file) {
+	auto read = fread(src, size, count, fp);
+	if (read != count) {
+		PRINT("Attempt to read %li elements of size %li in %s on line %i failed - only %li elements read.\n", count, size,
+				file, line, read);
+		abort();
+	}
+}
+
+
 
 #endif /* TIGERFMM_HPP_ */
