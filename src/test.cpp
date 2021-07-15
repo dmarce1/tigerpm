@@ -186,7 +186,7 @@ static void kick_fmmpm_test() {
 
 		PRINT("KICK\n");
 		tm.start();
-		kick_fmmpm_begin(0, 1.0, 1.0, 0.66666666666, true, true);
+		kick_fmmpm_begin(0, 1.0, 1.0, 0.333333333, true, true);
 		kick_fmmpm_end();
 		tm.stop();
 		PRINT("%e s\n", tm.read());

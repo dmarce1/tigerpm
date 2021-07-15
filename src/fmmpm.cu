@@ -325,7 +325,7 @@ inline __device__ int compute_pp_interaction(float dx, float dy, float dz, float
 	return flops;
 }
 
-__device__ __noinline__ int pp_interactions(int nactive) {
+__device__ int pp_interactions(int nactive) {
 	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -437,7 +437,7 @@ __device__ __noinline__ int pp_interactions(int nactive) {
 	return flops;
 }
 
-__device__ __noinline__ int pc_interactions(int nactive) {
+__device__ int pc_interactions(int nactive) {
 	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -521,7 +521,7 @@ __device__ __noinline__ int pc_interactions(int nactive) {
 	return flops;
 }
 
-__device__ __noinline__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
+__device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 	int flops = 0;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -564,7 +564,7 @@ __device__ __noinline__ int cc_interactions(checkitem mycheck, expansion& Lexpan
 	return flops;
 }
 
-__device__ __noinline__ int long_range_interp(int nactive) {
+__device__  int long_range_interp(int nactive) {
 	const int& tid = threadIdx.x;
 	__shared__ extern int shmem_ptr[];
 	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
@@ -1438,7 +1438,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	if (root) {
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
-		//	PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
+		PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
 	}
 	return host;
 }
