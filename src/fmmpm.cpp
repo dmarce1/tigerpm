@@ -58,10 +58,12 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 			}
 		}
 	}
-//	PRINT("Trees took %e s\n", tm.read());
+	PRINT("Trees took %e s\n", tm.read());
 	tm.reset();
-
-	kick_return kr = kick_fmmpm(trees, box, min_rung, scale, t0, theta, first_call, full_eval);
+	tm.start();
+	kick_return kr = kick_fmmpm(std::move(trees), box, min_rung, scale, t0, theta, first_call, full_eval);
+	tm.stop();
+	PRINT("FMM took %e s\n", tm.read());
 	kr.nactive = size_t(nactive);
 	for (auto& f : futs) {
 		auto this_kr = f.get();
@@ -78,6 +80,8 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 }
 
 void kick_fmmpm_end() {
+	timer tm;
+	tm.start();
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<kick_fmmpm_end_action>(c));
@@ -86,5 +90,6 @@ void kick_fmmpm_end() {
 	particles_resize(particles_local_size());
 
 	hpx::wait_all(futs.begin(), futs.end());
-
+	tm.stop();
+	PRINT( "fmmpmend : %e\n", tm.read());
 }

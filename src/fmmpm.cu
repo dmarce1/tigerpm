@@ -25,7 +25,6 @@ __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (
 struct list_set;
 struct checkitem;
 
-
 struct fmmpm_params {
 	fixed32* x;
 	fixed32* y;
@@ -73,7 +72,6 @@ struct fmmpm_params {
 	void free();
 };
 
-
 __constant__ fmmpm_params dev_fmmpm_params;
 
 struct checkitem {
@@ -83,8 +81,7 @@ struct checkitem {
 	int get_nactive() const {
 		return dev_fmmpm_params.trees.nodes[index].nactive;
 	}
-	__device__ inline
-	fixed32 get_x(int dim) const {
+	__device__  inline fixed32 get_x(int dim) const {
 		return dev_fmmpm_params.trees.nodes[index].multi.x[dim];
 	}
 	__device__ inline
@@ -107,12 +104,10 @@ struct checkitem {
 	int get_snk_end() const {
 		return dev_fmmpm_params.trees.nodes[index].snk_end;
 	}
-	__device__ inline
-	multipole get_multipole() const {
+	__device__  inline multipole get_multipole() const {
 		return dev_fmmpm_params.trees.nodes[index].multi.m;
 	}
-	__device__ inline
-	array<checkitem, 2> get_children() {
+	__device__  inline array<checkitem, 2> get_children() {
 		const auto indices = dev_fmmpm_params.trees.nodes[index].children;
 		array<checkitem, 2> c;
 		c[0].index = indices[0];
@@ -216,7 +211,7 @@ static void process_copies(vector<cpymem> copies, cudaMemcpyKind direction, cuda
 		}
 		compressed.push_back(copy);
 	}
-//	PRINT("Compressed from %i to %i copies\n", copies.size(), compressed.size());
+	PRINT("Compressed from %i to %i copies\n", copies.size(), compressed.size());
 	for (int i = 0; i < compressed.size(); i++) {
 		CUDA_CHECK(cudaMemcpyAsync(compressed[i].dest, compressed[i].src, compressed[i].size, direction, stream));
 	}
@@ -564,7 +559,7 @@ __device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 	return flops;
 }
 
-__device__  int long_range_interp(int nactive) {
+__device__ int long_range_interp(int nactive) {
 	const int& tid = threadIdx.x;
 	__shared__ extern int shmem_ptr[];
 	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
@@ -1121,27 +1116,14 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		host.fz = 0.0;
 		CUDA_CHECK(cudaMalloc(&kreturn, sizeof(kick_return)));
 		CUDA_CHECK(cudaMemcpy(kreturn, &host, sizeof(kick_return), cudaMemcpyHostToDevice));
-		/*		pctime = 0.0;
-		 pptime = 0.0;
-		 cctime = 0.0;
-		 Ltime = 0.0;
-		 chk2time = 0.0;
-		 chk1time = 0.0;
-		 acttime = 0.0;
-		 longtime = 0.0;
-		 kicktime = 0.0;
-		 branchtime = 0.0;
-		 totalflops = 0.0;*/
 		root = true;
 	} else {
 		root = false;
 	}
 	timer tmr;
 	tmr.start();
-//	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
-//cudaFuncCache pCacheConfig;
+	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
 	cudaDeviceSetCacheConfig (cudaFuncCachePreferShared);
-//	cudaDeviceGetCacheConfig(&pCacheConfig);
 	timer tm;
 	size_t nsources = 0;
 	size_t nsinks = 0;
@@ -1150,7 +1132,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	const size_t bigvol = bigbox.volume();
 	const size_t vol = box.volume();
 	int tree_size = 0;
-//	print("%i\n", bigvol);
+	PRINT("%i\n", bigvol);
 	for (i[0] = bigbox.begin[0]; i[0] != bigbox.end[0]; i[0]++) {
 		for (i[1] = bigbox.begin[1]; i[1] != bigbox.end[1]; i[1]++) {
 			for (i[2] = bigbox.begin[2]; i[2] != bigbox.end[2]; i[2]++) {
@@ -1164,7 +1146,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 			}
 		}
 	}
-//	PRINT("tree size = %e GB\n", tree_size / 1024 / 1024 / 1024.0);
+	PRINT("tree size = %e GB\n", tree_size / 1024 / 1024 / 1024.0);
 	auto phibox = box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		phibox.begin[dim] *= get_options().four_o_chain;
@@ -1179,12 +1161,12 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	int occupancy;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_fmmpm_kernel,WARP_SIZE, sizeof(fmmpm_shmem)));
-//	PRINT("Occupancy = %i\n", occupancy);
+	PRINT("Occupancy = %i\n", occupancy);
 	int num_blocks = 2 * occupancy * cuda_smp_count();
-//	PRINT("%e cells per block\n", (double ) box.volume() / num_blocks);
+	PRINT("%e cells per block\n", (double ) box.volume() / num_blocks);
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + sizeof(fmmpm_params);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
-//	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
+	PRINT("required = %li freemem = %li\n", mem_required, free_mem);
 	size_t value = CUDA_STACK_SIZE;
 	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
@@ -1203,11 +1185,11 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		kick_fmmpm(std::move(trees), child_boxes.second, min_rung, scale, t0, theta, first_call, full_eval, kreturn);
 	} else {
 		cuda_set_device();
-		//	PRINT("Data transfer\n");
+		PRINT("Data transfer\n");
 		tm.start();
 		fmmpm_params params;
 		params.allocate(nsources, nsinks, vol, bigvol, phibox.volume(), num_blocks);
-		tm.stop();
+//		tm.stop();
 //		PRINT("%e\n", tm.read());
 		tm.start();
 		params.kreturn = kreturn;
@@ -1354,20 +1336,20 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-//		PRINT("Transfer time %e\n", tm.read());
+PRINT("Transfer time %e\n", tm.read());
 		tm.reset();
 		tm.start();
-//		PRINT("Launching kernel\n");
+PRINT("Launching kernel\n");
 		CUDA_CHECK(cudaMemcpyToSymbol(dev_fmmpm_params, &params, sizeof(fmmpm_params)));
 		kick_fmmpm_kernel<<<num_blocks,WARP_SIZE,sizeof(fmmpm_shmem),stream>>>();
 
 		count = 0;
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-//		PRINT("%e\n", tm.read());
+PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
-//		PRINT("Transfer back\n");
+PRINT("Transfer back\n");
 		copies.resize(0);
 		count = 0;
 		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
@@ -1416,7 +1398,6 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		free(dev_tree_neighbors);
 		CUDA_CHECK(cudaStreamDestroy(stream));
 		tree_collection_destroy(all_trees);
-		tm.stop();
 	}
 	tmr.stop();
 	/*	const double gflops = totalflops / tmr.read() / 1024.0 / 1024.0 / 1024.0;
@@ -1439,6 +1420,8 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
 		PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
+		tm.stop();
+		PRINT( "%e\n", tm.read());
 	}
 	return host;
 }
