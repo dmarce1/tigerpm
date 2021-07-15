@@ -108,6 +108,15 @@ public:
 }
 ;
 
+
+struct tree_collection {
+	tree_node* nodes;
+	int* roots;
+};
+
+tree_collection tree_collection_create(const vector<tree>& trees);
+void tree_collection_destroy(tree_collection);
+
 tree tree_create(const array<int, NDIM>& cell_index, chaincell cell, int min_rung);
 
 #endif /* TREE_HPP_ */

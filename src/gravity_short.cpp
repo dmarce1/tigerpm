@@ -60,8 +60,8 @@ void gravity_short_ewald_compare(int Nsamples) {
 		g2 = sqrt(g2);
 		f1 = samples[i].p;
 		f2 = gm * results.first[i];
-		const double gerr = std::log(std::abs(g1/g2));
-		const double ferr = std::log(std::abs(f1/f2));
+		const double gerr = std::abs(std::log(std::abs(g1/g2)));
+		const double ferr = std::abs(std::log(std::abs(f1/f2)));
 		lerr_phi += sqr(ferr) / Nsamples;
 		lerr_force += sqr(gerr) / Nsamples;
 		lmax_phi = std::max(lmax_phi, ferr);

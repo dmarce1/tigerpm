@@ -36,7 +36,7 @@ static int sort(tree& t, const range<double>& box, int begin, int end, int depth
 		}
 		int nactive = 0;
 		for (int i = begin; i < end; i++) {
-			if( particles_rung(i) >= min_rung) {
+			if (particles_rung(i) >= min_rung) {
 				nactive++;
 			}
 		}
@@ -288,4 +288,40 @@ void tree::resize(int new_size) {
 	}
 	sz = new_size;
 }
+
+tree_collection tree_collection_create(const vector<tree>& trees) {
+	tree_collection collection;
+	vector<tree_node> nodes;
+	vector<int> roots;
+	int size = 0;
+	for (int i = 0; i < trees.size(); i++) {
+		size += trees[i].size();
+	}
+	nodes.resize(size);
+	roots.resize(trees.size());
+	int count = 0;
+	for (int i = 0; i < trees.size(); i++) {
+		roots[i] = count;
+		for (int j = 0; j < trees[i].size(); j++) {
+			tree_node node = trees[i].nodes[j];
+			if (node.children[0] != -1) {
+				node.children[0] += count;
+				node.children[1] += count;
+			}
+			nodes[count + j] = node;
+		}
+		count += trees[i].size();
+	}
+	CUDA_CHECK(cudaMalloc(&collection.nodes, sizeof(tree_node)*size));
+	CUDA_CHECK(cudaMalloc(&collection.roots, sizeof(int)*trees.size()));
+	CUDA_CHECK(cudaMemcpy(collection.nodes, nodes.data(), sizeof(tree_node)*size, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(collection.roots, roots.data(), sizeof(int)*trees.size(), cudaMemcpyHostToDevice));
+	return collection;
+}
+
+void tree_collection_destroy(tree_collection collection) {
+	CUDA_CHECK(cudaFree(collection.nodes));
+	CUDA_CHECK(cudaFree(collection.roots));
+}
+
 
