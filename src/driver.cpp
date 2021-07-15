@@ -97,6 +97,7 @@ void driver() {
 	tmr.start();
 	timer total_time;
 	total_time.start();
+	int this_iter = 0;
 	while (tau < tau_max) {
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
@@ -159,8 +160,11 @@ void driver() {
 		chain_time = 0.0;
 		kick_time = 0.0;
 		drift_time = 0.0;
-
 		tau += dt;
+		this_iter++;
+		if( this_iter > get_options().max_iter) {
+			break;
+		}
 	}
 
 }

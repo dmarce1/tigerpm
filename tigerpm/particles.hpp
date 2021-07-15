@@ -12,15 +12,22 @@
 #include <tigerpm/options.hpp>
 #include <tigerpm/range.hpp>
 
+
+
 #include <vector>
 
+
+
 #ifndef PARTICLES_CPP
-extern array<vector<fixed32>, NDIM> particles_X;
-extern array<vector<float>, NDIM> particles_U;
-extern vector<char> particles_R;
+#include <thrust/system/cuda/experimental/pinned_allocator.h>
+template<class T>
+using pinned_allocator = thrust::system::cuda::experimental::pinned_allocator< T >;
+extern array<vector<fixed32, pinned_allocator<fixed32>>, NDIM> particles_X;
+extern array<vector<float, pinned_allocator<float>>, NDIM> particles_U;
+extern vector<char, pinned_allocator<char>> particles_R;
 #ifdef FORCE_TEST
-extern vector<float> particles_P;
-extern array<vector<float>, NDIM> particles_G;
+extern vector<float, pinned_allocator<float>> particles_P;
+extern array<vector<float, pinned_allocator<float>>, NDIM> particles_G;
 #endif
 #endif
 
@@ -53,6 +60,7 @@ struct particle_pos {
 };
 
 int particles_size();
+void particles_destroy();
 void particles_resize(size_t new_size);
 void particles_resize_pos(size_t new_size);
 void particles_random_init();

@@ -13,6 +13,7 @@ struct options {
 	int four_o_chain;
 	int check_num;
 	int check_freq;
+	int max_iter;
 
 	double eta;
 	double sigma8;
@@ -33,6 +34,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & max_iter;
 		arc & check_num;
 		arc & check_freq;
 		arc & sigma8;

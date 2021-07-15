@@ -50,6 +50,7 @@ bool process_options(int argc, char *argv[]) {
 	("box_size", po::value<double>(&(opts.box_size))->default_value(1), "size of the computational domain in mpc") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49), "") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(130), "nparts^(1/3)") //
+	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "") //
 	("check_num", po::value<int>(&(opts.check_num))->default_value(-1), "") //
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "") //
 	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(3), "") //

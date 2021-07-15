@@ -5,6 +5,7 @@
 #include <tigerpm/test.hpp>
 #include <tigerpm/fixed.hpp>
 #include <tigerpm/util.hpp>
+#include <tigerpm/particles.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
@@ -15,7 +16,7 @@ int hpx_main(int argc, char *argv[]) {
 	} else {
 		driver();
 	}
-
+	particles_destroy();
 	return hpx::finalize();
 }
 

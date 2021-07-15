@@ -3,12 +3,16 @@
 #include <tigerpm/fixed.hpp>
 #include <unordered_map>
 
-array<vector<fixed32>, NDIM> particles_X;
-array<vector<float>, NDIM> particles_U;
-vector<char> particles_R;
+#include <thrust/system/cuda/experimental/pinned_allocator.h>
+template<class T>
+using pinned_allocator = thrust::system::cuda::experimental::pinned_allocator< T >;
+
+array<vector<fixed32, pinned_allocator<fixed32>>, NDIM> particles_X;
+array<vector<float, pinned_allocator<float>>, NDIM> particles_U;
+vector<char, pinned_allocator<char>> particles_R;
 #ifdef FORCE_TEST
-vector<float> particles_P;
-array<vector<float>, NDIM> particles_G;
+vector<float, pinned_allocator<float>> particles_P;
+array<vector<float, pinned_allocator<float>>, NDIM> particles_G;
 #endif
 static int local_size;
 
@@ -309,6 +313,20 @@ static void find_domains(domain_t* tree) {
 
 int particles_size() {
 	return X[0].size();
+}
+
+void particles_destroy() {
+	for (int dim = 0; dim < NDIM; dim++) {
+		particles_X[dim] = vector<fixed32, pinned_allocator < fixed32>>();
+		particles_U[dim] = vector<float, pinned_allocator<float>>();
+#ifdef FORCE_TEST
+		particles_G[dim] = vector<float, pinned_allocator<float>>();
+#endif
+	}
+	particles_R = vector<char, pinned_allocator<char>>();
+#ifdef FORCE_TEST
+	particles_P = vector<float, pinned_allocator<float>>();
+#endif
 }
 
 void particles_resize(size_t new_size) {
