@@ -81,7 +81,7 @@ struct checkitem {
 	int get_nactive() const {
 		return dev_fmmpm_params.trees.nodes[index].nactive;
 	}
-	__device__  inline fixed32 get_x(int dim) const {
+	__device__   inline fixed32 get_x(int dim) const {
 		return dev_fmmpm_params.trees.nodes[index].multi.x[dim];
 	}
 	__device__ inline
@@ -104,10 +104,10 @@ struct checkitem {
 	int get_snk_end() const {
 		return dev_fmmpm_params.trees.nodes[index].snk_end;
 	}
-	__device__  inline multipole get_multipole() const {
+	__device__   inline multipole get_multipole() const {
 		return dev_fmmpm_params.trees.nodes[index].multi.m;
 	}
-	__device__  inline array<checkitem, 2> get_children() {
+	__device__   inline array<checkitem, 2> get_children() {
 		const auto indices = dev_fmmpm_params.trees.nodes[index].children;
 		array<checkitem, 2> c;
 		c[0].index = indices[0];
@@ -135,11 +135,7 @@ void fmmpm_params::allocate(size_t source_size, size_t sink_size, size_t cell_co
 	CUDA_CHECK(cudaMalloc(&x, source_size * sizeof(fixed32)));
 	CUDA_CHECK(cudaMalloc(&y, source_size * sizeof(fixed32)));
 	CUDA_CHECK(cudaMalloc(&z, source_size * sizeof(fixed32)));
-	CUDA_CHECK(cudaMalloc(&velx, sink_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&vely, sink_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&velz, sink_size * sizeof(float)));
 	CUDA_CHECK(cudaMalloc(&lists, nblocks * sizeof(list_set)));
-	CUDA_CHECK(cudaMalloc(&rung, sink_size * sizeof(char)));
 	CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
 	CUDA_CHECK(cudaMalloc(&active, nblocks * sizeof(int) * SINK_BUCKET_SIZE));
 #ifdef FORCE_TEST
@@ -155,12 +151,8 @@ void fmmpm_params::free() {
 	CUDA_CHECK(cudaFree(x));
 	CUDA_CHECK(cudaFree(y));
 	CUDA_CHECK(cudaFree(z));
-	CUDA_CHECK(cudaFree(velx));
-	CUDA_CHECK(cudaFree(vely));
-	CUDA_CHECK(cudaFree(velz));
 	CUDA_CHECK(cudaFree(phi));
 	CUDA_CHECK(cudaFree(active));
-	CUDA_CHECK(cudaFree(rung));
 	CUDA_CHECK(cudaFree(lists));
 	CUDA_CHECK(cudaFree(tree_neighbors));
 #ifdef FORCE_TEST
@@ -1193,6 +1185,10 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 //		PRINT("%e\n", tm.read());
 		tm.start();
 		params.kreturn = kreturn;
+		params.velx = &particles_vel(XDIM, 0);
+		params.vely = &particles_vel(YDIM, 0);
+		params.velz = &particles_vel(ZDIM, 0);
+		params.rung = &particles_rung(0);
 		params.theta = theta;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
@@ -1280,36 +1276,6 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 			count += this_size;
 		}
 
-		count = 0;
-		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
-			for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
-				for (i[2] = box.begin[2]; i[2] != box.end[2]; i[2]++) {
-					auto this_cell = chainmesh_get(i);
-					const auto this_size = this_cell.pend - this_cell.pbegin;
-					const auto begin = this_cell.pbegin;
-					cpymem cpy;
-					const int l = box.index(i);
-					const int m = bigbox.index(i);
-					const auto dif = count - begin;
-					trees[m].adjust_snk_indexes(dif);
-					cpy.size = sizeof(float) * this_size;
-					cpy.dest = params.velx + count;
-					cpy.src = &particles_vel(XDIM, begin);
-					copies.push_back(cpy);
-					cpy.dest = params.vely + count;
-					cpy.src = &particles_vel(YDIM, begin);
-					copies.push_back(cpy);
-					cpy.dest = params.velz + count;
-					cpy.src = &particles_vel(ZDIM, begin);
-					copies.push_back(cpy);
-					cpy.size = sizeof(char) * this_size;
-					cpy.dest = params.rung + count;
-					cpy.src = &particles_rung(begin);
-					copies.push_back(cpy);
-					count += this_size;
-				}
-			}
-		}
 		tree_collection all_trees = tree_collection_create(trees);
 		params.trees = all_trees;
 		count = 0;
@@ -1336,7 +1302,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-//PRINT("Transfer time %e\n", tm.read());
+		PRINT("Transfer time %e\n", tm.read());
 		tm.reset();
 		tm.start();
 //PRINT("Launching kernel\n");
@@ -1351,47 +1317,6 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		tm.start();
 //PRINT("Transfer back\n");
 		copies.resize(0);
-		count = 0;
-		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
-			for (i[1] = box.begin[1]; i[1] != box.end[1]; i[1]++) {
-				for (i[2] = box.begin[2]; i[2] != box.end[2]; i[2]++) {
-					auto this_cell = chainmesh_get(i);
-					const auto this_size = this_cell.pend - this_cell.pbegin;
-					const auto begin = this_cell.pbegin;
-					cpymem cpy;
-					cpy.size = sizeof(float) * this_size;
-					cpy.src = params.velx + count;
-					cpy.dest = &particles_vel(XDIM, begin);
-					copies.push_back(cpy);
-					cpy.src = params.vely + count;
-					cpy.dest = &particles_vel(YDIM, begin);
-					copies.push_back(cpy);
-					cpy.src = params.velz + count;
-					cpy.dest = &particles_vel(ZDIM, begin);
-					copies.push_back(cpy);
-					cpy.size = sizeof(char) * this_size;
-					cpy.src = params.rung + count;
-					cpy.dest = &particles_rung(begin);
-					copies.push_back(cpy);
-#ifdef FORCE_TEST
-					cpy.size = sizeof(float) * this_size;
-					cpy.src = params.gx + count;
-					cpy.dest = &particles_gforce(XDIM, begin);
-					copies.push_back(cpy);
-					cpy.src = params.gy + count;
-					cpy.dest = &particles_gforce(YDIM, begin);
-					copies.push_back(cpy);
-					cpy.src = params.gz + count;
-					cpy.dest = &particles_gforce(ZDIM, begin);
-					copies.push_back(cpy);
-					cpy.src = params.pot + count;
-					cpy.dest = &particles_pot(begin);
-					copies.push_back(cpy);
-#endif
-					count += this_size;
-				}
-			}
-		}
 		process_copies(std::move(copies), cudaMemcpyDeviceToHost, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		params.free();
