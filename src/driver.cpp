@@ -4,23 +4,9 @@
 #include <tigerpm/gravity_long.hpp>
 #include <tigerpm/particles.hpp>
 #include <tigerpm/timer.hpp>
+#include <tigerpm/time.hpp>
+#include <tigerpm/checkpoint.hpp>
 
-using rung_type = std::int8_t;
-using time_type = std::uint64_t;
-
-inline time_type inc(time_type t, rung_type max_rung) {
-	t += (time_type(1) << time_type(64 - max_rung));
-	return t;
-}
-
-inline rung_type min_rung(time_type t) {
-	rung_type min_rung = 64;
-	while (((t & 1) == 0) && (min_rung != 0)) {
-		min_rung--;
-		t >>= 1;
-	}
-	return min_rung;
-}
 
 double cosmos_dadtau(double a) {
 	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
@@ -78,46 +64,6 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	tm.stop();
 	kick_time += tm.read();
 	return kr;
-}
-
-struct driver_params {
-	double a;
-	double tau;
-	double tau_max;
-	double cosmicK;
-	double esum0;
-	int iter;
-	size_t total_processed;
-	double runtime;
-	time_type itime;
-};
-
-void write_checkpoint(driver_params params) {
-	PRINT("Writing checkpoint\n");
-	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string(".dat");
-	FILE* fp = fopen(fname.c_str(), "wb");
-	if (fp == nullptr) {
-		PRINT("Unable to open %s for writing.\n", fname.c_str());
-		abort();
-	}
-	fwrite(&params, sizeof(driver_params), 1, fp);
-	particles_save(fp);
-
-	fclose(fp);
-}
-
-void read_checkpoint(driver_params& params, int checknum) {
-	PRINT("Reading checkpoint\n");
-	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string(".dat");
-	FILE* fp = fopen(fname.c_str(), "rb");
-	if (fp == nullptr) {
-		PRINT("Unable to open %s for reading.\n", fname.c_str());
-		abort();
-	}
-	FREAD(&params, sizeof(driver_params), 1, fp);
-	particles_load(fp);
-
-	fclose(fp);
 }
 
 void driver() {

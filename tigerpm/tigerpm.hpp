@@ -29,14 +29,14 @@
 #define TREEPM_BLOCK_SIZE 32
 #define TREEPM_OVERSUBSCRIPTION 4
 
-#define SINK_BUCKET_SIZE 128
+#define SINK_BUCKET_SIZE 64
 #define SOURCE_BUCKET_SIZE 64
 
 #define MAX_RUNG 32
 #define NINTERP 6
 #define CHAIN_BW 2
 #define NCELLS ((2*CHAIN_BW+1)*(2*CHAIN_BW+1)*(2*CHAIN_BW+1))
-#define KICK_PP_MAX (4*32)
+#define KICK_PP_MAX (32*32)
 
 #define NCHILD 2
 #define PHI_BW 4

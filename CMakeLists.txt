@@ -15,6 +15,7 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 
 set(tigerpm_source_files
 	src/chainmesh.cpp
+	src/checkpoint.cpp
     src/cuda.cpp
     src/driver.cpp
     src/drift.cpp
@@ -40,6 +41,7 @@ set(tigerpm_source_files
 
 set(tigerpm_header_files
 	tigerpm/chainmesh.hpp
+	tigerpm/checkpoint.hpp
 	tigerpm/containers.hpp
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
@@ -58,6 +60,7 @@ set(tigerpm_header_files
 	tigerpm/stack_vector.hpp
 	tigerpm/test.hpp
 	tigerpm/tigerpm.hpp
+	tigerpm/time.hpp
 	tigerpm/timer.hpp
 	tigerpm/tree.hpp
 	tigerpm/util.hpp
@@ -82,7 +85,7 @@ set_property(TARGET tigerpm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(tigerpm PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_options(tigerpm PUBLIC "-DUSE_HPX")
 target_compile_options(tigerpm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math  --maxrregcount 128;
+                        --use_fast_math ;
                         >)
                         
 set_property(TARGET tigerpm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})

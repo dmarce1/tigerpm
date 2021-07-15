@@ -1139,7 +1139,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	timer tmr;
 	tmr.start();
-//	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
+	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
 //cudaFuncCache pCacheConfig;
 	cudaDeviceSetCacheConfig (cudaFuncCachePreferShared);
 //	cudaDeviceGetCacheConfig(&pCacheConfig);
@@ -1180,8 +1180,8 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	int occupancy;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_fmmpm_kernel,WARP_SIZE, sizeof(fmmpm_shmem)));
-//	PRINT("Occupancy = %i\n", occupancy);
-	int num_blocks = occupancy * cuda_smp_count();
+	PRINT("Occupancy = %i\n", occupancy);
+	int num_blocks = 2 * occupancy * cuda_smp_count();
 //	PRINT("%e cells per block\n", (double ) box.volume() / num_blocks);
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + sizeof(fmmpm_params);
 	const size_t free_mem = (size_t) 85 * cuda_free_mem() / size_t(100);
@@ -1370,20 +1370,20 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		process_copies(std::move(copies), cudaMemcpyHostToDevice, stream);
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-//		PRINT("Transfer time %e\n", tm.read());
+		PRINT("Transfer time %e\n", tm.read());
 		tm.reset();
 		tm.start();
-//		PRINT("Launching kernel\n");
+		PRINT("Launching kernel\n");
 		CUDA_CHECK(cudaMemcpyToSymbol(dev_fmmpm_params, &params, sizeof(fmmpm_params)));
 		kick_fmmpm_kernel<<<num_blocks,WARP_SIZE,sizeof(fmmpm_shmem),stream>>>();
 
 		count = 0;
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		tm.stop();
-//		PRINT("%e\n", tm.read());
+		PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
-//		PRINT("Transfer back\n");
+		PRINT("Transfer back\n");
 		copies.resize(0);
 		count = 0;
 		for (i[0] = box.begin[0]; i[0] != box.end[0]; i[0]++) {
@@ -1454,7 +1454,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	if (root) {
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
-//		PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
+		PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
 	}
 	return host;
 }
