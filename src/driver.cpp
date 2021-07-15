@@ -61,11 +61,15 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	tm.stop();
 	gravity_long_time += tm.read();
 	tm.reset();
+
 	tm.start();
 	chainmesh_create();
+
 	chainmesh_exchange_begin();
+
 	chainmesh_exchange_end();
 	tm.stop();
+
 	chain_time += tm.read();
 	tm.reset();
 	tm.start();
@@ -197,12 +201,19 @@ void driver() {
 		runtime += total_time.read();
 		double pps = total_processed / runtime;
 		PRINT("%12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n", iter - 1, z,
-				tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, domain_time / iter, gravity_long_time / iter,
-				chain_time / iter, kick_time / iter, drift_time / iter, total_time.read(), pps);
+				tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, domain_time, gravity_long_time, chain_time,
+				kick_time, drift_time, total_time.read(), (double ) kr.nactive / total_time.read());
 		total_time.reset();
 		total_time.start();
 		//	PRINT( "%e\n", total_time.read() - gravity_long_time - chain_time - kick_time - drift_time - domain_time);
 		itime = inc(itime, kr.max_rung);
+
+		gravity_long_time = 0.0;
+		domain_time = 0.0;
+		chain_time = 0.0;
+		kick_time = 0.0;
+		drift_time = 0.0;
+
 		tau += dt;
 	}
 

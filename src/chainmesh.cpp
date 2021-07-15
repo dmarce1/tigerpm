@@ -6,11 +6,10 @@
 struct indices_hash {
 	inline size_t operator()(const array<int, NDIM>& indices) const {
 		std::hash<int> ihash;
-		size_t hash = 0;
-		for (int dim = 0; dim < NDIM; dim++) {
-			hash ^= ihash(indices[dim]) << (dim * 10);
-		}
-		return hash;
+		size_t hash1 = 1664525LL * indices[0] + 1013904223LL;
+		size_t hash2 = 22695477LL * indices[1] + 1LL;
+		size_t hash3 = 134775813LL * indices[1] + 1LL;
+		return hash1 ^ hash2 ^ hash3;
 	}
 };
 
@@ -28,15 +27,14 @@ struct indices_equal {
 };
 
 using cell_map_type = std::unordered_map<array<int,NDIM>, chaincell, indices_hash, indices_equal>;
-using part_map_type = std::unordered_map<array<int,NDIM>, std::vector<particle_pos>, indices_hash, indices_equal>;
-
+using bnd_element_type = std::pair<array<int,NDIM>,vector<particle_pos>>;
 static cell_map_type cells;
-static part_map_type bnd_parts;
+static vector<bnd_element_type> bnd_parts;
 static mutex_type mutex;
 static range<int> mybox;
 
 static void sort(const range<int> chain_box, int pbegin, int pend);
-static void transmit_chain_particles(array<int, NDIM>, vector<particle_pos>);
+static void transmit_chain_particles(vector<bnd_element_type>);
 
 HPX_PLAIN_ACTION(chainmesh_create);
 HPX_PLAIN_ACTION(chainmesh_exchange_begin);
@@ -50,9 +48,11 @@ chaincell chainmesh_get(const array<int, NDIM>& i) {
 	return cells[i];
 }
 
-static void transmit_chain_particles(array<int, NDIM> celli, vector<particle_pos> parts) {
+static void transmit_chain_particles(vector<bnd_element_type> parts) {
 	std::lock_guard<mutex_type> lock(mutex);
-	bnd_parts[celli] = std::move(parts);
+	for (int i = 0; i < parts.size(); i++) {
+		bnd_parts.push_back(parts[i]);
+	}
 }
 
 void chainmesh_exchange_begin() {
@@ -64,7 +64,7 @@ void chainmesh_exchange_begin() {
 	vector<range<int>> allboxes(hpx_size());
 	find_all_boxes(allboxes, N);
 	const auto myvol = mybox.volume();
-	spinlock_type this_mutex;
+	mutex_type this_mutex;
 	for (int rank = 0; rank < allboxes.size(); rank++) {
 		const auto box = allboxes[rank];
 		array<int, NDIM> si;
@@ -78,8 +78,9 @@ void chainmesh_exchange_begin() {
 						std::vector<hpx::future<void>> these_futs;
 						for (i[0] = inter.begin[0]; i[0] != inter.end[0]; i[0]++) {
 							for (i[1] = inter.begin[1]; i[1] != inter.end[1]; i[1]++) {
-								for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
-									these_futs.push_back(hpx::async([i,si,&futs,rank,&this_mutex]() {
+								these_futs.push_back(hpx::async([inter,si,&futs,rank,&this_mutex](array<int,NDIM> i) {
+									vector<bnd_element_type> many_parts;
+									for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
 										assert(cells.find(i) != cells.end());
 										vector<particle_pos> parts;
 										const auto& cell = cells[i];
@@ -93,12 +94,13 @@ void chainmesh_exchange_begin() {
 										for (int dim = 0; dim < NDIM; dim++) {
 											j[dim] -= si[dim];
 										}
-										auto fut = hpx::async<transmit_chain_particles_action>(hpx_localities()[rank], j,
-												std::move(parts));
-										std::lock_guard<spinlock_type> lock(this_mutex);
-										futs.push_back(std::move(fut));
-									}));
-								}
+										many_parts.push_back(std::make_pair(j,std::move(parts)));
+									}
+									auto fut = hpx::async<transmit_chain_particles_action>(hpx_localities()[rank],
+											std::move(many_parts));
+									std::lock_guard<mutex_type> lock(this_mutex);
+									futs.push_back(std::move(fut));
+								}, i));
 							}
 						}
 						hpx::wait_all(these_futs.begin(), these_futs.end());
@@ -122,15 +124,18 @@ void chainmesh_exchange_end() {
 		cells[i->first].pend = count;
 		particles_resize_pos(count);
 	}
-	for (auto i = bnd_parts.begin(); i != bnd_parts.end(); i++) {
-		auto celli = i->first;
-		auto func = [celli](std::vector<particle_pos> parts) {
-			const auto cell = cells[celli];
-			for( int i = cell.pbegin; i != cell.pend; i++) {
-				particles_set_particle_pos(parts[i - cell.pbegin], i);
+	const int nthreads = hpx::thread::hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		auto func = [proc, nthreads]() {
+			for (auto i = proc; i < bnd_parts.size(); i+=nthreads) {
+				auto celli = bnd_parts[i].first;
+				const auto cell = cells[celli];
+				for( int j = cell.pbegin; j != cell.pend; j++) {
+					particles_set_particle_pos(bnd_parts[i].second[j - cell.pbegin], j);
+				}
 			}
 		};
-		futs.push_back(hpx::async(func, std::move(i->second)));
+		futs.push_back(hpx::async(func));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	bnd_parts = decltype(bnd_parts)();
@@ -143,6 +148,7 @@ void chainmesh_create() {
 	}
 	static int N = get_options().chain_dim;
 	mybox = find_my_box(N);
+	cells = decltype(cells)();
 	sort(mybox, 0, particles_size());
 #ifndef NDEBUG
 	for (auto i = cells.begin(); i != cells.end(); i++) {
