@@ -65,6 +65,8 @@ void particles_resize(size_t new_size);
 void particles_resize_pos(size_t new_size);
 void particles_random_init();
 void particles_domain_sort();
+int particles_nactive(int begin, int end, int rung);
+bool particles_has_active(int begin, int end, int rung);
 range<int> particles_get_local_box();
 int particles_local_size();
 vector<int> particles_per_rank();

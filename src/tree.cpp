@@ -44,8 +44,8 @@ static int sort(tree& t, const range<double>& box, int begin, int end, int depth
 		for (int i = begin; i < end; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const auto x = particles_pos(dim, i).to_double();
-				assert(x <= box.end[dim]);
-				assert(x >= box.begin[dim]);
+				assert(x <= 1.0000001 * box.end[dim]);
+				assert(x >= 0.9999999 * box.begin[dim]);
 				xmax[dim] = std::max(xmax[dim], x);
 				xmin[dim] = std::min(xmin[dim], x);
 			}
@@ -200,6 +200,28 @@ tree tree_create(const array<int, NDIM>& cell_index, chaincell cell, int min_run
 	return new_tree;
 }
 
+tree tree_create_stub() {
+	tree new_tree;
+	tree_node node;
+	int index = new_tree.allocate();
+	node.src_begin = 0;
+	node.src_end = 0;
+	node.children[0] = -1;
+	node.children[1] = -1;
+	node.nactive = 0;
+	for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+		node.multi.m[i] = 0;
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		node.multi.x[dim] = 0.0;
+	}
+	node.radius = 0.0;
+	node.snk_begin = node.src_begin;
+	node.snk_end = node.src_end;
+	new_tree.set(node, index);
+	return new_tree;
+}
+
 tree::tree() {
 	nodes = nullptr;
 	sz = cap = 0;
@@ -312,10 +334,10 @@ tree_collection tree_collection_create(const vector<tree>& trees) {
 		}
 		count += trees[i].size();
 	}
-	CUDA_CHECK(cudaMalloc(&collection.nodes, sizeof(tree_node)*size));
-	CUDA_CHECK(cudaMalloc(&collection.roots, sizeof(int)*trees.size()));
-	CUDA_CHECK(cudaMemcpy(collection.nodes, nodes.data(), sizeof(tree_node)*size, cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(collection.roots, roots.data(), sizeof(int)*trees.size(), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMalloc(&collection.nodes, sizeof(tree_node) * size));
+	CUDA_CHECK(cudaMalloc(&collection.roots, sizeof(int) * trees.size()));
+	CUDA_CHECK(cudaMemcpy(collection.nodes, nodes.data(), sizeof(tree_node) * size, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(collection.roots, roots.data(), sizeof(int) * trees.size(), cudaMemcpyHostToDevice));
 	return collection;
 }
 
@@ -323,5 +345,4 @@ void tree_collection_destroy(tree_collection collection) {
 	CUDA_CHECK(cudaFree(collection.nodes));
 	CUDA_CHECK(cudaFree(collection.roots));
 }
-
 

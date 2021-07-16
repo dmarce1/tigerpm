@@ -41,7 +41,6 @@ set(tigerpm_source_files
 
 set(tigerpm_header_files
 	tigerpm/chainmesh.hpp
-	tigerpm/checkpoint.hpp
 	tigerpm/containers.hpp
 	tigerpm/complex.hpp
 	tigerpm/cuda.hpp
@@ -60,7 +59,6 @@ set(tigerpm_header_files
 	tigerpm/stack_vector.hpp
 	tigerpm/test.hpp
 	tigerpm/tigerpm.hpp
-	tigerpm/time.hpp
 	tigerpm/timer.hpp
 	tigerpm/tree.hpp
 	tigerpm/util.hpp

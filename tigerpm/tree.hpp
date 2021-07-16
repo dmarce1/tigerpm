@@ -118,5 +118,6 @@ tree_collection tree_collection_create(const vector<tree>& trees);
 void tree_collection_destroy(tree_collection);
 
 tree tree_create(const array<int, NDIM>& cell_index, chaincell cell, int min_rung);
+tree tree_create_stub();
 
 #endif /* TREE_HPP_ */

@@ -1114,7 +1114,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	timer tmr;
 	tmr.start();
-//	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
+	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
 	cudaDeviceSetCacheConfig (cudaFuncCachePreferShared);
 	timer tm;
 	size_t nsources = 0;

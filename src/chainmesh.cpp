@@ -180,8 +180,8 @@ static void sort(const range<int> chain_box, int pbegin, int pend) {
 	for (int i = pbegin; i < pend; i++) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			const auto x = particles_pos(dim, i).to_double();
-			assert(x >= chain_box.begin[dim] * Ninv);
-			assert(x <= chain_box.end[dim] * Ninv);
+			assert(x >= 0.9999999*chain_box.begin[dim] * Ninv);
+			assert(x <= 1.0000001*chain_box.end[dim] * Ninv);
 		}
 	}
 #endif

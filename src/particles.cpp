@@ -315,9 +315,29 @@ int particles_size() {
 	return X[0].size();
 }
 
+int particles_nactive(int begin, int end, int rung) {
+	int count = 0;
+	for (int i = begin; i < end; i++) {
+		if (particles_rung(i) >= rung) {
+			count++;
+		}
+	}
+	return count;
+}
+
+bool particles_has_active(int begin, int end, int rung) {
+	int count = 0;
+	for (int i = begin; i < end; i++) {
+		if (particles_rung(i) >= rung) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void particles_destroy() {
 	for (int dim = 0; dim < NDIM; dim++) {
-		particles_X[dim] = vector<fixed32, pinned_allocator < fixed32>>();
+		particles_X[dim] = vector<fixed32, pinned_allocator<fixed32>>();
 		particles_U[dim] = vector<float, pinned_allocator<float>>();
 #ifdef FORCE_TEST
 		particles_G[dim] = vector<float, pinned_allocator<float>>();
