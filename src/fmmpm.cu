@@ -151,12 +151,6 @@ void fmmpm_params::allocate(size_t source_size, size_t sink_size, size_t cell_co
 	CUDA_CHECK(cudaMalloc(&lists, nblocks * sizeof(list_set)));
 	CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
 	CUDA_CHECK(cudaMalloc(&active, nblocks * sizeof(int) * SINK_BUCKET_SIZE));
-#ifdef FORCE_TEST
-	CUDA_CHECK(cudaMalloc(&gx, source_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&gy, source_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&gz, source_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&pot, source_size * sizeof(float)));
-#endif
 }
 void fmmpm_params::free() {
 	CUDA_CHECK(cudaFree(current_index));
