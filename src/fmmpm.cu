@@ -12,6 +12,18 @@
 
 #include <algorithm>
 
+__managed__ double pctime = 0.0;
+__managed__ double pptime = 0.0;
+__managed__ double cctime = 0.0;
+__managed__ double Ltime = 0.0;
+__managed__ double chk2time = 0.0;
+__managed__ double chk1time = 0.0;
+__managed__ double acttime = 0.0;
+__managed__ double kicktime = 0.0;
+__managed__ double branchtime = 0.0;
+__managed__ double longtime = 0.0;
+
+
 __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
@@ -42,6 +54,7 @@ struct fmmpm_params {
 	bool do_phi;
 	float rs;
 	float rcut;
+	float rcut2;
 	float GM;
 	float eta;
 	float t0;
@@ -266,7 +279,7 @@ inline __device__ int compute_pp_interaction(float dx, float dy, float dz, float
 	const float& h2inv = params.h2inv;
 	const float& h3inv = params.h3inv;
 	const float& inv2rs = params.inv2rs;
-	const float rcut2 = sqr(params.rcut);
+	const float& rcut2 = params.rcut2;
 	float rinv, rinv3;
 	const float r2 = sqr(dx, dy, dz);
 	flops += 1;
@@ -668,7 +681,7 @@ __device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed3
 		__trap();
 	}
 	int flops = 0;
-//	auto tm = clock64();
+	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	__shared__ extern int shmem_ptr[];
@@ -697,8 +710,8 @@ __device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed3
 	for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
 		Lexpansion[i] = Ltmp[i];
 	}
-//	atomicAdd(&Ltime, (double) (clock64() - tm));
-//	tm = clock64();
+	atomicAdd(&Ltime, (double) (clock64() - tm));
+	tm = clock64();
 	if (tid == 0) {
 		flops += 1456 + params.do_phi * 220;
 		multilist.resize(0);
@@ -806,13 +819,13 @@ __device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed3
 		__syncwarp();
 
 	} while (iamleaf && checklist.size());
-//	atomicAdd(&chk1time, (double) (clock64() - tm));
-//	tm = clock64();
+	atomicAdd(&chk1time, (double) (clock64() - tm));
+	tm = clock64();
 	flops += cc_interactions(mycheck, Lexpansion);
-//	atomicAdd(&cctime, (double) (clock64() - tm));
+	atomicAdd(&cctime, (double) (clock64() - tm));
 
 	if (iamleaf) {
-//		tm = clock64();
+		tm = clock64();
 		const auto snk_begin = mycheck.get_snk_begin();
 		const auto snk_end = mycheck.get_snk_end();
 		const int nsinks = snk_end - snk_begin;
@@ -838,12 +851,12 @@ __device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed3
 			nactive += total;
 			__syncwarp();
 		}
-//		atomicAdd(&acttime, (double) (clock64() - tm));
-//		tm = clock64();
+		atomicAdd(&acttime, (double) (clock64() - tm));
+		tm = clock64();
 
 		flops += long_range_interp(nactive);
-//		atomicAdd(&longtime, (double) (clock64() - tm));
-//		tm = clock64();
+		atomicAdd(&longtime, (double) (clock64() - tm));
+		tm = clock64();
 		__syncwarp();
 		if (tid == 0) {
 			pplist.resize(0);
@@ -904,15 +917,15 @@ __device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed3
 			}
 
 		}
-//		atomicAdd(&chk2time, (double) (clock64() - tm));
-//		tm = clock64();
+		atomicAdd(&chk2time, (double) (clock64() - tm));
+		tm = clock64();
 
 		flops += pc_interactions(nactive);
-//		atomicAdd(&pctime, (double) (clock64() - tm));
-//		tm = clock64();
+		atomicAdd(&pctime, (double) (clock64() - tm));
+		tm = clock64();
 		flops += pp_interactions(nactive);
-//		atomicAdd(&pptime, (double) (clock64() - tm));
-//		tm = clock64();
+		atomicAdd(&pptime, (double) (clock64() - tm));
+		tm = clock64();
 		int max_rung = -1;
 		float pot = 0.0f;
 		float fx = 0.f;
@@ -997,9 +1010,9 @@ __device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed3
 				atomicAdd(&params.kreturn->fnorm, fnorm);
 			}
 		}
-//		atomicAdd(&kicktime, (double) (clock64() - tm));
+		atomicAdd(&kicktime, (double) (clock64() - tm));
 	} else {
-//		tm = clock64();
+		tm = clock64();
 		const auto children = mycheck.get_children();
 		__syncwarp();
 		array<fixed32, NDIM> X;
@@ -1113,7 +1126,6 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		root = false;
 	}
 	timer tmr;
-	tmr.start();
 	PRINT("shmem size = %i\n", sizeof(fmmpm_shmem));
 	cudaDeviceSetCacheConfig (cudaFuncCachePreferShared);
 	timer tm;
@@ -1194,6 +1206,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		params.rs = get_options().rs;
 		params.do_phi = full_eval;
 		params.rcut = (double) CHAIN_BW / get_options().chain_dim;
+		params.rcut2 = sqr(params.rcut);
 		params.hsoft = get_options().hsoft;
 		params.phi0 = std::pow(get_options().parts_dim, NDIM) * 4.0 * M_PI * sqr(params.rs) - SELF_PHI / params.hsoft;
 //		PRINT("RCUT = %e RS\n", params.rcut / params.rs);
@@ -1305,13 +1318,15 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		PRINT("Transfer time %e\n", tm.read());
 		tm.reset();
 		tm.start();
+		tmr.start();
 //PRINT("Launching kernel\n");
 		CUDA_CHECK(cudaMemcpyToSymbol(dev_fmmpm_params, &params, sizeof(fmmpm_params)));
 		kick_fmmpm_kernel<<<num_blocks,WARP_SIZE,sizeof(fmmpm_shmem),stream>>>();
 
 		count = 0;
 		CUDA_CHECK(cudaStreamSynchronize(stream));
-		tm.stop();
+		tmr.stop();
+					tm.stop();
 //PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
@@ -1324,8 +1339,6 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		CUDA_CHECK(cudaStreamDestroy(stream));
 		tree_collection_destroy(all_trees);
 	}
-	tmr.stop();
-	/*	const double gflops = totalflops / tmr.read() / 1024.0 / 1024.0 / 1024.0;
 	 PRINT("Timings\n");
 	 double total_time = pctime + cctime + pptime + Ltime + chk1time + chk2time + acttime + longtime + kicktime + branchtime;
 	 PRINT("PC  %e\n", pctime / total_time);
@@ -1338,13 +1351,12 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	 PRINT("LNG %e\n", longtime / total_time);
 	 PRINT("KCK %e\n", kicktime / total_time);
 	 PRINT("BRC %e\n", branchtime / total_time);
-	 PRINT("GFLOPS = %e\n", gflops);*/
 
 	kick_return host;
 	if (root) {
 		CUDA_CHECK(cudaMemcpy(&host, kreturn, sizeof(kick_return), cudaMemcpyDeviceToHost));
 		CUDA_CHECK(cudaFree(kreturn));
-		//PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
+		PRINT("GFLOPS = %e\n", host.flops / 1024.0 / 1024.0 / 1024.0 / tmr.read());
 		tm.stop();
 		//PRINT( "%e\n", tm.read());
 	}

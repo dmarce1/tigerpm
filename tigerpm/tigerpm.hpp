@@ -37,6 +37,7 @@
 #define CHAIN_BW 2
 #define NCELLS ((2*CHAIN_BW+1)*(2*CHAIN_BW+1)*(2*CHAIN_BW+1))
 #define KICK_PP_MAX (37*32)
+#define KICK_PC_MAX (4*32)
 
 #define NCHILD 2
 #define PHI_BW 4
