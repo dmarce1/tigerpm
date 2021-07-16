@@ -82,7 +82,7 @@ struct checkitem {
 	int get_nactive() const {
 		return dev_fmmpm_params.trees.nodes[index].nactive;
 	}
-	__device__       inline fixed32 get_x(int dim) const {
+	__device__         inline fixed32 get_x(int dim) const {
 		return dev_fmmpm_params.trees.nodes[index].multi.x[dim];
 	}
 	__device__ inline
@@ -105,10 +105,10 @@ struct checkitem {
 	int get_snk_end() const {
 		return dev_fmmpm_params.trees.nodes[index].snk_end;
 	}
-	__device__       inline multipole get_multipole() const {
+	__device__         inline multipole get_multipole() const {
 		return dev_fmmpm_params.trees.nodes[index].multi.m;
 	}
-	__device__       inline array<checkitem, 2> get_children() {
+	__device__         inline array<checkitem, 2> get_children() {
 		const auto indices = dev_fmmpm_params.trees.nodes[index].children;
 		array<checkitem, 2> c;
 		c[0].index = indices[0];
@@ -316,6 +316,7 @@ __device__ int pp_interactions(int nactive) {
 	if (list.size() == 0) {
 		return 0;
 	}
+	int n = 0;
 	auto these_parts_begin = list[i].get_src_begin();
 	auto these_parts_end = list[i].get_src_end();
 	while (i < list.size()) {
@@ -375,6 +376,7 @@ __device__ int pp_interactions(int nactive) {
 				const float dz = distance(sink_z, src_z);
 				flops += 3;
 				flops += compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
+				n++;
 			}
 		}
 		__syncwarp();
@@ -395,6 +397,7 @@ __device__ int pp_interactions(int nactive) {
 				const float dz = distance(sink_z, src_z);
 				flops += 3;
 				flops += compute_pp_interaction(dx, dy, dz, g[XDIM], g[YDIM], g[ZDIM], phi);
+				n++;
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				shared_reduce_add(g[dim]);
@@ -411,6 +414,10 @@ __device__ int pp_interactions(int nactive) {
 			__syncwarp();
 		}
 	}
+	shared_reduce_add(n);
+	if( tid == 0 ) {
+		atomicAdd(&params.kreturn->pp, (double) n);
+	}
 	return flops;
 }
 
@@ -422,7 +429,7 @@ __device__ int pc_interactions(int nactive) {
 	fmmpm_shmem& shmem = (fmmpm_shmem&) (*shmem_ptr);
 	const fmmpm_params& params = dev_fmmpm_params;
 	const auto& list = (params.lists + bid)->multilist;
-
+	int n = 0;
 	int kmid;
 	if (nactive % warpSize < warpSize / 8) {
 		kmid = nactive - nactive % warpSize;
@@ -452,6 +459,7 @@ __device__ int pc_interactions(int nactive) {
 			}
 			flops += greens_function(D, dx, dy, dz, params.inv2rs);
 			flops += M2L_kernel(L, M, D, params.do_phi);
+			n++;
 		}
 		g[XDIM] -= L[XDIM + 1];
 		g[YDIM] -= L[YDIM + 1];
@@ -481,6 +489,7 @@ __device__ int pc_interactions(int nactive) {
 			}
 			flops += greens_function(D, dx, dy, dz, params.inv2rs);
 			flops += M2L_kernel(L, M, D, params.do_phi);
+			n++;
 		}
 		for (int P = warpSize / 2; P >= 1; P /= 2) {
 			for (int i = 0; i < NDIM + 1; i++) {
@@ -495,6 +504,10 @@ __device__ int pc_interactions(int nactive) {
 		}
 	}
 	__syncwarp();
+	shared_reduce_add(n);
+	if( tid == 0 ) {
+		atomicAdd(&params.kreturn->pc, (double) n);
+	}
 	return flops;
 }
 
@@ -508,6 +521,7 @@ __device__ int cp_interactions(checkitem mycheck, expansion& Lexpansion) {
 	const auto& list = (params.lists + bid)->cplist;
 	int i = 0;
 	int N = 0;
+	int n = 0;
 	int part_index;
 	if (list.size() == 0) {
 		return 0;
@@ -566,6 +580,7 @@ __device__ int cp_interactions(checkitem mycheck, expansion& Lexpansion) {
 			const float dz = distance(sink_z, src_z);
 			flops += 3;
 			flops += greens_function(L, dx, dy, dz, params.inv2rs);
+			n++;
 		}
 		for (int P = warpSize / 2; P >= 1; P /= 2) {
 			for (int i = 0; i < EXPANSION_SIZE; i++) {
@@ -576,7 +591,10 @@ __device__ int cp_interactions(checkitem mycheck, expansion& Lexpansion) {
 			Lexpansion[i] += L[i];
 		}
 	}
-
+	shared_reduce_add(n);
+	if( tid == 0 ) {
+		atomicAdd(&params.kreturn->cp, (double) n);
+	}
 	return flops;
 }
 
@@ -587,7 +605,7 @@ __device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 	__shared__ extern int shmem_ptr[];
 	const fmmpm_params& params = dev_fmmpm_params;
 	const auto& list = (params.lists + bid)->multilist;
-
+	int n = 0;
 	expansion L;
 	const fixed32 sink_x = mycheck.get_x(XDIM);
 	const fixed32 sink_y = mycheck.get_x(YDIM);
@@ -610,6 +628,7 @@ __device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 		}
 		flops += greens_function(D, dx, dy, dz, params.inv2rs);
 		flops += M2L_kernel(L, M, D, params.do_phi);
+		n++;
 	}
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
@@ -620,6 +639,10 @@ __device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 		Lexpansion[i] += L[i];
 	}
 	__syncwarp();
+	shared_reduce_add(n);
+	if( tid == 0 ) {
+		atomicAdd(&params.kreturn->cc, (double) n);
+	}
 	return flops;
 }
 
@@ -809,12 +832,12 @@ __device__ void do_kick(size_t stack, checkitem mycheck, int depth, array<fixed3
 				const float dz = distance(sink_z, src_z);
 				const float R2 = sqr(dx, dy, dz);
 				const bool veryfar = R2 > sqr(myradius + source_radius + params.rcut);
-				const bool far = R2 > sqr(myradius + source_radius) * theta2inv;
-				const bool far2 = R2 > sqr(myradius * thetainv + source_radius);
+				const bool far1 = R2 > sqr(myradius * 1.5 + source_radius) * theta2inv;
+				const bool far2 = R2 > sqr(myradius * 1.5 * thetainv + source_radius);
 				if (!veryfar) {
-					if (far) {
+					if (far1) {
 						multi = true;
-					} else if (far2 && source_isleaf) {
+					} else if (far2 &&  source_isleaf) {
 						cp = true;
 					} else if (!source_isleaf) {
 						next = true;
@@ -1201,9 +1224,14 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		host.flops = 0;
 		host.pot = 0.0;
 		host.fnorm = 0.0;
+		host.nactive = 0;
 		host.fx = 0.0;
 		host.fy = 0.0;
 		host.fz = 0.0;
+		host.pp = 0.0;
+		host.pc = 0.0;
+		host.cp = 0.0;
+		host.cc = 0.0;
 		CUDA_CHECK(cudaMalloc(&kreturn, sizeof(kick_return)));
 		CUDA_CHECK(cudaMemcpy(kreturn, &host, sizeof(kick_return), cudaMemcpyHostToDevice));
 		root = true;

@@ -99,6 +99,11 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 	tm.stop();
 //	PRINT("FMM took %e s\n", tm.read());
 	kr.nactive = size_t(total_active);
+	PRINT("PP : %e\n",kr.pp / total_active);
+	PRINT("PC : %e\n", kr.pc / total_active);
+	PRINT("CP : %e\n", kr.cp / total_active);
+	PRINT("CC : %e\n", kr.cc / total_active);
+
 	for (auto& f : futs) {
 		auto this_kr = f.get();
 		kr.max_rung = std::max(kr.max_rung, this_kr.max_rung);
@@ -109,6 +114,10 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 		kr.fz += this_kr.fz;
 		kr.fnorm += this_kr.fnorm;
 		kr.nactive = this_kr.nactive;
+		kr.pp += this_kr.pp;
+		kr.pc += this_kr.pc;
+		kr.cp += this_kr.cp;
+		kr.cc += this_kr.cc;
 	}
 	return kr;
 }
