@@ -168,12 +168,6 @@ void fmmpm_params::free() {
 	CUDA_CHECK(cudaFree(active));
 	CUDA_CHECK(cudaFree(lists));
 	CUDA_CHECK(cudaFree(tree_neighbors));
-#ifdef FORCE_TEST
-	CUDA_CHECK(cudaFree(gx));
-	CUDA_CHECK(cudaFree(gy));
-	CUDA_CHECK(cudaFree(gz));
-	CUDA_CHECK(cudaFree(pot));
-#endif
 }
 
 static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, int phivol) {
@@ -1200,6 +1194,12 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		params.velx = &particles_vel(XDIM, 0);
 		params.vely = &particles_vel(YDIM, 0);
 		params.velz = &particles_vel(ZDIM, 0);
+#ifdef FORCE_TEST
+		params.gx = &particles_gforce(XDIM, 0);
+		params.gy = &particles_gforce(YDIM, 0);
+		params.gz = &particles_gforce(ZDIM, 0);
+		params.pot = &particles_pot(0);
+#endif
 		params.rung = &particles_rung(0);
 		params.theta = theta;
 		params.min_rung = min_rung;
