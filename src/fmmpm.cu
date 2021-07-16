@@ -81,7 +81,7 @@ struct checkitem {
 	int get_nactive() const {
 		return dev_fmmpm_params.trees.nodes[index].nactive;
 	}
-	__device__   inline fixed32 get_x(int dim) const {
+	__device__    inline fixed32 get_x(int dim) const {
 		return dev_fmmpm_params.trees.nodes[index].x[dim];
 	}
 	__device__ inline
@@ -104,10 +104,10 @@ struct checkitem {
 	int get_snk_end() const {
 		return dev_fmmpm_params.trees.nodes[index].snk_end;
 	}
-	__device__   inline multipos get_multipos() const {
+	__device__    inline multipos get_multipos() const {
 		return dev_fmmpm_params.trees.multis[index];
 	}
-	__device__   inline array<checkitem, 2> get_children() {
+	__device__    inline array<checkitem, 2> get_children() {
 		const auto indices = dev_fmmpm_params.trees.nodes[index].children;
 		array<checkitem, 2> c;
 		c[0].index = indices[0];
@@ -422,7 +422,7 @@ __device__ int pc_interactions(int nactive) {
 	const auto& list = (params.lists + bid)->multilist;
 
 	int kmid;
-	if (nactive % warpSize < warpSize / 8) {
+	if (nactive % warpSize < warpSize / 2) {
 		kmid = nactive - nactive % warpSize;
 	} else {
 		kmid = nactive;
@@ -562,7 +562,7 @@ __device__ int long_range_interp(int nactive) {
 		X[XDIM] = sink_x.to_float();
 		X[YDIM] = sink_y.to_float();
 		X[ZDIM] = sink_z.to_float();
-		array<array<array<array<float, 4>, 4>, 4>, NDIM> force;
+		array<array<array<float, 4>, 4>, 4> force;
 		array<array<array<float, 8>, 8>, 8> pot;
 		for (int dim = 0; dim < NDIM; dim++) {
 			X[dim] *= params.Nfour;
@@ -577,6 +577,15 @@ __device__ int long_range_interp(int nactive) {
 				}
 			}
 		}
+		float gx = 0.f;
+		float gy = 0.f;
+		float gz = 0.f;
+		for (int dim = 0; dim < NDIM; dim++) {
+			for (int i = 0; i < 4; i++) {
+				const float x = X[dim] - (I[dim] + 2 + i);
+				w[dim][i] = cloud4(x);
+			}
+		}
 		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
 			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
 				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
@@ -586,51 +595,57 @@ __device__ int long_range_interp(int nactive) {
 					const int ip = i + 2;
 					const int jp = j + 2;
 					const int kp = k + 2;
-					force[0][i][j][k] = -((2.f / 3.f) * (pot[ip + 1][jp][kp] - pot[ip - 1][jp][kp]) - (1.f / 12.f) * (pot[ip + 2][jp][kp] - pot[ip - 2][jp][kp]))
-							* params.Nfour;
-					force[1][i][j][k] = -((2.f / 3.f) * (pot[ip][jp + 1][kp] - pot[ip][jp - 1][kp]) - (1.f / 12.f) * (pot[ip][jp + 2][kp] - pot[ip][jp - 2][kp]))
-							* params.Nfour;
-					force[2][i][j][k] = -((2.f / 3.f) * (pot[ip][jp][kp + 1] - pot[ip][jp][kp - 1]) - (1.f / 12.f) * (pot[ip][jp][kp + 2] - pot[ip][jp][kp - 2]))
+					force[i][j][k] = -((2.f / 3.f) * (pot[ip + 1][jp][kp] - pot[ip - 1][jp][kp]) - (1.f / 12.f) * (pot[ip + 2][jp][kp] - pot[ip - 2][jp][kp]))
 							* params.Nfour;
 				}
 			}
 		}
-		for (int dim = 0; dim < NDIM; dim++) {
-			for (int i = 0; i < 4; i++) {
-				const float x = X[dim] - (I[dim] + 2 + i);
-				w[dim][i] = cloud4(x);
+		for (int i = 0; i < CLOUD_W; i++) {
+			for (int j = 0; j < CLOUD_W; j++) {
+				for (int k = 0; k < CLOUD_W; k++) {
+					gx += force[i][j][k] * w[0][i] * w[1][j] * w[2][k];
+				}
 			}
 		}
-		float gx = 0.f;
 		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
 			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
 				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
 					const int i = J[0] - I[0] - 2;
 					const int j = J[1] - I[1] - 2;
 					const int k = J[2] - I[2] - 2;
-					gx += force[0][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+					const int ip = i + 2;
+					const int jp = j + 2;
+					const int kp = k + 2;
+					force[i][j][k] = -((2.f / 3.f) * (pot[ip][jp + 1][kp] - pot[ip][jp - 1][kp]) - (1.f / 12.f) * (pot[ip][jp + 2][kp] - pot[ip][jp - 2][kp]))
+							* params.Nfour;
 				}
 			}
 		}
-		float gy = 0.f;
+		for (int i = 0; i < CLOUD_W; i++) {
+			for (int j = 0; j < CLOUD_W; j++) {
+				for (int k = 0; k < CLOUD_W; k++) {
+					gy += force[i][j][k] * w[0][i] * w[1][j] * w[2][k];
+				}
+			}
+		}
 		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
 			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
 				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
 					const int i = J[0] - I[0] - 2;
 					const int j = J[1] - I[1] - 2;
 					const int k = J[2] - I[2] - 2;
-					gy += force[1][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+					const int ip = i + 2;
+					const int jp = j + 2;
+					const int kp = k + 2;
+					force[i][j][k] = -((2.f / 3.f) * (pot[ip][jp][kp + 1] - pot[ip][jp][kp - 1]) - (1.f / 12.f) * (pot[ip][jp][kp + 2] - pot[ip][jp][kp - 2]))
+							* params.Nfour;
 				}
 			}
 		}
-		float gz = 0.f;
-		for (J[0] = I[0] + 2; J[0] < I[0] + 6; J[0]++) {
-			for (J[1] = I[1] + 2; J[1] < I[1] + 6; J[1]++) {
-				for (J[2] = I[2] + 2; J[2] < I[2] + 6; J[2]++) {
-					const int i = J[0] - I[0] - 2;
-					const int j = J[1] - I[1] - 2;
-					const int k = J[2] - I[2] - 2;
-					gz += force[2][i][j][k] * w[0][i] * w[1][j] * w[2][k];
+		for (int i = 0; i < CLOUD_W; i++) {
+			for (int j = 0; j < CLOUD_W; j++) {
+				for (int k = 0; k < CLOUD_W; k++) {
+					gz += force[i][j][k] * w[0][i] * w[1][j] * w[2][k];
 				}
 			}
 		}
