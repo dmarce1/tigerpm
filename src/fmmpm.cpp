@@ -42,7 +42,7 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
 		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
 			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
-				const auto func = [i,bigbox,box,&trees,&has_active, min_rung,&total_active]() {
+				const auto func = [i,bigbox,box,&trees,&has_active, full_eval, min_rung,&total_active]() {
 					array<int, NDIM> j;
 					bool active_neighbor = false;
 					for (j[0] = i[0] - CHAIN_BW; j[0] < i[0] + CHAIN_BW; j[0]++) {
@@ -58,7 +58,7 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 						}
 					}
 					const auto index = bigbox.index(i);
-					if( active_neighbor ) {
+					if( active_neighbor  || full_eval ) {
 						const auto cell = chainmesh_get(i);
 						tree rc = tree_create(i,cell, min_rung);
 						const auto index = bigbox.index(i);

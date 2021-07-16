@@ -313,13 +313,15 @@ void tree::resize(int new_size) {
 
 tree_collection tree_collection_create(const vector<tree>& trees) {
 	tree_collection collection;
-	vector<tree_node> nodes;
+	vector<tree_info> nodes;
+	vector<multipos> multis;
 	vector<int> roots;
 	int size = 0;
 	for (int i = 0; i < trees.size(); i++) {
 		size += trees[i].size();
 	}
 	nodes.resize(size);
+	multis.resize(size);
 	roots.resize(trees.size());
 	int count = 0;
 	for (int i = 0; i < trees.size(); i++) {
@@ -330,13 +332,23 @@ tree_collection tree_collection_create(const vector<tree>& trees) {
 				node.children[0] += count;
 				node.children[1] += count;
 			}
-			nodes[count + j] = node;
+			nodes[count + j].x = node.multi.x;
+			nodes[count + j].radius = node.radius;
+			nodes[count + j].children = node.children;
+			nodes[count + j].src_begin = node.src_begin;
+			nodes[count + j].src_end = node.src_end;
+			nodes[count + j].snk_begin = node.snk_begin;
+			nodes[count + j].snk_end = node.snk_end;
+			nodes[count + j].nactive = node.nactive;
+			multis[count + j] = node.multi;
 		}
 		count += trees[i].size();
 	}
-	CUDA_CHECK(cudaMalloc(&collection.nodes, sizeof(tree_node) * size));
+	CUDA_CHECK(cudaMalloc(&collection.multis, sizeof(multipos) * size));
+	CUDA_CHECK(cudaMalloc(&collection.nodes, sizeof(tree_info) * size));
 	CUDA_CHECK(cudaMalloc(&collection.roots, sizeof(int) * trees.size()));
-	CUDA_CHECK(cudaMemcpy(collection.nodes, nodes.data(), sizeof(tree_node) * size, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(collection.multis, multis.data(), sizeof(multipos) * size, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(collection.nodes, nodes.data(), sizeof(tree_info) * size, cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(collection.roots, roots.data(), sizeof(int) * trees.size(), cudaMemcpyHostToDevice));
 	return collection;
 }

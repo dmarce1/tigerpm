@@ -20,7 +20,6 @@ struct multipos {
 };
 
 struct tree_node {
-	array<fixed32, NDIM> x;
 	float radius;
 	array<int, NCHILD> children;
 	int src_begin;
@@ -31,6 +30,16 @@ struct tree_node {
 	multipos multi;
 };
 
+struct tree_info {
+	array<fixed32, NDIM> x;
+	float radius;
+	array<int, NCHILD> children;
+	int src_begin;
+	int src_end;
+	int snk_begin;
+	int snk_end;
+	int nactive;
+};
 
 class tree {
 public:
@@ -105,12 +114,12 @@ public:
 			nodes[i].snk_end += dif;
 		}
 	}
-}
-;
+};
 
 
 struct tree_collection {
-	tree_node* nodes;
+	tree_info* nodes;
+	multipos* multis;
 	int* roots;
 };
 

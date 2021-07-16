@@ -82,7 +82,7 @@ struct checkitem {
 		return dev_fmmpm_params.trees.nodes[index].nactive;
 	}
 	__device__   inline fixed32 get_x(int dim) const {
-		return dev_fmmpm_params.trees.nodes[index].multi.x[dim];
+		return dev_fmmpm_params.trees.nodes[index].x[dim];
 	}
 	__device__ inline
 	float get_radius() const {
@@ -104,8 +104,8 @@ struct checkitem {
 	int get_snk_end() const {
 		return dev_fmmpm_params.trees.nodes[index].snk_end;
 	}
-	__device__   inline multipole get_multipole() const {
-		return dev_fmmpm_params.trees.nodes[index].multi.m;
+	__device__   inline multipos get_multipos() const {
+		return dev_fmmpm_params.trees.multis[index];
 	}
 	__device__   inline array<checkitem, 2> get_children() {
 		const auto indices = dev_fmmpm_params.trees.nodes[index].children;
@@ -138,12 +138,6 @@ void fmmpm_params::allocate(size_t source_size, size_t sink_size, size_t cell_co
 	CUDA_CHECK(cudaMalloc(&lists, nblocks * sizeof(list_set)));
 	CUDA_CHECK(cudaMalloc(&phi, phi_cell_count * sizeof(float)));
 	CUDA_CHECK(cudaMalloc(&active, nblocks * sizeof(int) * SINK_BUCKET_SIZE));
-#ifdef FORCE_TEST
-	CUDA_CHECK(cudaMalloc(&gx, source_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&gy, source_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&gz, source_size * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&pot, source_size * sizeof(float)));
-#endif
 }
 void fmmpm_params::free() {
 	CUDA_CHECK(cudaFree(current_index));
@@ -155,12 +149,6 @@ void fmmpm_params::free() {
 	CUDA_CHECK(cudaFree(active));
 	CUDA_CHECK(cudaFree(lists));
 	CUDA_CHECK(cudaFree(tree_neighbors));
-#ifdef FORCE_TEST
-	CUDA_CHECK(cudaFree(gx));
-	CUDA_CHECK(cudaFree(gy));
-	CUDA_CHECK(cudaFree(gz));
-	CUDA_CHECK(cudaFree(pot));
-#endif
 }
 
 static size_t mem_requirements(int nsources, int nsinks, int vol, int bigvol, int phivol) {
@@ -448,14 +436,15 @@ __device__ int pc_interactions(int nactive) {
 		array<float, NDIM + 1> L;
 		L[0] = L[1] = L[2] = L[3] = 0.f;
 		for (int i = 0; i < list.size(); i++) {
-			const fixed32 src_x = list[i].get_x(XDIM);
-			const fixed32 src_y = list[i].get_x(YDIM);
-			const fixed32 src_z = list[i].get_x(ZDIM);
+			const multipos& mpos = list[i].get_multipos();
+			const fixed32& src_x = mpos.x[XDIM];
+			const fixed32& src_y = mpos.x[YDIM];
+			const fixed32& src_z = mpos.x[ZDIM];
+			const auto& M = mpos.m;
 			const float dx = distance(sink_x, src_x);
 			const float dy = distance(sink_y, src_y);
 			const float dz = distance(sink_z, src_z);
 			flops += 3;
-			const auto M = list[i].get_multipole();
 			expansion D;
 			for (int j = 0; j < EXPANSION_SIZE; j++) {
 				D[j] = 0.f;
@@ -477,14 +466,15 @@ __device__ int pc_interactions(int nactive) {
 		array<float, NDIM + 1> L;
 		L[0] = L[1] = L[2] = L[3] = 0.f;
 		for (int i = tid; i < list.size(); i += warpSize) {
-			const fixed32 src_x = list[i].get_x(XDIM);
-			const fixed32 src_y = list[i].get_x(YDIM);
-			const fixed32 src_z = list[i].get_x(ZDIM);
+			const multipos& mpos = list[i].get_multipos();
+			const fixed32& src_x = mpos.x[XDIM];
+			const fixed32& src_y = mpos.x[YDIM];
+			const fixed32& src_z = mpos.x[ZDIM];
+			const auto& M = mpos.m;
 			const float dx = distance(sink_x, src_x);
 			const float dy = distance(sink_y, src_y);
 			const float dz = distance(sink_z, src_z);
 			flops += 3;
-			const auto M = list[i].get_multipole();
 			expansion D;
 			for (int j = 0; j < EXPANSION_SIZE; j++) {
 				D[j] = 0.f;
@@ -524,14 +514,15 @@ __device__ int cc_interactions(checkitem mycheck, expansion& Lexpansion) {
 		L[i] = 0.f;
 	}
 	for (int i = tid; i < list.size(); i += warpSize) {
-		const fixed32 src_x = list[i].get_x(XDIM);
-		const fixed32 src_y = list[i].get_x(YDIM);
-		const fixed32 src_z = list[i].get_x(ZDIM);
+		const multipos& mpos = list[i].get_multipos();
+		const fixed32& src_x = mpos.x[XDIM];
+		const fixed32& src_y = mpos.x[YDIM];
+		const fixed32& src_z = mpos.x[ZDIM];
+		const auto& M = mpos.m;
 		const float dx = distance(sink_x, src_x);
 		const float dy = distance(sink_y, src_y);
 		const float dz = distance(sink_z, src_z);
 		flops += 3;
-		const auto M = list[i].get_multipole();
 		expansion D;
 		for (int j = 0; j < EXPANSION_SIZE; j++) {
 			D[j] = 0.f;
@@ -1189,6 +1180,12 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 		params.vely = &particles_vel(YDIM, 0);
 		params.velz = &particles_vel(ZDIM, 0);
 		params.rung = &particles_rung(0);
+#ifdef FORCE_TEST
+		params.gx = &particles_gforce(XDIM, 0);
+		params.gy = &particles_gforce(YDIM, 0);
+		params.gz = &particles_gforce(ZDIM, 0);
+		params.pot = &particles_pot(0);
+#endif
 		params.theta = theta;
 		params.min_rung = min_rung;
 		params.rs = get_options().rs;
