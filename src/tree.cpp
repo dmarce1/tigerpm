@@ -355,6 +355,7 @@ tree_collection tree_collection_create(const vector<tree>& trees) {
 
 void tree_collection_destroy(tree_collection collection) {
 	CUDA_CHECK(cudaFree(collection.nodes));
+	CUDA_CHECK(cudaFree(collection.multis));
 	CUDA_CHECK(cudaFree(collection.roots));
 }
 
