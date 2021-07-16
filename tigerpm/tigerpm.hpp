@@ -34,7 +34,7 @@
 
 #define MAX_RUNG 32
 #define NINTERP 6
-#define CHAIN_BW 2
+#define CHAIN_BW 1
 #define NCELLS ((2*CHAIN_BW+1)*(2*CHAIN_BW+1)*(2*CHAIN_BW+1))
 #define KICK_PP_MAX (37*32)
 

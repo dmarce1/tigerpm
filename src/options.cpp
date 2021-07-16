@@ -53,7 +53,7 @@ bool process_options(int argc, char *argv[]) {
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "") //
 	("check_num", po::value<int>(&(opts.check_num))->default_value(-1), "") //
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "") //
-	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(3), "") //
+	("four_o_chain", po::value<int>(&(opts.four_o_chain))->default_value(5), "") //
 	("parts_o_four", po::value<int>(&(opts.parts_o_four))->default_value(3), "parts dim over four dim") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "test problem") //
 			;
@@ -89,7 +89,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 	opts.four_dim = opts.parts_dim / opts.parts_o_four;
 	opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
-	opts.rs = (double) CHAIN_BW / opts.four_dim * opts.four_o_chain / 6.0;
+	opts.rs = (double) CHAIN_BW / opts.four_dim * opts.four_o_chain / 5.0;
 
 	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);

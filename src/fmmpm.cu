@@ -1279,7 +1279,7 @@ kick_return kick_fmmpm(vector<tree> trees, range<int> box, int min_rung, double 
 	}
 	int occupancy;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, kick_fmmpm_kernel,WARP_SIZE, sizeof(fmmpm_shmem)));
-	//PRINT("Occupancy = %i\n", occupancy);
+	PRINT("Occupancy = %i\n", occupancy);
 	int num_blocks = 2 * occupancy * cuda_smp_count();
 	//PRINT("%e cells per block\n", (double ) box.volume() / num_blocks);
 	const size_t mem_required = mem_requirements(nsources, nsinks, vol, bigvol, phibox.volume()) + tree_size + sizeof(fmmpm_params);
