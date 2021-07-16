@@ -44,7 +44,10 @@ HPX_PLAIN_ACTION(transmit_chain_particles);
 #define NPARTS_PER_LOCK 1024
 
 chaincell chainmesh_get(const array<int, NDIM>& i) {
-	assert(cells.find(i) != cells.end());
+	if(cells.find(i) == cells.end()) {
+		PRINT( "OOPS\n");
+		abort();
+	}
 	return cells[i];
 }
 

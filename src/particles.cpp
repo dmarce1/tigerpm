@@ -326,7 +326,6 @@ int particles_nactive(int begin, int end, int rung) {
 }
 
 bool particles_has_active(int begin, int end, int rung) {
-	int count = 0;
 	for (int i = begin; i < end; i++) {
 		if (particles_rung(i) >= rung) {
 			return true;

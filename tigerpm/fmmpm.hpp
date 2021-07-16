@@ -18,6 +18,10 @@ struct kick_return {
 	double fy;
 	double fz;
 	double fnorm;
+	double pp;
+	double pc;
+	double cp;
+	double cc;
 	size_t nactive;
 	template<class Arc>
 	void serialize(Arc& a, unsigned) {
@@ -29,6 +33,10 @@ struct kick_return {
 		a & fz;
 		a & fnorm;
 		a & nactive;
+		a & pp;
+		a & pc;
+		a & cp;
+		a & cc;
 	}
 };
 

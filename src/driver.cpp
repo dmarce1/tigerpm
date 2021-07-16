@@ -110,11 +110,11 @@ void driver() {
 		double theta;
 		const double z = 1.0 / a - 1.0;
 		if (z > 20.0) {
-			theta = 1.0 / 3.0;
+			theta = 0.4;
 		} else if (z > 2.0) {
-			theta = 1.0 / 2.0;
+			theta = 0.55;
 		} else {
-			theta = 2.0 / 3.0;
+			theta = 0.7;
 		}
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 		if (full_eval) {

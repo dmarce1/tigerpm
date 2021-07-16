@@ -1001,6 +1001,7 @@ inline array<float, 35> M2M_kernel(const array<float,35>& Ma, array<float, NDIM>
 	X[0] = -X[0];
 	X[1] = -X[1];
 	X[2] = -X[2];
+	const float x000 = float(1);
 	const float& x100 = X[0];
 	const float& x010 = X[1];
 	const float& x001 = X[2];

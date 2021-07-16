@@ -145,13 +145,13 @@ static void chainmesh_test() {
 
 static void kick_fmmpm_test() {
 	timer tm;
-	particles_random_init();
-/*	driver_params params;
+//	particles_random_init();
+	driver_params params;
 	if( get_options().check_num >= 0 ) {
 		read_checkpoint(params,get_options().check_num);
 	} else {
 		initialize();
-	}*/
+	}
 	for (int pass = 0; pass < 2; pass++) {
 		PRINT("DOMAIN SORT\n");
 		tm.start();

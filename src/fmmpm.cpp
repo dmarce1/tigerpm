@@ -22,13 +22,13 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 	tm.start();
 	array<int, NDIM> i;
 	vector<hpx::future<void>> futs1;
-	vector<bool> has_active(vol);
+	vector<int> has_active(vol);
 	for (i[0] = box.begin[0]; i[0] < box.end[0]; i[0]++) {
 		for (i[1] = box.begin[1]; i[1] < box.end[1]; i[1]++) {
 			for (i[2] = box.begin[2]; i[2] < box.end[2]; i[2]++) {
-				const auto func = [i,bigbox,box,&trees, min_rung,&has_active]() {
+				const auto func = [i,bigbox,box, min_rung,&has_active]() {
 					const auto cell = chainmesh_get(i);
-					has_active[box.index(i)]= particles_has_active(cell.pbegin, cell.pend, min_rung);
+					has_active[box.index(i)] = particles_has_active(cell.pbegin, cell.pend, min_rung);
 				};
 				futs1.push_back(hpx::async(func));
 			}
@@ -61,7 +61,6 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 					if( active_neighbor ) {
 						const auto cell = chainmesh_get(i);
 						tree rc = tree_create(i,cell, min_rung);
-						const auto index = bigbox.index(i);
 						total_active += rc.get_nactive(0);
 						trees[index] = std::move(rc);
 					} else {
@@ -99,6 +98,11 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 	tm.stop();
 //	PRINT("FMM took %e s\n", tm.read());
 	kr.nactive = size_t(total_active);
+	PRINT("PP : %e\n", kr.pp / total_active);
+	PRINT("PC : %e\n", kr.pc / total_active);
+	PRINT("CP : %e\n", kr.cp / total_active);
+	PRINT("CC : %e\n", kr.cc / total_active);
+
 	for (auto& f : futs) {
 		auto this_kr = f.get();
 		kr.max_rung = std::max(kr.max_rung, this_kr.max_rung);
@@ -109,6 +113,10 @@ kick_return kick_fmmpm_begin(int min_rung, double scale, double t0, double theta
 		kr.fz += this_kr.fz;
 		kr.fnorm += this_kr.fnorm;
 		kr.nactive = this_kr.nactive;
+		kr.pp += this_kr.pp;
+		kr.pc += this_kr.pc;
+		kr.cp += this_kr.cp;
+		kr.cc += this_kr.cc;
 	}
 	return kr;
 }
